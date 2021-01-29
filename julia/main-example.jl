@@ -27,7 +27,7 @@ function init_params()
         verification_on = true,
         verification_period = 30,
     
-        random_seed = nothing,
+        rng_seed = nothing,
     
         t_year = t_year,
         t_end = 111 * t_year,

@@ -22,7 +22,7 @@ end
     verification_on::Union{Bool, Nothing} = nothing
     verification_period::Union{Float64, Nothing} = nothing
     
-    random_seed::Union{UInt64, Nothing} = nothing
+    rng_seed::Union{UInt64, Nothing} = nothing
     
     t_year::Union{Int, Nothing} = nothing
     t_end::Union{Int, Nothing} = nothing
