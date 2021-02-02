@@ -52,11 +52,13 @@ end
     
     t_liver_stage::Union{Float64, Nothing} = nothing
     
+    transition_rate::Union{Float64, Nothing} = nothing
+    
     mean_host_lifetime::Union{Float64, Nothing} = nothing
     max_host_lifetime::Union{Float64, Nothing} = nothing
     
     immigration_on::Union{Bool, Nothing} = nothing
-    immigration_rate::Union{Float64, Nothing} = nothing
+    immigration_rate_fraction::Union{Float64, Nothing} = nothing
 end
 
 function validate(p::Params)
@@ -123,6 +125,7 @@ function validate(p::Params)
     @assert p.coinfection_reduces_transmission != nothing
     
     @assert p.ectopic_recombination_rate != nothing
+    @assert p.ectopic_recombination_rate >= 0.0
     
     @assert p.immunity_loss_rate != nothing
     @assert p.immunity_loss_rate >= 0.0
@@ -133,6 +136,9 @@ function validate(p::Params)
     @assert p.t_liver_stage != nothing
     @assert p.t_liver_stage >= 0.0
     
+    @assert p.transition_rate != nothing
+    @assert p.transition_rate >= 0.0
+    
     @assert p.mean_host_lifetime != nothing
     @assert p.mean_host_lifetime >= 0.0
     
@@ -141,6 +147,6 @@ function validate(p::Params)
     
     @assert p.immigration_on != nothing
     
-    @assert p.immigration_rate != nothing
-    @assert p.immigration_rate >= 0.0
+    @assert p.immigration_rate_fraction != nothing
+    @assert p.immigration_rate_fraction >= 0.0
 end

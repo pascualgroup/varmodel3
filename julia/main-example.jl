@@ -38,7 +38,7 @@ function init_params()
         
         n_genes_initial = 9600,
         n_genes_per_strain = 60,
-    
+        
         n_loci = 2,
     
         n_alleles_per_locus_initial = 960,
@@ -53,12 +53,14 @@ function init_params()
         mutation_rate = 1.42e-8,
     
         t_liver_stage = 14.0,
+        
+        transition_rate = 1/6.0,
     
         mean_host_lifetime = 30 * t_year,
         max_host_lifetime = 30 * t_year,
     
         immigration_on = true,
-        immigration_rate = 0.0026,
+        immigration_rate_fraction = 0.0026,
     
         biting_rate_mean = 0.0005,
         daily_biting_rate_distribution = [
