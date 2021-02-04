@@ -54,6 +54,8 @@ end
     
     transition_rate::Union{Float64, Nothing} = nothing
     
+    moi_transmission_max::Union{Int, Nothing}
+    
     mean_host_lifetime::Union{Float64, Nothing} = nothing
     max_host_lifetime::Union{Float64, Nothing} = nothing
     
@@ -138,6 +140,9 @@ function validate(p::Params)
     
     @assert p.transition_rate != nothing
     @assert p.transition_rate >= 0.0
+    
+    @assert p.moi_transmission_max != nothing
+    @assert p.moi_transmission_max >= 0
     
     @assert p.mean_host_lifetime != nothing
     @assert p.mean_host_lifetime >= 0.0
