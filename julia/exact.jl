@@ -122,7 +122,7 @@ function run_exact(p::Params)
     exp_dist = Exponential(1.0)
     while true
         total_rate = sum(rates)
-        dt = rand(exp_dist) * total_rate
+        dt = rand(exp_dist) / total_rate
         
         t_next = t + dt
         if t_next > p.t_end
@@ -130,6 +130,7 @@ function run_exact(p::Params)
         end
         
         t = t_next
+        println("t = $(t)")
         
         @assert total_rate > 0.0
         
@@ -168,8 +169,8 @@ function do_biting_event!(p::Params, t::Float64, s::State)
     
     println("src_host = $(src_host.id), dst_host = $(dst_host.id)")
     
-    inf_indices = expression_indices(p, t, src_host)
-    active_infections = findall(inf_indices .> 0)
+    # Identify infections past the liver stage
+    inf_indices = findall([inf.t + p.t_liver_stage < t for inf in src_host.infections])
     inf_count = length(inf_indices)
     
     # Only transmit if there are between 1 and moi_transmission_max infections
@@ -194,13 +195,6 @@ function do_biting_event!(p::Params, t::Float64, s::State)
             infect_host!(t, s, dst_host, strain)
         end
     end
-end
-
-function expression_indices(p::Params, t::Float64, host::Host)
-    collect(
-        inf.t + p.t_liver_stage < t ? inf.expression_index : 0
-        for inf in host.infections
-    )
 end
 
 function active_infection_count(p::Params, t::Float64, host::Host)
@@ -336,7 +330,7 @@ function infect_host!(t::Float64, s::State, host::Host, strain::Array{Gene})
         ref_index  = ref_index
     )
     push!(host.infections, infection)
-    push!(s.infections, InfectionRef(host.index, ref_index))
+    push!(s.infections, InfectionRef(host.index, length(host.infections)))
     
     if length(host.infections) == 1
         push!(s.infected_hosts, host.index)
