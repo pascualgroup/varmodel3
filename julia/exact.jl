@@ -5,18 +5,22 @@ using Distributions
 using StatsBase
 
 const HostId = Int
-const HostIndex = Int32
 const InfectionId = Int
-const InfectionIndex = Int32
-const HostInfectionIndex = Int16
 const Locus = Int8
 const AlleleId = Int
 const Gene = Array{AlleleId}
 const ImmunityCount = Int8
 const ImmunityIndex = Int32
 
-@with_kw mutable struct Infection
-    "Time infection occurred"
+# Used to work around that Julia doesn't support mutual type recursion
+# (e.g. Host pointing to Infection and Infection pointing to HOst)
+abstract type Object end
+
+@with_kw mutable struct Infection <: Object
+    "Reference to containing Host"
+    host::Object
+    
+    "Time infection occurred at"
     t::Float64
     
     "Expression order of genes"
@@ -24,28 +28,11 @@ const ImmunityIndex = Int32
     
     "Current expression index of genes"
     expression_index::Int
-    
-    "Index in global random-samplable array of all infections"
-    ref_index::Int
 end
 
-struct InfectionRef
-    host_index::HostIndex
-    infection_index::HostInfectionIndex
-end
-
-struct ImmunityRef
-    host_index::HostIndex
-    locus::Locus
-    allele_id::AlleleId
-end
-
-@with_kw mutable struct Host
+@with_kw mutable struct Host <: Object
     "Unique ID across simulation"
     id::Int
-    
-    "Index in global random-samplable array"
-    index::HostIndex
     
     t_birth::Float64
     t_death::Float64
@@ -54,12 +41,9 @@ end
     
     "Immunity counts, by locus, by allele"
     immunity_counts::Array{Dict{AlleleId, ImmunityCount}}
-    
-    "Immunity location in global random-samplable array, by locus, by allele"
-    immunity_ref_indices::Array{Dict{AlleleId, Int32}}
 end
 
-@with_kw mutable struct State
+@with_kw mutable struct State <: Object
     transmission_count::Int
     bite_count::Int
     infected_bite_count::Int
@@ -67,16 +51,9 @@ end
     n_alleles::Array{Int}
     gene_pool::Array{Gene}
     
-    hosts::Array{Host}
-    
-    "Random-samplable array of infected hosts"
-    infected_hosts::Array{HostIndex}
-    
-    "Random-samplable array of all infections in all hosts"
-    infections::Array{InfectionRef}
-    
-    "Random-samplable array of immunity in all hosts"
-    immunities::Array{ImmunityRef}
+    hosts::IndexedSet{Host}
+    infected_hosts::IndexedSet{Host}
+    infections::IndexedSet{Infection}
 end
 
 function infected_fraction(s::State)
@@ -137,16 +114,37 @@ function run_exact(p::Params)
         event_id = sample(1:N_EVENTS, Weights(rates, total_rate))
         if event_id == BITING
             do_biting_event!(p, t, s)
+            rates[BITING] = biting_rate(p, t, s)
+            rates[IMMIGRATION] = immigration_rate(p, t, s)
+            rates[TRANSITION] = transition_rate(p, t, s)
+            rates[MUTATION] = mutation_rate(p, t, s)
+            rates[RECOMBINATION] = recombination_rate(p, t, s)
         elseif event_id == IMMIGRATION
             do_immigration_event!(p, t, s)
+            rates[BITING] = biting_rate(p, t, s)
+            rates[IMMIGRATION] = immigration_rate(p, t, s)
+            rates[TRANSITION] = transition_rate(p, t, s)
+            rates[MUTATION] = mutation_rate(p, t, s)
+            rates[RECOMBINATION] = recombination_rate(p, t, s)
         elseif event_id == IMMUNITY_LOSS
             do_immunity_loss_event!(p, t, s)
+            rates[BITING] = biting_rate(p, t, s)
+            rates[IMMIGRATION] = immigration_rate(p, t, s)
         elseif event_id == TRANSITION
             do_transition_event!(p, t, s)
+            rates[BITING] = biting_rate(p, t, s)
+            rates[IMMIGRATION] = immigration_rate(p, t, s)
+            rates[TRANSITION] = transition_rate(p, t, s)
+            rates[MUTATION] = mutation_rate(p, t, s)
+            rates[RECOMBINATION] = recombination_rate(p, t, s)
         elseif event_id == MUTATION
             do_mutation_event!(p, t, s)
+            rates[BITING] = biting_rate(p, t, s)
+            rates[IMMIGRATION] = immigration_rate(p, t, s)
         elseif event_id == RECOMBINATION
             do_recombination_event!(p, t, s)
+            rates[BITING] = biting_rate(p, t, s)
+            rates[IMMIGRATION] = immigration_rate(p, t, s)
         end
         
         println("t = $(t)")
@@ -164,7 +162,7 @@ function do_biting_event!(p::Params, t::Float64, s::State)
     println("do_biting_event!()")
     
     # TODO: is it OK for these to be the same host?
-    src_host = s.hosts[rand(s.infected_hosts)]
+    src_host = rand(s.infected_hosts)
     dst_host = rand(s.hosts)
     
     println("src_host = $(src_host.id), dst_host = $(dst_host.id)")
@@ -211,7 +209,8 @@ function do_immigration_event!(p::Params, t::Float64, s::State)
 end
 
 function immunity_loss_rate(p::Params, t::Float64, s::State)
-    p.immunity_loss_rate * length(s.immunities)
+#     p.immunity_loss_rate * length(s.immunities)
+    0.0
 end
 
 function do_immunity_loss_event!(p::Params, t::Float64, s::State)
@@ -224,6 +223,54 @@ end
 
 function do_transition_event!(p::Params, t::Float64, s::State)
     println("do_transition_event!()")
+    
+    infection = rand(s.infections)
+    host::Host = infection.host
+    if infection.t + p.t_liver_stage < t
+        println("expression_index = $(infection.expression_index)")
+        # Advance expression until non-immune gene is reached
+        while true
+            if infection.expression_index == p.n_genes_per_strain
+                clear_infection!(p, t, s, host, infection)
+                break
+            else
+                # Advance expression until a gene the host is not immune to
+                infection.expression_index += 1
+                if !is_immune(host, infection)
+                    break
+                end
+            end
+        end
+    end
+end
+
+function clear_infection!(p::Params, t::Float64, s::State, host::Host, infection::Infection)
+    println("clear_infection!()")
+    delete!(s.infections, infection)
+    delete!(host.infections, infection)
+    
+    if length(host.infections) == 0
+        delete!(s.infected_hosts, host)
+    end
+end
+
+"""
+Removes an item in the middle of an array that does not need to be kept ordered in constant time.
+
+The item is replaced with the item at the end of the array, and then the item at the end of the
+array is removed.
+"""
+function swap_with_end_and_remove!(a, index)
+    if index != lastindex(a)
+        setindex!(a, a[lastindex(a)], index)
+    end
+    pop!(a)
+    nothing
+end
+
+function is_immune(host::Host, infection::Infection)
+    # TODO: immunity
+    return false
 end
 
 function mutation_rate(p::Params, t::Float64, s::State)
@@ -255,10 +302,9 @@ function initialize_state(p::Params)
         gene_pool = gene_pool,
         
         hosts = hosts,
-        infected_hosts = [],
+        infected_hosts = IndexedSet{Host}(),
         
-        infections = [],
-        immunities = []
+        infections = IndexedSet{Infection}(),
     )
     initialize_infections!(p, s)
     
@@ -286,7 +332,7 @@ function initialize_gene_pool(p::Params)
 end
 
 function initialize_hosts(p::Params, gene_pool)
-    hosts::Array{Host} = []
+    hosts = IndexedSet{Host}()
     
     for id in 1:p.n_hosts
         lifetime = draw_host_lifetime(p.mean_host_lifetime, p.max_host_lifetime)
@@ -295,12 +341,10 @@ function initialize_hosts(p::Params, gene_pool)
         
         push!(hosts, Host(;
             id = id,
-            index = id,
             t_birth = t_birth,
             t_death = t_death,
-            infections = [],
-            immunity_counts = [Dict() for i in 1:p.n_loci],
-            immunity_ref_indices = [Dict() for i in 1:p.n_loci]
+            infections = Infection[],
+            immunity_counts = [Dict() for i in 1:p.n_loci]
         ))
     end
     
@@ -322,17 +366,16 @@ end
 function infect_host!(t::Float64, s::State, host::Host, strain::Array{Gene})
     println("Infecting $(host.id)")
     
-    ref_index = length(s.infections) + 1
     infection = Infection(;
-        t,
+        host = host,
+        t = t,
         expression_order = strain,
-        expression_index = 1,
-        ref_index  = ref_index
+        expression_index = 1
     )
     push!(host.infections, infection)
-    push!(s.infections, InfectionRef(host.index, length(host.infections)))
+    push!(s.infections, infection)
     
     if length(host.infections) == 1
-        push!(s.infected_hosts, host.index)
+        push!(s.infected_hosts, host)
     end
 end
