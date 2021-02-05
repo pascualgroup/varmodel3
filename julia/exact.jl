@@ -12,7 +12,7 @@ const Gene = Array{AlleleId}
 const ImmunityCount = UInt8
 
 # Used to work around that Julia doesn't support mutual type recursion
-# (e.g. Host pointing to Infection and Infection pointing to HOst)
+# (e.g. Host pointing to Infection and Infection pointing to Host)
 abstract type Object end
 
 @with_kw mutable struct Infection <: Object
@@ -51,10 +51,6 @@ struct ImmunityRef
 end
 
 @with_kw mutable struct State <: Object
-    transmission_count::Int
-    bite_count::Int
-    infected_bite_count::Int
-    
     n_alleles::Array{Int}
     gene_pool::Array{Gene}
     
@@ -340,10 +336,6 @@ function initialize_state(p::Params)
     gene_pool = initialize_gene_pool(p)
     hosts = initialize_hosts(p, gene_pool)
     s = State(;
-        transmission_count = 0,
-        bite_count = 0,
-        infected_bite_count = 0,
-    
         n_alleles = n_alleles,
         gene_pool = gene_pool,
         
