@@ -11,10 +11,10 @@ import Base.length
 """
 struct IndexedSet{T}
     array::Array{T}
-    indices::IdDict{T, Int}
+    indices::Dict{T, Int}
     
     function IndexedSet{T}() where {T}
-        new(T[], IdDict{T, Int}())
+        new(T[], Dict{T, Int}())
     end
 end
 

@@ -4,13 +4,12 @@ using Random
 using Distributions
 using StatsBase
 
-const HostId = Int
-const InfectionId = Int
-const Locus = Int8
-const AlleleId = Int
+const HostId = UInt32
+const InfectionId = UInt32
+const Locus = UInt8
+const AlleleId = UInt32
 const Gene = Array{AlleleId}
-const ImmunityCount = Int8
-const ImmunityIndex = Int32
+const ImmunityCount = UInt8
 
 # Used to work around that Julia doesn't support mutual type recursion
 # (e.g. Host pointing to Infection and Infection pointing to HOst)
@@ -30,9 +29,11 @@ abstract type Object end
     expression_index::Int
 end
 
+const ImmunityCounter = Accumulator{AlleleId, ImmunityCount}
+
 @with_kw mutable struct Host <: Object
     "Unique ID across simulation"
-    id::Int
+    id::HostId
     
     t_birth::Float64
     t_death::Float64
@@ -40,7 +41,13 @@ end
     infections::Array{Infection}
     
     "Immunity counts, by locus, by allele"
-    immunity_counts::Array{Dict{AlleleId, ImmunityCount}}
+    immunity_counts::Array{ImmunityCounter}
+end
+
+struct ImmunityRef
+    host::Host
+    locus::Locus
+    allele_id::AlleleId
 end
 
 @with_kw mutable struct State <: Object
@@ -54,6 +61,7 @@ end
     hosts::IndexedSet{Host}
     infected_hosts::IndexedSet{Host}
     infections::IndexedSet{Infection}
+    immunities::IndexedSet{ImmunityRef}
 end
 
 function infected_fraction(s::State)
@@ -73,11 +81,11 @@ const (
 ) = 1:N_EVENTS
 
 function run_exact(p::Params)
-    println("run_exact()")
+    # println("run_exact()")
     
     rng_seed = if p.rng_seed == nothing
         rng_seed = rand(RandomDevice(), UInt64)
-        println("random seed: $(rng_seed)")
+        # println("random seed: $(rng_seed)")
         rng_seed
     else
         p.rng_seed
@@ -87,6 +95,7 @@ function run_exact(p::Params)
     s = initialize_state(p)
     
     t = 0.0
+    t_next_print = 30.0
     
     rates = fill(0.0, N_EVENTS)
     update_rates!(p, t, s, rates, (1:N_EVENTS)...)
@@ -102,7 +111,13 @@ function run_exact(p::Params)
         end
         
         t = t_next
-        println("t = $(t)")
+        if t > t_next_print
+            println("t = $(t)")
+            println("frac infected: $(infected_fraction(s))")
+            println("# infections: $(length(s.infections))")
+            println("# immunities: $(length(s.immunities))")
+            t_next_print += 30.0
+        end
         
         @assert total_rate > 0.0
         
@@ -127,7 +142,7 @@ function run_exact(p::Params)
             update_rates!(p, t, s, rates, BITING, IMMIGRATION)
         end
         
-        println("t = $(t)")
+        # println("t = $(t)")
     end
 end
 
@@ -161,13 +176,13 @@ function biting_rate(p::Params, t::Float64, s::State)
 end
 
 function do_biting_event!(p::Params, t::Float64, s::State)
-    println("do_biting_event!()")
+    # println("do_biting_event!()")
     
     # TODO: is it OK for these to be the same host?
     src_host = rand(s.infected_hosts)
     dst_host = rand(s.hosts)
     
-    println("src_host = $(src_host.id), dst_host = $(dst_host.id)")
+    # println("src_host = $(src_host.id), dst_host = $(dst_host.id)")
     
     # Identify infections past the liver stage
     inf_indices = findall([inf.t + p.t_liver_stage < t for inf in src_host.infections])
@@ -177,7 +192,7 @@ function do_biting_event!(p::Params, t::Float64, s::State)
     if 1 <= inf_count <= p.moi_transmission_max
         p_infect = p.transmissibility / (p.coinfection_reduces_transmission ? 1 : inf_count)
         inf_to_transmit = findall(p_infect .< rand(inf_count))
-        println("transmitting $(length(inf_to_transmit)) infections")
+        # println("transmitting $(length(inf_to_transmit)) infections")
         
         src_strains = [inf.expression_order for inf in src_host.infections[inf_to_transmit]]
         
@@ -207,7 +222,7 @@ function immigration_rate(p::Params, t::Float64, s::State)
 end
 
 function do_immigration_event!(p::Params, t::Float64, s::State)
-    println("do_immigration_event!()")
+    # println("do_immigration_event!()")
 end
 
 function immunity_loss_rate(p::Params, t::Float64, s::State)
@@ -216,7 +231,7 @@ function immunity_loss_rate(p::Params, t::Float64, s::State)
 end
 
 function do_immunity_loss_event!(p::Params, t::Float64, s::State)
-    println("do_immunity_loss_event!()")
+    # println("do_immunity_loss_event!()")
 end
 
 function transition_rate(p::Params, t::Float64, s::State)
@@ -224,30 +239,53 @@ function transition_rate(p::Params, t::Float64, s::State)
 end
 
 function do_transition_event!(p::Params, t::Float64, s::State)
-    println("do_transition_event!()")
+    # println("do_transition_event!()")
     
     infection = rand(s.infections)
     host::Host = infection.host
     if infection.t + p.t_liver_stage < t
-        println("expression_index = $(infection.expression_index)")
+        # println("expression_index = $(infection.expression_index)")
         # Advance expression until non-immune gene is reached
         while true
             if infection.expression_index == p.n_genes_per_strain
                 clear_infection!(p, t, s, host, infection)
                 break
             else
+                # Gain immunity
+                gain_immunity!(p, t, s, host, current_gene(infection))
+                
                 # Advance expression until a gene the host is not immune to
                 infection.expression_index += 1
                 if !is_immune(host, infection)
+                    # println("not immune.")
                     break
                 end
+                # println("immune!")
             end
         end
     end
 end
 
+function gain_immunity!(p::Params, t::Float64, s::State, host::Host, gene::Gene)
+    # Increment immunity count at each locus
+    for locus in 1:lastindex(gene)
+        counter = host.immunity_counts[locus]
+        allele_id = gene[locus]
+        inc!(counter, allele_id)
+        
+        # Register this host/locus/allele combo for loss by random sampling
+        if counter[allele_id] == 1
+            push!(s.immunities, ImmunityRef(host, locus, allele_id))
+        end
+    end
+end
+
+function current_gene(infection::Infection)
+    infection.expression_order[infection.expression_index]
+end
+
 function clear_infection!(p::Params, t::Float64, s::State, host::Host, infection::Infection)
-    println("clear_infection!()")
+    # println("clear_infection!()")
     delete!(s.infections, infection)
     delete!(host.infections, infection)
     
@@ -271,8 +309,14 @@ function swap_with_end_and_remove!(a, index)
 end
 
 function is_immune(host::Host, infection::Infection)
-    # TODO: immunity
-    return false
+    gene = current_gene(infection)
+    for locus in 1:lastindex(host.immunity_counts)
+        allele_id = gene[locus]
+        if host.immunity_counts[locus][allele_id] == 0
+            return false
+        end
+    end
+    true
 end
 
 function mutation_rate(p::Params, t::Float64, s::State)
@@ -280,7 +324,7 @@ function mutation_rate(p::Params, t::Float64, s::State)
 end
 
 function do_mutation_event!(p::Params, t::Float64, s::State)
-    println("do_mutation_event!()")
+    # println("do_mutation_event!()")
 end
 
 function recombination_rate(p::Params, t::Float64, s::State)
@@ -288,7 +332,7 @@ function recombination_rate(p::Params, t::Float64, s::State)
 end
 
 function do_recombination_event!(p::Params, t::Float64, s::State)
-    println("do_recombination_event!()")
+    # println("do_recombination_event!()")
 end
 
 function initialize_state(p::Params)
@@ -307,6 +351,7 @@ function initialize_state(p::Params)
         infected_hosts = IndexedSet{Host}(),
         
         infections = IndexedSet{Infection}(),
+        immunities = IndexedSet{ImmunityRef}(),
     )
     initialize_infections!(p, s)
     
@@ -366,7 +411,7 @@ function initialize_infections!(p::Params, s::State)
 end
 
 function infect_host!(t::Float64, s::State, host::Host, strain::Array{Gene})
-    println("Infecting $(host.id)")
+    # println("Infecting $(host.id)")
     
     infection = Infection(;
         host = host,
