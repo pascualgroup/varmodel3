@@ -87,14 +87,9 @@ function run_exact(p::Params)
     s = initialize_state(p)
     
     t = 0.0
-    rates = [
-        biting_rate(p, t, s),
-        immigration_rate(p, t, s),
-        immunity_loss_rate(p, t, s),
-        transition_rate(p, t, s),
-        mutation_rate(p, t, s),
-        recombination_rate(p, t, s),
-    ]
+    
+    rates = fill(0.0, N_EVENTS)
+    update_rates!(p, t, s, rates, (1:N_EVENTS)...)
     
     exp_dist = Exponential(1.0)
     while true
@@ -114,40 +109,47 @@ function run_exact(p::Params)
         event_id = sample(1:N_EVENTS, Weights(rates, total_rate))
         if event_id == BITING
             do_biting_event!(p, t, s)
-            rates[BITING] = biting_rate(p, t, s)
-            rates[IMMIGRATION] = immigration_rate(p, t, s)
-            rates[TRANSITION] = transition_rate(p, t, s)
-            rates[MUTATION] = mutation_rate(p, t, s)
-            rates[RECOMBINATION] = recombination_rate(p, t, s)
+            update_rates!(p, t, s, rates, BITING, IMMIGRATION, TRANSITION, MUTATION, RECOMBINATION)
         elseif event_id == IMMIGRATION
             do_immigration_event!(p, t, s)
-            rates[BITING] = biting_rate(p, t, s)
-            rates[IMMIGRATION] = immigration_rate(p, t, s)
-            rates[TRANSITION] = transition_rate(p, t, s)
-            rates[MUTATION] = mutation_rate(p, t, s)
-            rates[RECOMBINATION] = recombination_rate(p, t, s)
+            update_rates!(p, t, s, rates, BITING, IMMIGRATION, TRANSITION, MUTATION, RECOMBINATION)
         elseif event_id == IMMUNITY_LOSS
             do_immunity_loss_event!(p, t, s)
-            rates[BITING] = biting_rate(p, t, s)
-            rates[IMMIGRATION] = immigration_rate(p, t, s)
+            update_rates!(p, t, s, rates, BITING, IMMIGRATION)
         elseif event_id == TRANSITION
             do_transition_event!(p, t, s)
-            rates[BITING] = biting_rate(p, t, s)
-            rates[IMMIGRATION] = immigration_rate(p, t, s)
-            rates[TRANSITION] = transition_rate(p, t, s)
-            rates[MUTATION] = mutation_rate(p, t, s)
-            rates[RECOMBINATION] = recombination_rate(p, t, s)
+            update_rates!(p, t, s, rates, (1:N_EVENTS)...)
         elseif event_id == MUTATION
             do_mutation_event!(p, t, s)
-            rates[BITING] = biting_rate(p, t, s)
-            rates[IMMIGRATION] = immigration_rate(p, t, s)
+            update_rates!(p, t, s, rates, BITING, IMMIGRATION)
         elseif event_id == RECOMBINATION
             do_recombination_event!(p, t, s)
-            rates[BITING] = biting_rate(p, t, s)
-            rates[IMMIGRATION] = immigration_rate(p, t, s)
+            update_rates!(p, t, s, rates, BITING, IMMIGRATION)
         end
         
         println("t = $(t)")
+    end
+end
+
+function update_rates!(p::Params, t::Float64, s::State, rates, event_ids...)
+    for event_id in event_ids
+        rates[event_id] = event_rate(event_id, p::Params, t::Float64, s::State)
+    end
+end
+
+function event_rate(event_id, p::Params, t::Float64, s::State)
+    if event_id == BITING
+        biting_rate(p, t, s)
+    elseif event_id == IMMIGRATION
+        immigration_rate(p, t, s)
+    elseif event_id == IMMUNITY_LOSS
+        immunity_loss_rate(p, t, s)
+    elseif event_id == TRANSITION
+        transition_rate(p, t, s)
+    elseif event_id == MUTATION
+        mutation_rate(p, t, s)
+    elseif event_id == RECOMBINATION
+        recombination_rate(p, t, s)
     end
 end
 
