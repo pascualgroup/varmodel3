@@ -4,39 +4,51 @@ using Random
 using Distributions
 using StatsBase
 
-const HostId = UInt32
-const InfectionId = UInt32
+# General Q's:
+# - Memory usage
+#   - How much memory is being used right now for the biggest runs?
+#   - (& is that therefore a bottleneck for cluster resources)
+#   - Qualitative importance of immunity loss?
+# - Speed
+#   - ABC stuff?
+#   - How much faster would be valuable?
+#   - GPU availability: Argonne Theta w/ DGX A100?
+#     https://www.alcf.anl.gov/support-center/theta
+
+const HostId = UInt16
+# const InfectionId = UInt32
 const Locus = UInt8
-const AlleleId = UInt32
+const AlleleId = UInt16 # TODO: 16-bit allele IDs?
+const ExpressionIndex = UInt8
 const Gene = Array{AlleleId}
+const Strain = Array{Gene}
 const ImmunityCount = UInt8
 
-# Used to work around that Julia doesn't support mutual type recursion
-# (e.g. Host pointing to Infection and Infection pointing to Host)
-abstract type Object end
-
-@with_kw mutable struct Infection <: Object
-    "Reference to containing Host"
-    host::Object
-    
-    "Time infection occurred at"
-    t::Float64
+@with_kw mutable struct Infection
+    "Strain"
+    strain::Strain
     
     "Expression order of genes"
-    expression_order::Array{Gene}
+    expression_order::Array{ExpressionIndex}
+    
+    "Time infection occurred at"
+    t::Float32
+    
+    "Reference to containing Host"
+    host_id::HostId # TODO: replace with ID to save memory
     
     "Current expression index of genes"
-    expression_index::Int
+    expression_index::UInt8
 end
 
 const ImmunityCounter = Accumulator{AlleleId, ImmunityCount}
 
-@with_kw mutable struct Host <: Object
+@with_kw mutable struct Host
     "Unique ID across simulation"
     id::HostId
     
-    t_birth::Float64
-    t_death::Float64
+    t_birth::Float32
+    t_death::Float32
     
     infections::Array{Infection}
     
@@ -45,17 +57,19 @@ const ImmunityCounter = Accumulator{AlleleId, ImmunityCount}
 end
 
 struct ImmunityRef
-    host::Host
+    host_id::HostId # TODO: replace with ID to save memory
     locus::Locus
     allele_id::AlleleId
 end
 
-@with_kw mutable struct State <: Object
+@with_kw mutable struct State
     n_alleles::Array{Int}
     gene_pool::Array{Gene}
     
+    host_id_map::Dict{HostId, Host}
     hosts::IndexedSet{Host}
     infected_hosts::IndexedSet{Host}
+    
     infections::IndexedSet{Infection}
     immunities::IndexedSet{ImmunityRef}
 end
@@ -67,6 +81,7 @@ function infected_fraction(s::State)
 end
 
 const N_EVENTS = 6
+const ALL_EVENTS = collect(1:N_EVENTS)
 const (
     BITING,
     IMMIGRATION,
@@ -74,7 +89,7 @@ const (
     TRANSITION,
     MUTATION,
     RECOMBINATION
-) = 1:N_EVENTS
+) = ALL_EVENTS
 
 function run_exact(p::Params)
     # println("run_exact()")
@@ -113,6 +128,8 @@ function run_exact(p::Params)
             println("# infections: $(length(s.infections))")
             println("# immunities: $(length(s.immunities))")
             t_next_print += 30.0
+            
+#             Base.GC.gc()
         end
         
         @assert total_rate > 0.0
@@ -120,22 +137,40 @@ function run_exact(p::Params)
         event_id = sample(1:N_EVENTS, Weights(rates, total_rate))
         if event_id == BITING
             do_biting_event!(p, t, s)
-            update_rates!(p, t, s, rates, BITING, IMMIGRATION, TRANSITION, MUTATION, RECOMBINATION)
+            update_rates!(
+                p, t, s, rates,
+                BITING, IMMIGRATION, TRANSITION, MUTATION, RECOMBINATION
+            )
         elseif event_id == IMMIGRATION
             do_immigration_event!(p, t, s)
-            update_rates!(p, t, s, rates, BITING, IMMIGRATION, TRANSITION, MUTATION, RECOMBINATION)
+            update_rates!(
+                p, t, s, rates,
+                BITING, IMMIGRATION, TRANSITION, MUTATION, RECOMBINATION
+            )
         elseif event_id == IMMUNITY_LOSS
             do_immunity_loss_event!(p, t, s)
-            update_rates!(p, t, s, rates, BITING, IMMIGRATION)
+            update_rates!(
+                p, t, s, rates,
+                BITING, IMMIGRATION
+            )
         elseif event_id == TRANSITION
             do_transition_event!(p, t, s)
-            update_rates!(p, t, s, rates, (1:N_EVENTS)...)
+            update_rates!(
+                p, t, s, rates,
+                ALL_EVENTS...
+            )
         elseif event_id == MUTATION
             do_mutation_event!(p, t, s)
-            update_rates!(p, t, s, rates, BITING, IMMIGRATION)
+            update_rates!(
+                p, t, s, rates,
+                BITING, IMMIGRATION
+            )
         elseif event_id == RECOMBINATION
             do_recombination_event!(p, t, s)
-            update_rates!(p, t, s, rates, BITING, IMMIGRATION)
+            update_rates!(
+                p, t, s, rates,
+                BITING, IMMIGRATION
+            )
         end
         
         # println("t = $(t)")
@@ -181,29 +216,44 @@ function do_biting_event!(p::Params, t::Float64, s::State)
     # println("src_host = $(src_host.id), dst_host = $(dst_host.id)")
     
     # Identify infections past the liver stage
-    inf_indices = findall([inf.t + p.t_liver_stage < t for inf in src_host.infections])
+    inf_indices = findall(
+        [inf.t + p.t_liver_stage < t for inf in src_host.infections]
+    )
     inf_count = length(inf_indices)
     
     # Only transmit if there are between 1 and moi_transmission_max infections
     if 1 <= inf_count <= p.moi_transmission_max
-        p_infect = p.transmissibility / (p.coinfection_reduces_transmission ? 1 : inf_count)
+        p_infect = p.transmissibility /
+            (p.coinfection_reduces_transmission ? 1 : inf_count)
         inf_to_transmit = findall(p_infect .< rand(inf_count))
         # println("transmitting $(length(inf_to_transmit)) infections")
         
-        src_strains = [inf.expression_order for inf in src_host.infections[inf_to_transmit]]
+        src_strains = [
+            inf.strain
+            for inf in src_host.infections[inf_to_transmit]
+        ]
         
         strains1 = sample(src_strains, length(src_strains))
         strains2 = sample(src_strains, length(src_strains))
         
+        # TODO: reuse unshuffled order across simulation
+        unshuffled_order = collect(UInt8(1):UInt8(p.n_genes_per_strain))
         for i in 1:length(src_strains)
-            strain = if strains1[i] == strains2[i]
-                # Shuffle
-                sample(strains1[i], p.n_genes_per_strain, replace = false)
+            (strain, expression_order) = if strains1[i] === strains2[i]
+                # Shuffle expression order, reuse strain
+                expression_order = sample(unshuffled_order, p.n_genes_per_strain, replace = false)
+                
+                (strains1[i], expression_order)
             else
-                # Random subset of genes in both strains
-                sample(vcat(strains1[i], strains2[i]), p.n_genes_per_strain, replace = false)
+                # Shuffle genes from strains and use unshuffled order
+                strain = sample(
+                    vcat(strains1[i], strains2[i]),
+                    p.n_genes_per_strain, replace = false
+                )
+                
+                (strain, unshuffled_order)
             end
-            infect_host!(t, s, dst_host, strain)
+            infect_host!(t, s, dst_host, strain, expression_order)
         end
     end
 end
@@ -238,20 +288,23 @@ function do_transition_event!(p::Params, t::Float64, s::State)
     # println("do_transition_event!()")
     
     infection = rand(s.infections)
-    host::Host = infection.host
+    host::Host = s.host_id_map[infection.host_id]
     if infection.t + p.t_liver_stage < t
         # println("expression_index = $(infection.expression_index)")
         # Advance expression until non-immune gene is reached
         while true
+            # Gain extra immunity to current gene
+            gain_immunity!(p, t, s, host, current_gene(infection))
+            
             if infection.expression_index == p.n_genes_per_strain
+                # Clear infection if we're at the end
                 clear_infection!(p, t, s, host, infection)
                 break
             else
-                # Gain immunity
-                gain_immunity!(p, t, s, host, current_gene(infection))
-                
-                # Advance expression until a gene the host is not immune to
+                # Advance expression if we're not yet at the end
                 infection.expression_index += 1
+                
+                # If we're not immune to this gene, stop advancing expression
                 if !is_immune(host, infection)
                     # println("not immune.")
                     break
@@ -270,17 +323,19 @@ function gain_immunity!(p::Params, t::Float64, s::State, host::Host, gene::Gene)
         inc!(counter, allele_id)
         
         # Register this host/locus/allele combo for loss by random sampling
-        if counter[allele_id] == 1
-            push!(s.immunities, ImmunityRef(host, locus, allele_id))
+        if p.immunity_loss_rate > 0.0 && counter[allele_id] == 1
+            push!(s.immunities, ImmunityRef(host.id, locus, allele_id))
         end
     end
 end
 
 function current_gene(infection::Infection)
-    infection.expression_order[infection.expression_index]
+    infection.strain[infection.expression_order[infection.expression_index]]
 end
 
-function clear_infection!(p::Params, t::Float64, s::State, host::Host, infection::Infection)
+function clear_infection!(
+    p::Params, t::Float64, s::State, host::Host, infection::Infection
+)
     # println("clear_infection!()")
     delete!(s.infections, infection)
     delete!(host.infections, infection)
@@ -291,10 +346,11 @@ function clear_infection!(p::Params, t::Float64, s::State, host::Host, infection
 end
 
 """
-Removes an item in the middle of an array that does not need to be kept ordered in constant time.
+Removes an item in the middle of an array that does not need to be kept ordered
+in constant time.
 
-The item is replaced with the item at the end of the array, and then the item at the end of the
-array is removed.
+The item is replaced with the item at the end of the array, and then the item
+at the end of the array is removed.
 """
 function swap_with_end_and_remove!(a, index)
     if index != lastindex(a)
@@ -324,7 +380,8 @@ function do_mutation_event!(p::Params, t::Float64, s::State)
 end
 
 function recombination_rate(p::Params, t::Float64, s::State)
-    p.ectopic_recombination_rate * p.n_genes_per_strain * (p.n_genes_per_strain - 1) / 2.0 * length(s.infections)
+    p.ectopic_recombination_rate * p.n_genes_per_strain *
+        (p.n_genes_per_strain - 1) / 2.0 * length(s.infections)
 end
 
 function do_recombination_event!(p::Params, t::Float64, s::State)
@@ -339,6 +396,7 @@ function initialize_state(p::Params)
         n_alleles = n_alleles,
         gene_pool = gene_pool,
         
+        host_id_map = Dict((host.id, host) for host in hosts),
         hosts = hosts,
         infected_hosts = IndexedSet{Host}(),
         
@@ -395,20 +453,22 @@ function draw_host_lifetime(mean_lifetime, max_lifetime)
 end
 
 function initialize_infections!(p::Params, s::State)
+    expression_order = collect(UInt8(1):UInt8(p.n_genes_per_strain))
     for id in 1:p.n_initial_infections
         host = rand(s.hosts)
         strain = rand(s.gene_pool, p.n_genes_per_strain)
-        infect_host!(0.0, s, host, strain)
+        infect_host!(0.0, s, host, strain, expression_order)
     end
 end
 
-function infect_host!(t::Float64, s::State, host::Host, strain::Array{Gene})
+function infect_host!(t::Float64, s::State, host::Host, strain::Array{Gene}, expression_order::Array{ExpressionIndex})
     # println("Infecting $(host.id)")
     
     infection = Infection(;
-        host = host,
+        host_id = host.id,
         t = t,
-        expression_order = strain,
+        strain = strain,
+        expression_order = expression_order,
         expression_index = 1
     )
     push!(host.infections, infection)

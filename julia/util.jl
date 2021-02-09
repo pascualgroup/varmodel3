@@ -2,6 +2,7 @@ import Base.push!
 import Base.delete!
 import Base.rand
 import Base.length
+import Base.iterate
 
 """
     A random-samplable mutable set.
@@ -17,6 +18,8 @@ struct IndexedSet{T}
         new(T[], Dict{T, Int}())
     end
 end
+
+Base.eltype(::Type{IndexedSet{T}}) where {T} = T
 
 function push!(c::IndexedSet{T}, x::T) where {T}
     push!(c.array, x)
@@ -49,4 +52,8 @@ function delete!(a::Vector, x)
             return deleteat!(a, i)
         end
     end
+end
+
+function iterate(c::IndexedSet{T}, state = 1) where {T}
+    state > length(c) ? nothing : ( c.array[state], state + 1 )
 end

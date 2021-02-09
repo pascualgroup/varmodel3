@@ -59,7 +59,7 @@ function init_params()
         moi_transmission_max = 9,
     
         mean_host_lifetime = 30 * t_year,
-        max_host_lifetime = 30 * t_year,
+        max_host_lifetime = 80 * t_year,
     
         immigration_on = true,
         immigration_rate_fraction = 0.0026,
