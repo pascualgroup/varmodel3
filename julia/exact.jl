@@ -73,6 +73,8 @@ end
     
     infections::IndexedSet{Infection}
     immunities::IndexedSet{ImmunityRef}
+    
+    default_expression_order::Array{ExpressionIndex}
 end
 
 function infected_fraction(s::State)
@@ -251,13 +253,11 @@ function do_biting_event!(p::Params, t::Float64, s::State)
     
     strains1 = rand(src_strains, length(src_strains))
     strains2 = rand(src_strains, length(src_strains))
-
-    # TODO: reuse unshuffled order across simulation
-    unshuffled_order = collect(UInt8(1):UInt8(p.n_genes_per_strain))
+    
     for i in 1:min(length(src_strains), p.max_infection_count - length(dst_host.infections))
         (strain, expression_order) = if strains1[i] === strains2[i]
             # Shuffle expression order, reuse strain
-            expression_order = sample(unshuffled_order, p.n_genes_per_strain, replace = false)
+            expression_order = sample(s.default_expression_order, p.n_genes_per_strain, replace = false)
     
             (strains1[i], expression_order)
         else
@@ -267,7 +267,7 @@ function do_biting_event!(p::Params, t::Float64, s::State)
                 p.n_genes_per_strain, replace = false
             )
     
-            (strain, unshuffled_order)
+            (strain, s.default_expression_order)
         end
         infect_host!(p, t, s, dst_host, strain, expression_order)
     end
@@ -287,7 +287,7 @@ function do_immigration_event!(p::Params, t::Float64, s::State)
     host = rand(s.hosts)
     if length(host.infections) < p.max_infection_count
         strain = rand(s.gene_pool, p.n_genes_per_strain)
-        expression_order = collect(ExpressionIndex(1):ExpressionIndex(p.n_genes_per_strain))
+        expression_order = s.default_expression_order
         infect_host!(p, t, s, host, strain, expression_order)
     end
 end
@@ -426,6 +426,8 @@ function initialize_state(p::Params)
         
         infections = IndexedSet{Infection}(),
         immunities = IndexedSet{ImmunityRef}(),
+        
+        default_expression_order = collect(ExpressionIndex(1):ExpressionIndex(p.n_genes_per_strain))
     )
     initialize_infections!(p, s)
     
@@ -479,8 +481,8 @@ function reinitialize_if_past_death!(p::Params, t::Float64, s::State, host::Host
         for infection in host.infections
             delete!(s.infections, infection)
         end
-        host.infections = []
-#         empty!(host.infections)
+#         host.infections = []
+        empty!(host.infections)
         delete!(s.infected_hosts, host)
         
         # Remove all immunities
@@ -490,8 +492,8 @@ function reinitialize_if_past_death!(p::Params, t::Float64, s::State, host::Host
                 delete!(s.immunities, ImmunityRef(host.id, locus, allele_id))
                 @assert length(s.immunities) == old_global_immunity_count - 1
             end
-            host.immunity_counts[locus] = ImmunityCounter()
-#             empty!(host.immunity_counts[locus].map)
+#             host.immunity_counts[locus] = ImmunityCounter()
+            empty!(host.immunity_counts[locus].map)
         end
         
         # Update ID
@@ -511,14 +513,13 @@ function draw_host_lifetime(p::Params)
 end
 
 function initialize_infections!(p::Params, s::State)
-    expression_order = collect(UInt8(1):UInt8(p.n_genes_per_strain))
     for id in 1:p.n_initial_infections
         while true
             host = rand(s.hosts)
             
             if length(host.infections) < p.max_infection_count
                 strain = rand(s.gene_pool, p.n_genes_per_strain)
-                infect_host!(p, 0.0, s, host, strain, expression_order)
+                infect_host!(p, 0.0, s, host, strain, s.default_expression_order)
                 break
             end
         end
