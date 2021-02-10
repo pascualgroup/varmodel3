@@ -64,7 +64,9 @@ function init_params()
     
         immigration_on = true,
         immigration_rate_fraction = 0.0026,
-    
+        
+        max_infection_count = 9,
+        
         biting_rate_mean = 0.0005,
         daily_biting_rate_distribution = [
             727.4467846151298,

@@ -62,6 +62,8 @@ end
     
     immigration_on::Union{Bool, Nothing} = nothing
     immigration_rate_fraction::Union{Float64, Nothing} = nothing
+    
+    max_infection_count::Union{Int, Nothing}
 end
 
 function validate(p::Params)
