@@ -57,7 +57,7 @@ const ImmunityCounter = Accumulator{AlleleId, ImmunityCount}
 end
 
 struct ImmunityRef
-    host_id::HostId # TODO: replace with ID to save memory
+    host_id::HostId
     locus::Locus
     allele_id::AlleleId
 end
@@ -66,6 +66,7 @@ end
     n_alleles::Array{Int}
     gene_pool::Array{Gene}
     
+    next_host_id::HostId
     host_id_map::Dict{HostId, Host}
     hosts::IndexedSet{Host}
     infected_hosts::IndexedSet{Host}
@@ -213,6 +214,10 @@ function do_biting_event!(p::Params, t::Float64, s::State)
     src_host = rand(s.infected_hosts)
     dst_host = rand(s.hosts)
     
+    # Allow hosts to die and get reinitialized if we've passed their death time
+    reinitialize_if_past_death!(p, t, s, src_host)
+    reinitialize_if_past_death!(p, t, s, dst_host)
+    
     # println("src_host = $(src_host.id), dst_host = $(dst_host.id)")
     
     # Identify infections past the liver stage
@@ -320,11 +325,13 @@ function gain_immunity!(p::Params, t::Float64, s::State, host::Host, gene::Gene)
     for locus in 1:lastindex(gene)
         counter = host.immunity_counts[locus]
         allele_id = gene[locus]
-        inc!(counter, allele_id)
         
-        # Register this host/locus/allele combo for loss by random sampling
-        if p.immunity_loss_rate > 0.0 && counter[allele_id] == 1
-            push!(s.immunities, ImmunityRef(host.id, locus, allele_id))
+        if counter[allele_id] < p.max_immunity_count
+            inc!(counter, allele_id)
+            # Register this host/locus/allele combo for loss by random sampling
+            if p.immunity_loss_rate > 0.0 && counter[allele_id] == 1
+                push!(s.immunities, ImmunityRef(host.id, locus, allele_id))
+            end
         end
     end
 end
@@ -396,6 +403,7 @@ function initialize_state(p::Params)
         n_alleles = n_alleles,
         gene_pool = gene_pool,
         
+        next_host_id = length(hosts) + 1,
         host_id_map = Dict((host.id, host) for host in hosts),
         hosts = hosts,
         infected_hosts = IndexedSet{Host}(),
@@ -432,7 +440,7 @@ function initialize_hosts(p::Params, gene_pool)
     hosts = IndexedSet{Host}()
     
     for id in 1:p.n_hosts
-        lifetime = draw_host_lifetime(p.mean_host_lifetime, p.max_host_lifetime)
+        lifetime = draw_host_lifetime(p)
         t_birth = -rand() * lifetime
         t_death = t_birth + lifetime
         
@@ -441,15 +449,47 @@ function initialize_hosts(p::Params, gene_pool)
             t_birth = t_birth,
             t_death = t_death,
             infections = Infection[],
-            immunity_counts = [Dict() for i in 1:p.n_loci]
+            immunity_counts = [ImmunityCounter() for i in 1:p.n_loci]
         ))
     end
     
     hosts
 end
 
-function draw_host_lifetime(mean_lifetime, max_lifetime)
-    min(rand(Exponential(mean_lifetime)), max_lifetime)
+function reinitialize_if_past_death!(p::Params, t::Float64, s::State, host::Host)
+    while t > host.t_death
+#         println("Reinitializing host $(host.id)")
+        # Remove all infections
+        for infection in host.infections
+            delete!(s.infections, infection)
+        end
+        empty!(host.infections)
+        delete!(s.infected_hosts, host)
+        
+        # Remove all immunities
+        for locus in 1:p.n_loci
+            for (allele_id, count) in host.immunity_counts[locus]
+                old_global_immunity_count = length(s.immunities)
+                delete!(s.immunities, ImmunityRef(host.id, locus, allele_id))
+                @assert length(s.immunities) == old_global_immunity_count - 1
+            end
+            empty!(host.immunity_counts[locus].map)
+        end
+        
+        # Update ID
+        delete!(s.host_id_map, host.id)
+        host.id = s.next_host_id
+        s.next_host_id += 1
+        s.host_id_map[host.id] = host
+        
+        # Update lifetime
+        host.t_birth = host.t_death
+        host.t_death = host.t_birth + draw_host_lifetime(p)
+    end
+end
+
+function draw_host_lifetime(p::Params)
+    min(rand(Exponential(p.mean_host_lifetime)), p.max_host_lifetime)
 end
 
 function initialize_infections!(p::Params, s::State)

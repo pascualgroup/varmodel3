@@ -33,7 +33,7 @@ function init_params()
         t_end = 111 * t_year,
         t_burnin = 10 * t_year,
     
-        n_hosts = 10000,
+        n_hosts = 1000,
         n_initial_infections = 20,
         
         n_genes_initial = 9600,
@@ -47,7 +47,8 @@ function init_params()
         coinfection_reduces_transmission = true,
     
         ectopic_recombination_rate = 1.8e-7,
-    
+        
+        max_immunity_count = 100,
         immunity_loss_rate = 0.001,
     
         mutation_rate = 1.42e-8,

@@ -27,6 +27,10 @@ function push!(c::IndexedSet{T}, x::T) where {T}
 end
 
 function delete!(c::IndexedSet{T}, x::T) where {T}
+    if !haskey(c.indices, x)
+        return c
+    end
+    
     a = c.array
     index = c.indices[x]
     if index != lastindex(a)
@@ -35,7 +39,7 @@ function delete!(c::IndexedSet{T}, x::T) where {T}
         c.indices[y] = index
     end
     pop!(a)
-    nothing
+    c
 end
 
 function length(c::IndexedSet{T}) where {T}

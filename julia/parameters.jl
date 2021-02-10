@@ -46,6 +46,7 @@ end
     
     ectopic_recombination_rate::Union{Float64, Nothing} = nothing
     
+    max_immunity_count::Union{UInt8, Nothing} = nothing
     immunity_loss_rate::Union{Float64, Nothing} = nothing
     
     mutation_rate::Union{Float64, Nothing} = nothing
@@ -56,8 +57,8 @@ end
     
     moi_transmission_max::Union{Int, Nothing}
     
-    mean_host_lifetime::Union{Float64, Nothing} = nothing
-    max_host_lifetime::Union{Float64, Nothing} = nothing
+    mean_host_lifetime::Union{Float32, Nothing} = nothing
+    max_host_lifetime::Union{Float32, Nothing} = nothing
     
     immigration_on::Union{Bool, Nothing} = nothing
     immigration_rate_fraction::Union{Float64, Nothing} = nothing
@@ -128,6 +129,8 @@ function validate(p::Params)
     
     @assert p.ectopic_recombination_rate != nothing
     @assert p.ectopic_recombination_rate >= 0.0
+    
+    @assert p.max_immunity_count != nothing
     
     @assert p.immunity_loss_rate != nothing
     @assert p.immunity_loss_rate >= 0.0
