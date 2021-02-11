@@ -3,6 +3,7 @@ import Base.delete!
 import Base.rand
 import Base.length
 import Base.iterate
+import Base.in
 
 """
     A random-samplable mutable set.
@@ -21,18 +22,23 @@ end
 
 Base.eltype(::Type{IndexedSet{T}}) where {T} = T
 
+function in(x::T, c::IndexedSet{T}) where {T}
+    haskey(c.indices, x)
+end
+
 function push!(c::IndexedSet{T}, x::T) where {T}
     push!(c.array, x)
     c.indices[x] = lastindex(c.array)
 end
 
 function delete!(c::IndexedSet{T}, x::T) where {T}
-    if !haskey(c.indices, x)
-        return c
-    end
+#     if !haskey(c.indices, x)
+#         return c
+#     end
     
     a = c.array
     index = c.indices[x]
+    delete!(c.indices, x)
     if index != lastindex(a)
         y = last(a)
         a[index] = y

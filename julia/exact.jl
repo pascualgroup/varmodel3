@@ -408,7 +408,7 @@ function mutation_rate(p::Params, t::Float64, s::State)
 end
 
 function do_mutation_event!(p::Params, t::Float64, s::State)
-    println("do_mutation_event($(t))")
+    # println("do_mutation_event!($(t))")
     infection = rand(s.infections)
     
     index = rand(1:p.n_genes_per_strain)
@@ -424,12 +424,82 @@ function mutate_gene!(p::Params, t::Float64, s::State, gene::Gene)
 end
 
 function recombination_rate(p::Params, t::Float64, s::State)
-    p.ectopic_recombination_rate * p.n_genes_per_strain *
-        (p.n_genes_per_strain - 1) / 2.0 * length(s.infections)
+    if p.n_genes_per_strain == 1
+        0.0
+    else
+        p.ectopic_recombination_rate * p.n_genes_per_strain *
+            (p.n_genes_per_strain - 1) / 2.0 * length(s.infections)
+    end
 end
 
 function do_recombination_event!(p::Params, t::Float64, s::State)
-    # println("do_recombination_event!()")
+#     println("do_recombination_event!($(t))")
+    
+    @assert p.n_genes_per_strain > 1
+    
+    infection = rand(s.infections)
+    
+    (index1, index2) = samplepair(p.n_genes_per_strain)
+    src_gene_1 = infection.strain[index1]
+    src_gene_2 = infection.strain[index2]
+    
+    if src_gene_1 === src_gene_2
+        return
+    end
+    
+    # TODO: need conversions?
+    
+    breakpoint = rand(1:p.n_loci)
+    (new_gene_1, new_gene_2) = if breakpoint == 1
+        (src_gene_1, src_gene_2)
+    else
+        similarity = gene_similarity(p, src_gene_1, src_gene_2, breakpoint)
+#         println("similarity = $(similarity)")
+        
+        new_gene_1 = if rand() < similarity
+#             println("1 is functional")
+            recombine_genes(src_gene_1, src_gene_2, breakpoint)
+        else
+            src_gene_1
+        end
+        
+        new_gene_2 = if rand() < similarity
+#             println("2 is functional")
+            recombine_genes(src_gene_2, src_gene_1, breakpoint)
+        else
+            src_gene_2
+        end
+        
+        (new_gene_1, new_gene_2)
+    end
+    
+    infection.strain[index1] = new_gene_1
+    infection.strain[index2] = new_gene_2
+end
+
+function recombine_genes(gene1, gene2, breakpoint)
+    vcat(gene1[1:(breakpoint-1)], gene2[breakpoint:end])
+end
+
+function gene_similarity(p::Params, gene1, gene2, breakpoint)
+    # Directly from C code.
+    # TODO: understand it.
+    # TODO: factor out these hard-coded constants as parameters.
+    p_div = 0.0
+    child_div = 0.0
+    rho = 0.8
+    avg_mutation = 5.0
+    for i in 1:p.n_loci
+        if gene1[i] != gene2[i]
+            p_div += 1.0
+            if i < breakpoint
+                child_div += 1.0
+            end
+        end
+    end
+    rho_power = child_div * avg_mutation * (p_div - child_div) * avg_mutation / (p_div * avg_mutation - 1.0)
+    
+    rho^rho_power
 end
 
 function initialize_state(p::Params)
@@ -504,15 +574,24 @@ function reinitialize_if_past_death!(p::Params, t::Float64, s::State, host::Host
             push!(s.old_infections, infection)
         end
 #         host.infections = []
+        
+        if length(host.infections) > 0
+            delete!(s.infected_hosts, host)
+        end
         empty!(host.infections)
-        delete!(s.infected_hosts, host)
+        
         
         # Remove all immunities
         for locus in 1:p.n_loci
             for (allele_id, count) in host.immunity_counts[locus]
-                old_global_immunity_count = length(s.immunities)
-                delete!(s.immunities, ImmunityRef(host.id, locus, allele_id))
-                @assert length(s.immunities) == old_global_immunity_count - 1
+                imref = ImmunityRef(host.id, locus, allele_id)
+                if count > 0
+                    old_global_immunity_count = length(s.immunities)
+                    delete!(s.immunities, imref)
+                    @assert length(s.immunities) == old_global_immunity_count - 1
+                else
+                    @assert !(imref in s.immunities)
+                end
             end
 #             host.immunity_counts[locus] = ImmunityCounter()
             empty!(host.immunity_counts[locus].map)
