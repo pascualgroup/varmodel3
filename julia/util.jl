@@ -61,3 +61,28 @@ end
 function iterate(c::IndexedSet{T}, state = 1) where {T}
     state > length(c) ? nothing : ( c.array[state], state + 1 )
 end
+
+function findall!(x::Array{Int}, y)
+    empty!(x)
+    for (i, yi) in enumerate(y)
+        if yi
+            push!(x, i)
+        end
+    end
+end
+
+function collect!(x, y)
+    empty!(x)
+    append!(x, y)
+end
+
+function shuffleto!(x, y)
+    collect!(x, y)
+    shuffle!(x)
+end
+
+function vcat!(x, y, z)
+    empty!(x)
+    append!(x, y)
+    append!(x, z)
+end

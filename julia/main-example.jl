@@ -33,7 +33,7 @@ function init_params()
         t_end = 111 * t_year,
         t_burnin = 10 * t_year,
     
-        n_hosts = 1000,
+        n_hosts = 10000,
         n_initial_infections = 20,
         
         n_genes_initial = 9600,

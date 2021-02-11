@@ -4,32 +4,18 @@ using Random
 using Distributions
 using StatsBase
 
-# General Q's:
-# - Memory usage
-#   - How much memory is being used right now for the biggest runs?
-#   - (& is that therefore a bottleneck for cluster resources)
-#   - Qualitative importance of immunity loss?
-# - Speed
-#   - ABC stuff?
-#   - How much faster would be valuable?
-#   - GPU availability: Argonne Theta w/ DGX A100?
-#     https://www.alcf.anl.gov/support-center/theta
-
 const HostId = UInt16
 # const InfectionId = UInt32
 const Locus = UInt8
 const AlleleId = UInt16 # TODO: 16-bit allele IDs?
 const ExpressionIndex = UInt8
 const Gene = Array{AlleleId}
-const Strain = Array{Gene}
+const Strain = Array{Union{Nothing, Gene}}
 const ImmunityCount = UInt8
 
 @with_kw mutable struct Infection
-    "Strain"
+    "Strain: genes in expression order"
     strain::Strain
-    
-    "Expression order of genes"
-    expression_order::Array{ExpressionIndex}
     
     "Time infection occurred at"
     t::Float32
@@ -72,9 +58,24 @@ end
     infected_hosts::IndexedSet{Host}
     
     infections::IndexedSet{Infection}
-    immunities::IndexedSet{ImmunityRef}
+    old_infections::Array{Infection}
     
-    default_expression_order::Array{ExpressionIndex}
+    immunities::IndexedSet{ImmunityRef}
+end
+
+struct BitingEventReusableArrays
+    inf_indices::Array{Int}
+    inf_to_transmit::Array{Int}
+    src_strains::Array{Strain}
+    strains1::Array{Union{Nothing, Strain}}
+    strains2::Array{Strain}
+    combined_genes::Strain
+    
+    function BitingEventReusableArrays()
+        new(
+            [], [], [], [], [], []
+        )
+    end
 end
 
 function infected_fraction(s::State)
@@ -115,6 +116,8 @@ function run_exact(p::Params)
     update_rates!(p, t, s, rates, (1:N_EVENTS)...)
     
     exp_dist = Exponential(1.0)
+    
+    r_biting_event = BitingEventReusableArrays()
     while true
         total_rate = sum(rates)
         dt = rand(exp_dist) / total_rate
@@ -129,17 +132,18 @@ function run_exact(p::Params)
             println("t = $(t)")
             println("frac infected: $(infected_fraction(s))")
             println("# infections: $(length(s.infections))")
+            println("# old infections: $(length(s.old_infections))")
             println("# immunities: $(length(s.immunities))")
             t_next_print += 30.0
             
-            Base.GC.gc()
+#             Base.GC.gc()
         end
         
         @assert total_rate > 0.0
         
         event_id = sample(1:N_EVENTS, Weights(rates, total_rate))
         if event_id == BITING
-            do_biting_event!(p, t, s)
+            do_biting_event!(p, t, s, r_biting_event)
             update_rates!(
                 p, t, s, rates,
                 BITING, IMMIGRATION, TRANSITION, MUTATION, RECOMBINATION
@@ -209,7 +213,7 @@ function biting_rate(p::Params, t::Float64, s::State)
     per_capita_rate * p.n_hosts
 end
 
-function do_biting_event!(p::Params, t::Float64, s::State)
+function do_biting_event!(p::Params, t::Float64, s::State, r::BitingEventReusableArrays)
     # println("do_biting_event!()")
     
     # TODO: is it OK for these to be the same host?
@@ -227,10 +231,8 @@ function do_biting_event!(p::Params, t::Float64, s::State)
     # println("src_host = $(src_host.id), dst_host = $(dst_host.id)")
 
     # Identify infections past the liver stage
-    inf_indices = findall(
-        [inf.t + p.t_liver_stage < t for inf in src_host.infections]
-    )
-    inf_count = length(inf_indices)
+    findall!(r.inf_indices, (inf.t + p.t_liver_stage < t for inf in src_host.infections))
+    inf_count = length(r.inf_indices)
 
     # Only transmit if there are between 1 and moi_transmission_max infections
     if !(1 <= inf_count <= p.moi_transmission_max)
@@ -239,37 +241,38 @@ function do_biting_event!(p::Params, t::Float64, s::State)
     
     p_infect = p.transmissibility /
         (p.coinfection_reduces_transmission ? 1 : inf_count)
-    inf_to_transmit = findall(p_infect .< rand(inf_count))
+    findall!(r.inf_to_transmit, (p_infect .< rand(inf_count)))
     # println("transmitting $(length(inf_to_transmit)) infections")
-
-    src_strains = [
-        inf.strain
-        for inf in src_host.infections[inf_to_transmit]
-    ]
     
-    if length(src_strains) == 0
+    collect!(r.src_strains, (inf.strain for inf in src_host.infections[r.inf_to_transmit]))
+    
+    if length(r.src_strains) == 0
         return
     end
     
-    strains1 = rand(src_strains, length(src_strains))
-    strains2 = rand(src_strains, length(src_strains))
+    collect!(r.strains1, r.src_strains)
+    rand!(r.strains1, r.src_strains)
     
-    for i in 1:min(length(src_strains), p.max_infection_count - length(dst_host.infections))
-        (strain, expression_order) = if strains1[i] === strains2[i]
-            # Shuffle expression order, reuse strain
-            expression_order = sample(s.default_expression_order, p.n_genes_per_strain, replace = false)
+    collect!(r.strains2, r.src_strains)
+    rand!(r.strains2, r.src_strains)
     
-            (strains1[i], expression_order)
+    for i in 1:min(length(r.src_strains), p.max_infection_count - length(dst_host.infections))
+        infection = create_or_reuse_infection!(p, t, s, dst_host)
+        
+        if r.strains1[i] === r.strains2[i]
+            # If they're the same, just shuffle genes
+            if length(r.strains1[i]) != length(infection.strain)
+                println(r.strains1[i])
+                println(infection.strain)
+                @assert false
+            end
+            sample!(r.strains1[i], infection.strain, replace = false)
         else
-            # Shuffle genes from strains and use unshuffled order
-            strain = sample(
-                vcat(strains1[i], strains2[i]),
-                p.n_genes_per_strain, replace = false
-            )
-    
-            (strain, s.default_expression_order)
+            # If they're different, sample from both sets of genes without replacement
+            vcat!(r.combined_genes, r.strains1[i], r.strains2[i])
+            sample!(r.combined_genes, infection.strain, replace = false)
         end
-        infect_host!(p, t, s, dst_host, strain, expression_order)
+        infect_host!(p, t, s, dst_host, infection)
     end
 end
 
@@ -286,9 +289,9 @@ function do_immigration_event!(p::Params, t::Float64, s::State)
     @assert p.immigration_on
     host = rand(s.hosts)
     if length(host.infections) < p.max_infection_count
-        strain = rand(s.gene_pool, p.n_genes_per_strain)
-        expression_order = s.default_expression_order
-        infect_host!(p, t, s, host, strain, expression_order)
+        infection = create_or_reuse_infection!(p, t, s, host)
+        rand!(infection.strain, s.gene_pool)
+        infect_host!(p, t, s, host, infection)
     end
 end
 
@@ -353,7 +356,7 @@ function gain_immunity!(p::Params, t::Float64, s::State, host::Host, gene::Gene)
 end
 
 function current_gene(infection::Infection)
-    infection.strain[infection.expression_order[infection.expression_index]]
+    infection.strain[infection.expression_index]
 end
 
 function clear_infection!(
@@ -362,6 +365,7 @@ function clear_infection!(
     # println("clear_infection!()")
     delete!(s.infections, infection)
     delete!(host.infections, infection)
+    push!(s.old_infections, infection)
     
     if length(host.infections) == 0
         delete!(s.infected_hosts, host)
@@ -427,7 +431,7 @@ function initialize_state(p::Params)
         infections = IndexedSet{Infection}(),
         immunities = IndexedSet{ImmunityRef}(),
         
-        default_expression_order = collect(ExpressionIndex(1):ExpressionIndex(p.n_genes_per_strain))
+        old_infections = [],
     )
     initialize_infections!(p, s)
     
@@ -480,6 +484,7 @@ function reinitialize_if_past_death!(p::Params, t::Float64, s::State, host::Host
         # Remove all infections
         for infection in host.infections
             delete!(s.infections, infection)
+            push!(s.old_infections, infection)
         end
 #         host.infections = []
         empty!(host.infections)
@@ -518,30 +523,43 @@ function initialize_infections!(p::Params, s::State)
             host = rand(s.hosts)
             
             if length(host.infections) < p.max_infection_count
-                strain = rand(s.gene_pool, p.n_genes_per_strain)
-                infect_host!(p, 0.0, s, host, strain, s.default_expression_order)
+                infection = create_or_reuse_infection!(p, 0.0, s, host)
+                rand!(infection.strain, s.gene_pool)
+                infect_host!(p, 0.0, s, host, infection)
                 break
             end
         end
     end
 end
 
-function infect_host!(p::Params, t::Float64, s::State, host::Host, strain::Array{Gene}, expression_order::Array{ExpressionIndex})
+function infect_host!(p::Params, t::Float64, s::State, host::Host, infection)
     @assert length(host.infections) < p.max_infection_count
     
     # println("Infecting $(host.id)")
-    
-    infection = Infection(;
-        host_id = host.id,
-        t = t,
-        strain = strain,
-        expression_order = expression_order,
-        expression_index = 1
-    )
     push!(host.infections, infection)
     push!(s.infections, infection)
     
     if length(host.infections) == 1
         push!(s.infected_hosts, host)
+    end
+end
+
+function create_or_reuse_infection!(p::Params, t::Float64, s::State, host::Host)
+    if length(s.old_infections) == 0
+        infection = Infection(
+            strain = Strain(nothing, p.n_genes_per_strain),
+            t = t,
+            host_id = host.id,
+            expression_index = 1
+        )
+        
+        infection
+    else
+        infection = pop!(s.old_infections)
+        infection.t = t
+        infection.host_id = host.id
+        infection.expression_index = 1
+        
+        infection
     end
 end
