@@ -296,12 +296,17 @@ function do_immigration_event!(p::Params, t::Float64, s::State)
 end
 
 function immunity_loss_rate(p::Params, t::Float64, s::State)
-#     p.immunity_loss_rate * length(s.immunities)
-    0.0
+    p.immunity_loss_rate * length(s.immunities)
 end
 
 function do_immunity_loss_event!(p::Params, t::Float64, s::State)
-    # println("do_immunity_loss_event!()")
+    imref = rand(s.immunities)
+    host = s.host_id_map[imref.host_id]
+    host.immunity_counts[imref.locus][imref.allele_id] -= 1
+    
+    if host.immunity_counts[imref.locus][imref.allele_id] == 0
+        delete!(s.immunities, imref)
+    end
 end
 
 function transition_rate(p::Params, t::Float64, s::State)
