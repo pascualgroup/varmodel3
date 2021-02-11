@@ -408,7 +408,19 @@ function mutation_rate(p::Params, t::Float64, s::State)
 end
 
 function do_mutation_event!(p::Params, t::Float64, s::State)
-    # println("do_mutation_event!()")
+    println("do_mutation_event($(t))")
+    infection = rand(s.infections)
+    
+    index = rand(1:p.n_genes_per_strain)
+    infection.strain[index] = mutate_gene!(p, t, s, infection.strain[index])
+end
+
+function mutate_gene!(p::Params, t::Float64, s::State, gene::Gene)
+    gene = Gene(gene)
+    locus = rand(1:p.n_loci)
+    s.n_alleles[locus] += 1
+    gene[locus] = s.n_alleles[locus]
+    gene
 end
 
 function recombination_rate(p::Params, t::Float64, s::State)
