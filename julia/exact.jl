@@ -49,7 +49,7 @@ struct ImmunityRef
 end
 
 @with_kw mutable struct State
-    n_alleles::Array{Int}
+    n_alleles::Array{AlleleId}
     gene_pool::Array{Gene}
     
     next_host_id::HostId
@@ -418,6 +418,8 @@ end
 function mutate_gene!(p::Params, t::Float64, s::State, gene::Gene)
     gene = Gene(gene)
     locus = rand(1:p.n_loci)
+    
+    @assert s.n_alleles[locus] < typemax(AlleleId)
     s.n_alleles[locus] += 1
     gene[locus] = s.n_alleles[locus]
     gene
