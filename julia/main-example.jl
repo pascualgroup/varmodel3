@@ -12,7 +12,8 @@ function init_params()
     t_year = 360
     
     Params(
-        implementation = EXACT_GILLESPIE,
+        implementation = DISCRETE_APPROXIMATION,
+        dt = 1,
         
         output_db_filename = "output.sqlite",
         

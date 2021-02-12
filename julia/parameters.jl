@@ -9,6 +9,8 @@ end
 @with_kw struct Params
     implementation::Union{ModelImplementation, Nothing} = nothing
     
+    dt::Union{Int, Nothing} = nothing
+    
     output_db_filename::Union{String, Nothing} = nothing
     
     output_hosts::Union{Bool, Nothing} = nothing
@@ -69,6 +71,13 @@ end
 function validate(p::Params)
     @assert p.implementation != nothing
     
+    if p.implementation == DISCRETE_APPROXIMATION
+        @assert p.dt != nothing
+        @assert p.dt > 0
+        @assert p.t_year % p.dt == 0
+        @assert p.t_burnin % p.dt == 0
+    end
+    
     @assert p.output_db_filename != nothing
     @assert p.output_db_filename != ""
     output_dir = dirname(p.output_db_filename)
@@ -99,6 +108,10 @@ function validate(p::Params)
     
     @assert p.t_end != nothing
     @assert p.t_end >= 0
+    @assert p.t_end % p.t_year == 0
+    
+    @assert p.t_burnin != nothing
+    @assert p.t_burnin % p.t_year == 0
     
     @assert p.n_hosts != nothing
     @assert p.n_hosts >= 0
