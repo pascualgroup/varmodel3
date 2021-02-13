@@ -11,7 +11,7 @@ const AlleleId = UInt16 # TODO: 16-bit allele IDs?
 const ExpressionIndex = UInt8
 const Gene = Array{AlleleId}
 const Strain = Array{Union{Nothing, Gene}}
-const ImmunityCount = UInt8
+const ImmunityCount = Int8
 
 @with_kw mutable struct Infection
     "Strain: genes in expression order"

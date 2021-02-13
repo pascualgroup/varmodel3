@@ -48,7 +48,7 @@ end
     
     ectopic_recombination_rate::Union{Float64, Nothing} = nothing
     
-    max_immunity_count::Union{UInt8, Nothing} = nothing
+    max_immunity_count::Union{Int8, Nothing} = nothing
     immunity_loss_rate::Union{Float64, Nothing} = nothing
     
     mutation_rate::Union{Float64, Nothing} = nothing
