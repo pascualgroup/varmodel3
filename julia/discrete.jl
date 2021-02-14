@@ -9,7 +9,7 @@ const RAND = Base.rand
     t_death::VECTOR{Float32}
     
     # Number of infections in each host
-    n_infections::VECTOR{UInt8}
+#     n_infections::VECTOR{UInt8}
     
     # Time of each infection
     # host X infection
@@ -17,8 +17,8 @@ const RAND = Base.rand
     
     # Genes that make up each infection, stored directly as
     # sequences of sequences of allele IDs
-    # host X infection X locus
-    infection_genes::ARRAY{UInt16, 3}
+    # host X infection X expression_index X locus
+    infection_genes::ARRAY{UInt16, 4}
     
     # Current expression index of each infection
     # host X infection
@@ -37,16 +37,16 @@ function DiscreteState(p::Params)
     t_birth = -RAND(Float32, p.n_hosts) .* lifetime
     t_death = t_birth + lifetime
     
-    n_infections = FILL(UInt8(0), p.n_hosts)
+#     n_infections = FILL(UInt8(0), p.n_hosts)
     t_infection = FILL(NaN32, p.n_hosts, p.max_infection_count)
-    infection_genes = FILL(AlleleId(0), p.n_hosts, p.max_infection_count, p.n_loci)
+    infection_genes = FILL(AlleleId(0), p.n_hosts, p.max_infection_count, p.n_genes_per_strain, p.n_loci)
     expression_index = FILL(ExpressionIndex(0), p.n_hosts, p.max_infection_count)
     
     infection_hosts = sample(1:p.n_hosts, p.n_initial_infections, replace = false)
-    n_infections[infection_hosts] .= 1
+#     n_infections[infection_hosts] .= 1
     t_infection[infection_hosts] .= 0.0
-    infection_genes[infection_hosts, 1, :] = rand(
-        AlleleId(1):AlleleId(p.n_alleles_per_locus_initial), p.n_initial_infections * p.n_loci
+    infection_genes[infection_hosts, 1, :, :] = rand(
+        AlleleId(1):AlleleId(p.n_alleles_per_locus_initial), p.n_initial_infections * p.n_genes_per_strain * p.n_loci
     )
     expression_index[infection_hosts, 1] .= 1
     
@@ -54,7 +54,7 @@ function DiscreteState(p::Params)
         t_birth = t_birth,
         t_death = t_death,
         
-        n_infections = n_infections,
+#         n_infections = n_infections,
         t_infection = t_infection,
         infection_genes = infection_genes,
         
@@ -91,9 +91,9 @@ function do_rebirth!(t, p, s)
     
     s.t_birth[dead_hosts] = s.t_death[dead_hosts]
     s.t_death[dead_hosts] = s.t_birth[dead_hosts] + [draw_host_lifetime(p) for i in 1:length(dead_hosts)]
-    s.n_infections[dead_hosts] .= 0
+#     s.n_infections[dead_hosts] .= 0
     s.t_infection[dead_hosts, :, :] .= NaN32
-    s.infection_genes[dead_hosts, :, :] .= 0
+    s.infection_genes[dead_hosts, :, :, :] .= 0
     s.expression_index[dead_hosts, :] .= 0
     s.immunity[dead_hosts, :, :] .= 0
 end
@@ -122,6 +122,11 @@ function do_immunity_loss!(t, p, s)
     end
 end
 
+function findfirst_stable(x)
+    y = findfirst(x)
+    y == nothing ? 0 : y
+end
+
 function do_transition!(t, p, s)
     println("do_transition!()")
     # TODO: adjust for dt
@@ -131,6 +136,9 @@ function do_transition!(t, p, s)
     
     n_trans_raw = rand(Binomial(n_infections, p_transition))
     println("n_trans_raw: $(n_trans_raw)")
+    if n_trans_raw == 0
+        return
+    end
     
     # Uniformly randomly sample indices in one-dimensional array
     # Includes nonexistent infections
@@ -139,6 +147,7 @@ function do_transition!(t, p, s)
     # Get one-dimensional views on infection
     expression_index_view = reshape(s.expression_index, n_infections)
     t_infection_view = reshape(s.t_infection, n_infections)
+    infection_genes_view = reshape(s.infection_genes, (n_infections, p.n_genes_per_strain, p.n_loci))
     
     # Filter indices down to infections that exist and are past the liver stage
     indices = indices_raw[
@@ -146,13 +155,61 @@ function do_transition!(t, p, s)
     ]
     n_trans = length(indices)
     println("n_trans = $(n_trans)")
+    if n_trans == 0
+        return
+    end
     
-    # Compute host and infection indices from sampled indices
+    # Compute host and infection indices from sampled linear indices
     host_indices = ((indices .- 1) .% p.n_hosts) .+ 1
     inf_indices = ((indices .- 1) ./ p.n_hosts) .+ 1
+#     host_inf_indices = [CartesianIndex(x) for x in zip(host_indices, inf_indices)]
     
-    # Construct matrix, with rows corresponding to infections, and columns
-    # corresponding to genes in the expression sequence, so that
-    # row i, column j is true if the host of infection i is *not immune* to gene j
-    # *and* the expression index is greater than the current index.
+    # is_future_expindex is an n_trans X n_genes_per_strain matrix
+    # where row i, column j is true if infection i has expression index less than j.
+    is_future_expindex = let
+        current_expindex = reshape(expression_index_view[indices], n_trans, 1)
+        other_expindex = reshape(1:p.n_genes_per_strain, 1, p.n_genes_per_strain)
+        current_expindex .< other_expindex
+    end
+    
+#     println("dims: $(size(is_future_expindex))")
+#     println(is_future_expindex)
+    
+    # is_immune is an n_trans X n_genes_per_strain matrix
+    # where row i, column j is true if the host of infection i is immune
+    # to the gene at expression index j.
+    # It is constructed by extracting immunity, and applying `all` across
+    # the third dimension: that is, computing, for each infection/gene,
+    # whether the host is immune to the allele at each locus.
+    allele_ids = infection_genes_view[indices, :, :] # n_trans X n_genes_per_strain X n_loci
+    println("size(allele_ids): $(size(allele_ids))")
+    is_not_immune = fill(false, (n_trans, p.n_genes_per_strain))
+    for locus in 1:p.n_loci
+        for j in 1:p.n_genes_per_strain
+            immunity_indices = [CartesianIndex(h, a, locus) for (h, a) in zip(host_indices, allele_ids[:, j, locus])]
+            is_not_immune[:, j] .|= s.immunity[immunity_indices] .== 0
+        end
+    end
+#     println("size(is_not_immune): $(size(is_not_immune))")
+#     println(is_not_immune)
+    
+    # Compute the first expression index in the future for which the host is not immune
+    println(is_future_expindex)
+    println(is_not_immune)
+    next_expression_indices_raw = reshape(mapslices(findfirst_stable, is_future_expindex .& is_not_immune; dims = 2), n_trans)
+    print(next_expression_indices_raw)
+    
+    subindices_to_advance = next_expression_indices_raw .!= 0
+    indices_to_advance = indices[subindices_to_advance]
+    indices_to_clear = indices[next_expression_indices_raw .== 0]
+    
+    # Advance expression of infections not yet done
+    next_expression_indices = next_expression_indices_raw[subindices_to_advance]
+    expression_index_view[indices_to_advance] = next_expression_indices
+    # TODO: confer immunity
+    
+    # Clear infections that are done
+    expression_index_view[indices_to_clear] .= 0
+    t_infection_view[indices_to_clear] .= NaN32
+    infection_genes_view[indices_to_clear, :, :] .= 0
 end
