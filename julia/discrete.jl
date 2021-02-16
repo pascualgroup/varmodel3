@@ -161,7 +161,95 @@ function do_transition!(t, p, s)
     
     # Compute host and infection indices from sampled linear indices
     host_indices = ((indices .- 1) .% p.n_hosts) .+ 1
-    inf_indices = ((indices .- 1) ./ p.n_hosts) .+ 1
+    inf_indices = ((indices .- 1) .÷ p.n_hosts) .+ 1
+#     host_inf_indices = [CartesianIndex(x) for x in zip(host_indices, inf_indices)]
+    
+    # Advance expression for each transition
+    # TODO: make CUDA-friendly
+    max_immunity_count = ImmunityCount(p.max_immunity_count)
+    for i in 1:n_trans
+        host_index = host_indices[i]
+        inf_index = inf_indices[i]
+        
+        # Advance expression until non-immune gene is reached
+        while true
+            exp_index = s.expression_index[host_index, inf_index]
+            @assert exp_index > 0
+            
+            # Gain extra immunity to current gene
+            for locus in 1:p.n_loci
+                allele_id = s.infection_genes[host_index, inf_index, exp_index, locus]
+                s.immunity[host_index, allele_id, locus] = min(
+                    max_immunity_count,
+                    s.immunity[host_index, allele_id, locus] + 1
+                )
+            end
+            
+            if exp_index == p.n_genes_per_strain
+                # Clear infection if we're at the end
+                s.t_infection[host_index, inf_index] = NaN32
+                s.infection_genes[host_index, inf_index, :, :] .= 0
+                s.expression_index[host_index, inf_index] = 0
+                break
+            else
+                # Advance expression if we're not yet at the end
+                s.expression_index[host_index, inf_index] += 1
+                
+                # If we're not immune to this gene, stop advancing expression
+                if !is_immune(p, s, host_index, inf_index, exp_index + 1)
+                    break
+                end
+            end
+        end
+    end
+end
+
+function is_immune(p, s, host_index, inf_index, exp_index)
+    for locus in 1:p.n_loci
+        allele_id = s.infection_genes[host_index, inf_index, exp_index, locus]
+        if s.immunity[host_index, allele_id, locus] == 0
+            return false
+        end
+    end
+    return true
+end
+
+
+function do_transition_arrayoriented_draft!(t, p, s)
+    println("do_transition!()")
+    # TODO: adjust for dt
+    p_transition = 1 - exp(-p.transition_rate)
+    
+    n_infections = p.n_hosts * p.max_infection_count
+    
+    n_trans_raw = rand(Binomial(n_infections, p_transition))
+    println("n_trans_raw: $(n_trans_raw)")
+    if n_trans_raw == 0
+        return
+    end
+    
+    # Uniformly randomly sample indices in one-dimensional array
+    # Includes nonexistent infections
+    indices_raw = sample(1:n_infections, n_trans_raw, replace = false)
+    
+    # Get one-dimensional views on infection
+    expression_index_view = reshape(s.expression_index, n_infections)
+    t_infection_view = reshape(s.t_infection, n_infections)
+    infection_genes_view = reshape(s.infection_genes, (n_infections, p.n_genes_per_strain, p.n_loci))
+    
+    # Filter indices down to infections that exist and are past the liver stage
+    indices = indices_raw[
+        (expression_index_view[indices_raw] .> 0) .& (t_infection_view[indices_raw] .+ p.t_liver_stage .< t)
+    ]
+    n_trans = length(indices)
+    println("n_trans = $(n_trans)")
+    if n_trans == 0
+        return
+    end
+    
+    # Compute host and infection indices from sampled linear indices
+    host_indices = ((indices .- 1) .% p.n_hosts) .+ 1
+    inf_indices = ((indices .- 1) .÷ p.n_hosts) .+ 1
 #     host_inf_indices = [CartesianIndex(x) for x in zip(host_indices, inf_indices)]
     
     # is_future_expindex is an n_trans X n_genes_per_strain matrix
@@ -213,3 +301,5 @@ function do_transition!(t, p, s)
     t_infection_view[indices_to_clear] .= NaN32
     infection_genes_view[indices_to_clear, :, :] .= 0
 end
+
+
