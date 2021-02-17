@@ -241,7 +241,7 @@ function do_biting_event!(p::Params, t::Float64, s::State, r::BitingEventReusabl
     
     p_infect = p.transmissibility /
         (p.coinfection_reduces_transmission ? 1 : inf_count)
-    findall!(r.inf_to_transmit, (p_infect .< rand(inf_count)))
+    findall!(r.inf_to_transmit, (rand(inf_count) .< p_infect))
     # println("transmitting $(length(inf_to_transmit)) infections")
     
     collect!(r.src_strains, (inf.strain for inf in src_host.infections[r.inf_to_transmit]))
