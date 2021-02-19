@@ -4,7 +4,7 @@ const VECTOR = Vector
 const FILL = Base.fill
 const RAND = Base.rand
 
-@with_kw struct DiscreteState
+@with_kw mutable struct DiscreteState
     t_birth::VECTOR{Float32}
     t_death::VECTOR{Float32}
     
@@ -18,7 +18,7 @@ const RAND = Base.rand
     # Genes that make up each infection, stored directly as
     # sequences of sequences of allele IDs
     # host X infection X expression_index X locus
-    infection_genes::ARRAY{UInt16, 4}
+    infection_genes::ARRAY{AlleleId, 4}
     
     # Current expression index of each infection
     # host X infection
@@ -30,6 +30,10 @@ const RAND = Base.rand
     # Immunity level for every allele
     # host X allele_id X locus
     immunity::ARRAY{ImmunityCount, 3}
+    
+    # Gene pool for immigration events
+    # gene X locus
+    gene_pool::ARRAY{AlleleId, 2}
 end
 
 function DiscreteState(p::Params)
@@ -42,12 +46,21 @@ function DiscreteState(p::Params)
     infection_genes = FILL(AlleleId(0), p.n_hosts, p.max_infection_count, p.n_genes_per_strain, p.n_loci)
     expression_index = FILL(ExpressionIndex(0), p.n_hosts, p.max_infection_count)
     
+    gene_pool = reshape(rand(
+        AlleleId(1):AlleleId(p.n_alleles_per_locus_initial),
+        p.n_genes_initial * p.n_loci
+    ), (p.n_genes_initial, p.n_loci))
+    
     infection_hosts = sample(1:p.n_hosts, p.n_initial_infections, replace = false)
 #     n_infections[infection_hosts] .= 1
     t_infection[infection_hosts] .= 0.0
-    infection_genes[infection_hosts, 1, :, :] = rand(
-        AlleleId(1):AlleleId(p.n_alleles_per_locus_initial), p.n_initial_infections * p.n_genes_per_strain * p.n_loci
-    )
+    
+    for i in 1:p.n_genes_per_strain
+        infection_genes[infection_hosts, 1, i, :] = gene_pool[rand(1:p.n_genes_initial, p.n_initial_infections), :]
+    end
+#     rand(
+#         AlleleId(1):AlleleId(p.n_alleles_per_locus_initial), p.n_initial_infections * p.n_genes_per_strain * p.n_loci
+#     )
     expression_index[infection_hosts, 1] .= 1
     
     DiscreteState(
@@ -61,7 +74,9 @@ function DiscreteState(p::Params)
         expression_index = expression_index,
         
         n_alleles = fill(AlleleId(p.n_alleles_per_locus_initial), p.n_loci),
-        immunity = FILL(ImmunityCount(0), p.n_hosts, 2 * p.n_alleles_per_locus_initial, p.n_loci),
+        immunity = FILL(ImmunityCount(0), p.n_hosts, p.n_alleles_per_locus_initial, p.n_loci),
+        
+        gene_pool = gene_pool
     )
 end
 
@@ -76,6 +91,9 @@ function run_discrete(p::Params)
         do_immunity_loss!(t, p, s) 
         do_transition!(t, p, s)
         do_biting!(t, p, s)
+        do_mutation!(t, p, s)
+        do_recombination!(t, p, s)
+        do_immigration!(t, p, s)
         
         if t % 30 == 0
             println("n_infections = $(sum(s.expression_index .> 0))")
@@ -358,93 +376,136 @@ function do_biting!(t, p, s)
     end
 end
 
+function do_mutation!(t, p, s)
+    # TODO: adjust for dt
+    p_mut = 1 - exp(-p.mutation_rate)
+    
+    # Draw mutations randomly using linear indexing
+    n_possible_mut = length(s.infection_genes)
+    n_mut_raw = rand(Binomial(n_possible_mut, p_mut))
+    mut_indices_raw = sample(1:n_possible_mut, n_mut_raw, replace = false)
+    
+    # Apply mutations for infections that actually exist
+    genes_cartesian = CartesianIndices(s.infection_genes)
+    mut_indices = filter(
+        function (i)
+            ind = genes_cartesian[i] # Gets multidimensional index from linear index
+            host = ind[1]
+            inf = ind[2]
+            s.expression_index[host, inf] > 0
+        end,
+        mut_indices_raw
+    )
+    n_mut = length(mut_indices)
+    println("n_mut_raw = $(n_mut_raw), n_mut = $(n_mut)")
+    
+    # Apply mutations by creating new alleles
+    # TODO: data-parallelize? (not helpful at low mutation rates.)
+    for i in mut_indices
+        (host, inf, exp_ind, locus) = Tuple(genes_cartesian[i])
+        @assert s.expression_index[host, inf] > 0
+        @assert maximum(s.n_alleles) < typemax(AlleleId)
+        s.n_alleles[locus] += 1
+        s.infection_genes[host, inf, exp_ind, locus] = s.n_alleles[locus]
+    end
+    
+    resize_immunity_if_necessary!(p, s)
+end
 
+function do_recombination!(t, p, s)
+    p_recomb = 1 - exp(
+        -p.ectopic_recombination_rate * (p.n_genes_per_strain) * (p.n_genes_per_strain - 1) / 2.0
+    )
+    
+    n_inf_raw = p.n_hosts * p.max_infection_count
+    n_recomb_raw = rand(Binomial(n_inf_raw, p_recomb))
+    recomb_indices_raw = sample(1:n_inf_raw, n_recomb_raw, replace = false)
+    
+    # Identify active infections
+    recomb_indices = filter(
+        i -> s.expression_index[i] > 0,
+        recomb_indices_raw
+    )
+    n_recomb = length(recomb_indices)
+    
+    println("n_recomb_raw = $(n_recomb_raw), n_recomb = $(n_recomb)")
+    
+    # Apply recombinations
+    # TODO: data-parallelize?
+    inf_cartesian = CartesianIndices(s.expression_index)
+    breakpoints = rand(1:p.n_loci, n_recomb)
+    for i in 1:n_recomb
+        (host, inf) = Tuple(inf_cartesian[recomb_indices[i]])
+        
+        i1, i2 = samplepair(p.n_genes_per_strain)
+        src_gene_1 = @view s.infection_genes[host, inf, i1, :]
+        src_gene_2 = @view s.infection_genes[host, inf, i2, :]
+        if src_gene_1 == src_gene_2
+            continue
+        end
+        
+        breakpoint = breakpoints[i]
+        if breakpoint == 1
+            # Do nothing
+        else
+            similarity = gene_similarity(p, src_gene_1, src_gene_2, breakpoint)
+            
+            new_gene_1 = if rand() < similarity
+                recombine_genes(src_gene_1, src_gene_2, breakpoint)
+            else
+                src_gene_1
+            end
+        
+            new_gene_2 = if rand() < similarity
+                recombine_genes(src_gene_2, src_gene_1, breakpoint)
+            else
+                src_gene_2
+            end
+            
+            src_gene_1[:] = new_gene_1
+            src_gene_2[:] = new_gene_2
+        end
+    end
+end
 
-# function do_transition_arrayoriented_draft!(t, p, s)
-#     println("do_transition!()")
-#     # TODO: adjust for dt
-#     p_transition = 1 - exp(-p.transition_rate)
-#     
-#     n_infections = p.n_hosts * p.max_infection_count
-#     
-#     n_trans_raw = rand(Binomial(n_infections, p_transition))
-#     println("n_trans_raw: $(n_trans_raw)")
-#     if n_trans_raw == 0
-#         return
-#     end
-#     
-#     # Uniformly randomly sample indices in one-dimensional array
-#     # Includes nonexistent infections
-#     indices_raw = sample(1:n_infections, n_trans_raw, replace = false)
-#     
-#     # Get one-dimensional views on infection
-#     expression_index_view = reshape(s.expression_index, n_infections)
-#     t_infection_view = reshape(s.t_infection, n_infections)
-#     infection_genes_view = reshape(s.infection_genes, (n_infections, p.n_genes_per_strain, p.n_loci))
-#     
-#     # Filter indices down to infections that exist and are past the liver stage
-#     indices = indices_raw[
-#         (expression_index_view[indices_raw] .> 0) .& (t_infection_view[indices_raw] .+ p.t_liver_stage .< t)
-#     ]
-#     n_trans = length(indices)
-#     println("n_trans = $(n_trans)")
-#     if n_trans == 0
-#         return
-#     end
-#     
-#     # Compute host and infection indices from sampled linear indices
-#     host_indices = ((indices .- 1) .% p.n_hosts) .+ 1
-#     inf_indices = ((indices .- 1) .÷ p.n_hosts) .+ 1
-# #     host_inf_indices = [CartesianIndex(x) for x in zip(host_indices, inf_indices)]
-#     
-#     # is_future_expindex is an n_trans X n_genes_per_strain matrix
-#     # where row i, column j is true if infection i has expression index less than j.
-#     is_future_expindex = let
-#         current_expindex = reshape(expression_index_view[indices], n_trans, 1)
-#         other_expindex = reshape(1:p.n_genes_per_strain, 1, p.n_genes_per_strain)
-#         current_expindex .< other_expindex
-#     end
-#     
-# #     println("dims: $(size(is_future_expindex))")
-# #     println(is_future_expindex)
-#     
-#     # is_immune is an n_trans X n_genes_per_strain matrix
-#     # where row i, column j is true if the host of infection i is immune
-#     # to the gene at expression index j.
-#     # It is constructed by extracting immunity, and applying `all` across
-#     # the third dimension: that is, computing, for each infection/gene,
-#     # whether the host is immune to the allele at each locus.
-#     allele_ids = infection_genes_view[indices, :, :] # n_trans X n_genes_per_strain X n_loci
-#     println("size(allele_ids): $(size(allele_ids))")
-#     is_not_immune = fill(false, (n_trans, p.n_genes_per_strain))
-#     for locus in 1:p.n_loci
-#         for j in 1:p.n_genes_per_strain
-#             immunity_indices = [CartesianIndex(h, a, locus) for (h, a) in zip(host_indices, allele_ids[:, j, locus])]
-#             is_not_immune[:, j] .|= s.immunity[immunity_indices] .== 0
-#         end
-#     end
-# #     println("size(is_not_immune): $(size(is_not_immune))")
-# #     println(is_not_immune)
-#     
-#     # Compute the first expression index in the future for which the host is not immune
-#     println(is_future_expindex)
-#     println(is_not_immune)
-#     next_expression_indices_raw = reshape(mapslices(findfirst_stable, is_future_expindex .& is_not_immune; dims = 2), n_trans)
-#     print(next_expression_indices_raw)
-#     
-#     subindices_to_advance = next_expression_indices_raw .!= 0
-#     indices_to_advance = indices[subindices_to_advance]
-#     indices_to_clear = indices[next_expression_indices_raw .== 0]
-#     
-#     # Advance expression of infections not yet done
-#     next_expression_indices = next_expression_indices_raw[subindices_to_advance]
-#     expression_index_view[indices_to_advance] = next_expression_indices
-#     # TODO: confer immunity
-#     
-#     # Clear infections that are done
-#     expression_index_view[indices_to_clear] .= 0
-#     t_infection_view[indices_to_clear] .= NaN32
-#     infection_genes_view[indices_to_clear, :, :] .= 0
-# end
-# 
-# 
+function do_immigration!(t, p, s)
+    # TODO: adjust for dt
+    p_bite = 1 - exp(
+        -p.immigration_rate_fraction * (p.biting_rate_mean * p.daily_biting_rate_distribution[
+            1 + Int(floor(t)) % p.t_year
+        ])
+    )
+    println("p_bite = $(p_bite)")
+    n_bites = rand(Binomial(p.n_hosts, p_bite))
+    
+    
+    # Sample source hosts
+    hosts_raw = sample(1:p.n_hosts, n_bites, replace = false)
+    
+    # Filter to hosts with available infection slots
+    hosts = filter(
+        i -> sum(s.expression_index[i,:] .== 0) > 0,
+        hosts_raw
+    )
+    
+    println("n_imm_raw = $(length(hosts_raw)), n_imm = $(length(hosts))")
+    
+    for host in hosts
+        inf_ind = findfirst(s.expression_index[host, :] .== 0)
+        
+        s.infection_genes[host, inf_ind, :, :] = s.gene_pool[rand(1:size(s.gene_pool)[1], p.n_genes_per_strain), :]
+        s.t_infection[host, inf_ind] = 0.0
+        s.expression_index[host, inf_ind] = 1
+    end
+end
+
+function resize_immunity_if_necessary!(p, s)
+    immunity_size = size(s.immunity)[2]
+    if maximum(s.n_alleles) > immunity_size
+        println("increasing immunity capacity by 25%...")
+        new_immunity_size = immunity_size * 5 ÷ 4
+        new_immunity = FILL(ImmunityCount(0), p.n_hosts, new_immunity_size, p.n_loci)
+        new_immunity[:,1:immunity_size,:] = s.immunity
+        s.immunity = new_immunity
+    end
+end
