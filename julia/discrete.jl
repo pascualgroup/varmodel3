@@ -82,6 +82,8 @@ end
 
 function run_discrete(p::Params)
     s = DiscreteState(p)
+    db = initialize_database(p)
+    execute(db, "BEGIN TRANSACTION")
     
     # TODO: use dt
     for t in 1:p.t_end
@@ -98,8 +100,51 @@ function run_discrete(p::Params)
         if t % 30 == 0
             println("n_infections = $(sum(s.expression_index .> 0))")
             println("n_immunity = $(sum(s.immunity .> 0))")
+            
+            write_summary(t, p, s, db)
+            
+            execute(db, "COMMIT")
+            execute(db, "BEGIN TRANSACTION")
         end
     end
+end
+
+function write_summary(t, p, s::DiscreteState, db)
+    n_infections = sum(s.expression_index .!== 0)
+    n_infected = sum(sum(s.expression_index .!== 0, dims = 2) .!== 0)
+    n_infected_bites = 0
+    n_total_bites = 0
+    (n_circulating_genes, n_circulating_strains) = count_circulating_genes_and_strains(p, s)
+    exec_time = 0.0
+    
+    execute(db.summary, [
+        t,
+        n_infections,
+        n_infected,
+        n_infected_bites,
+        n_total_bites,
+        n_circulating_strains,
+        n_circulating_genes,
+        exec_time
+    ])
+end
+
+function count_circulating_genes_and_strains(p::Params, s::DiscreteState)
+    println("Starting count...")
+    genes::Set{Array{AlleleId, 1}} = Set()
+    strains::Set{Array{AlleleId, 2}} = Set()
+    
+    for j in 1:p.max_infection_count
+        for i in 1:p.n_hosts
+            push!(strains, s.infection_genes[i, j, :, :])
+            for k in 1:p.n_genes_per_strain
+                push!(genes, s.infection_genes[i, j, k, :])
+            end
+        end
+    end
+    println("Count finished.")
+    
+    (length(genes), length(strains))
 end
 
 function do_rebirth!(t, p, s)

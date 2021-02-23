@@ -1,6 +1,7 @@
 #!/usr/bin/env julia
 
 include("parameters.jl")
+include("output.jl")
 include("model.jl")
 
 function main()

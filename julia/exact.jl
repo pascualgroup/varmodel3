@@ -108,7 +108,9 @@ function run_exact(p::Params)
     Random.seed!(rng_seed)
         
     s = initialize_state(p)
-    
+    db = initialize_database(p)
+    execute(db, "BEGIN TRANSACTION")
+        
     t = 0.0
     t_next_print = 30.0
     
@@ -129,14 +131,18 @@ function run_exact(p::Params)
         
         t = t_next
         if t > t_next_print
-            println("t = $(t)")
+            println("t = $(t_next_print)")
             println("frac infected: $(infected_fraction(s))")
             println("# infections: $(length(s.infections))")
             println("# old infections: $(length(s.old_infections))")
             println("# immunities: $(length(s.immunities))")
-            t_next_print += 30.0
             
-#             Base.GC.gc()
+            write_summary(t_next_print, s, db)
+            
+            execute(db, "COMMIT")
+            execute(db, "BEGIN TRANSACTION")
+            
+            t_next_print += 30.0
         end
         
         @assert total_rate > 0.0
@@ -182,6 +188,44 @@ function run_exact(p::Params)
         
         # println("t = $(t)")
     end
+    
+    execute(db, "COMMIT")
+end
+
+function write_summary(t, s::State, db)
+    n_infections = length(s.infections)
+    n_infected = length(s.infected_hosts)
+    n_infected_bites = 0
+    n_total_bites = 0
+    (n_circulating_genes, n_circulating_strains) = count_circulating_genes_and_strains(s)
+    exec_time = 0.0
+    
+    execute(db.summary, [
+        t,
+        n_infections,
+        n_infected,
+        n_infected_bites,
+        n_total_bites,
+        n_circulating_strains,
+        n_circulating_genes,
+        exec_time
+    ])
+end
+
+function count_circulating_genes_and_strains(s)
+    println("Starting count...")
+    genes::Set{Gene} = Set()
+    strains::Set{Strain} = Set()
+    
+    for infection in s.infections
+        push!(strains, infection.strain)
+        for gene in infection.strain
+            push!(genes, gene)
+        end
+    end
+    println("Count finished.")
+    
+    (length(genes), length(strains))
 end
 
 function update_rates!(p::Params, t::Float64, s::State, rates, event_ids...)
