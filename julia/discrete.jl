@@ -4,6 +4,8 @@ const VECTOR = Vector
 const FILL = Base.fill
 const RAND = Base.rand
 
+const StrainId = UInt32
+
 @with_kw mutable struct DiscreteState
     t_birth::VECTOR{Float32}
     t_death::VECTOR{Float32}
@@ -14,6 +16,13 @@ const RAND = Base.rand
     # Time of each infection
     # host X infection
     t_infection::ARRAY{Float32, 2}
+    
+    # Strain IDs for each infection, used during infection to
+    # compare whether two sets of genes are copies of each other
+    # host X infection
+    infection_strain_id::ARRAY{StrainId, 2}
+    
+    next_strain_id::StrainId
     
     # Genes that make up each infection, stored directly as
     # sequences of sequences of allele IDs
@@ -43,6 +52,7 @@ function DiscreteState(p::Params)
     
 #     n_infections = FILL(UInt8(0), p.n_hosts)
     t_infection = FILL(NaN32, p.n_hosts, p.max_infection_count)
+    infection_strain_id = FILL(0, p.n_hosts, p.max_infection_count)
     infection_genes = FILL(AlleleId(0), p.n_hosts, p.max_infection_count, p.n_genes_per_strain, p.n_loci)
     expression_index = FILL(ExpressionIndex(0), p.n_hosts, p.max_infection_count)
     
@@ -54,6 +64,9 @@ function DiscreteState(p::Params)
     infection_hosts = sample(1:p.n_hosts, p.n_initial_infections, replace = false)
 #     n_infections[infection_hosts] .= 1
     t_infection[infection_hosts] .= 0.0
+    
+    infection_strain_id[infection_hosts, 1] = 1:p.n_initial_infections
+    next_strain_id = p.n_initial_infections + 1
     
     for i in 1:p.n_genes_per_strain
         infection_genes[infection_hosts, 1, i, :] = gene_pool[rand(1:p.n_genes_initial, p.n_initial_infections), :]
@@ -69,6 +82,10 @@ function DiscreteState(p::Params)
         
 #         n_infections = n_infections,
         t_infection = t_infection,
+        
+        infection_strain_id = infection_strain_id,
+        next_strain_id = next_strain_id,
+        
         infection_genes = infection_genes,
         
         expression_index = expression_index,
@@ -87,7 +104,7 @@ function run_discrete(p::Params)
     
     # TODO: use dt
     for t in 1:p.t_end
-        println("stepping to t = $(t)")
+#         println("stepping to t = $(t)")
         
         do_rebirth!(t, p, s)
         do_immunity_loss!(t, p, s) 
@@ -98,6 +115,8 @@ function run_discrete(p::Params)
         do_immigration!(t, p, s)
         
         if t % 30 == 0
+            println("")
+            println("t = $(t)")
             println("n_infections = $(sum(s.expression_index .> 0))")
             println("n_immunity = $(sum(s.immunity .> 0))")
             
@@ -115,6 +134,7 @@ function write_summary(t, p, s::DiscreteState, db)
     n_infected_bites = 0
     n_total_bites = 0
     (n_circulating_genes, n_circulating_strains) = count_circulating_genes_and_strains(p, s)
+    println("n_genes = $(n_circulating_genes), n_strains = $(n_circulating_strains)")
     exec_time = 0.0
     
     execute(db.summary, [
@@ -132,13 +152,16 @@ end
 function count_circulating_genes_and_strains(p::Params, s::DiscreteState)
     println("Starting count...")
     genes::Set{Array{AlleleId, 1}} = Set()
-    strains::Set{Array{AlleleId, 2}} = Set()
+    strains::BitSet = BitSet()
     
     for j in 1:p.max_infection_count
         for i in 1:p.n_hosts
-            push!(strains, s.infection_genes[i, j, :, :])
-            for k in 1:p.n_genes_per_strain
-                push!(genes, s.infection_genes[i, j, k, :])
+            strain_id = s.infection_strain_id[i,j]
+            if strain_id != 0 && !(strain_id in strains)
+#                 for k in 1:p.n_genes_per_strain
+#                     push!(genes, s.infection_genes[i, j, k, :])
+#                 end
+                push!(strains, strain_id)
             end
         end
     end
@@ -148,15 +171,16 @@ function count_circulating_genes_and_strains(p::Params, s::DiscreteState)
 end
 
 function do_rebirth!(t, p, s)
-    println("do_rebirth!()")
+#     println("do_rebirth!()")
     
     dead_hosts = findall(s.t_death .< t)
-    println("n dead: $(length(dead_hosts))")
+#     println("n dead: $(length(dead_hosts))")
     
     s.t_birth[dead_hosts] = s.t_death[dead_hosts]
     s.t_death[dead_hosts] = s.t_birth[dead_hosts] + [draw_host_lifetime(p) for i in 1:length(dead_hosts)]
 #     s.n_infections[dead_hosts] .= 0
     s.t_infection[dead_hosts, :, :] .= NaN32
+    s.infection_strain_id[dead_hosts, :] .= 0
     s.infection_genes[dead_hosts, :, :, :] .= 0
     s.expression_index[dead_hosts, :] .= 0
     s.immunity[dead_hosts, :, :] .= 0
@@ -170,7 +194,7 @@ function do_immunity_loss!(t, p, s)
     for locus in 1:p.n_loci
         n_immunities = p.n_hosts * s.n_alleles[locus]
         n_loss = rand(Binomial(n_immunities, p_loss))
-        println("n_loss($(locus)) = $(n_loss)")
+#         println("n_loss($(locus)) = $(n_loss)")
         
         # Uniformly randomly sample indices in one-dimensional array
         indices = sample(1:n_immunities, n_loss, replace = false)
@@ -192,14 +216,14 @@ function findfirst_stable(x)
 end
 
 function do_transition!(t, p, s)
-    println("do_transition!()")
+#     println("do_transition!()")
     # TODO: adjust for dt
     p_transition = 1 - exp(-p.transition_rate)
     
     n_infections = p.n_hosts * p.max_infection_count
     
     n_trans_raw = rand(Binomial(n_infections, p_transition))
-    println("n_trans_raw: $(n_trans_raw)")
+#     println("n_trans_raw: $(n_trans_raw)")
     if n_trans_raw == 0
         return
     end
@@ -218,7 +242,7 @@ function do_transition!(t, p, s)
         (expression_index_view[indices_raw] .> 0) .& (t_infection_view[indices_raw] .+ p.t_liver_stage .< t)
     ]
     n_trans = length(indices)
-    println("n_trans = $(n_trans)")
+#     println("n_trans = $(n_trans)")
     if n_trans == 0
         return
     end
@@ -252,6 +276,7 @@ function do_transition!(t, p, s)
             if exp_index == p.n_genes_per_strain
                 # Clear infection if we're at the end
                 s.t_infection[host_index, inf_index] = NaN32
+                s.infection_strain_id[host_index, inf_index] = 0
                 s.infection_genes[host_index, inf_index, :, :] .= 0
                 s.expression_index[host_index, inf_index] = 0
                 break
@@ -285,7 +310,7 @@ function do_biting!(t, p, s)
             1 + Int(floor(t)) % p.t_year
         ])
     )
-    println("p_bite = $(p_bite)")
+#     println("p_bite = $(p_bite)")
     n_bites = rand(Binomial(p.n_hosts, p_bite))
     
     # Sample source hosts and destination hosts
@@ -407,13 +432,16 @@ function do_biting!(t, p, s)
             
             strain1 = reshape(@view(s.infection_genes[src_host, i1, :, :]), p.n_genes_per_strain, p.n_loci)
             strain2 = reshape(@view(s.infection_genes[src_host, i2, :, :]), p.n_genes_per_strain, p.n_loci)
-            s.infection_genes[dst_host, dst_inf_index, :, :] = if strain1 == strain2
+            if s.infection_strain_id[src_host, i1] == s.infection_strain_id[src_host, i2]
                 # Just copy shuffled genes if the strains are identical
-                shuffle(strain1)
+                s.infection_strain_id[dst_host, dst_inf_index] = s.infection_strain_id[src_host, i1]
+                s.infection_genes[dst_host, dst_inf_index, :, :] = shuffle(strain1)
             else
                 # Recombine genes if the strains are not identical
                 all_genes = vcat(strain1, strain2)
-                all_genes[sample(1:(2 * p.n_genes_per_strain), p.n_genes_per_strain, replace = true), :]
+                s.infection_strain_id[dst_host, dst_inf_index] = s.next_strain_id
+                s.next_strain_id += 1
+                s.infection_genes[dst_host, dst_inf_index, :, :] = all_genes[sample(1:(2 * p.n_genes_per_strain), p.n_genes_per_strain, replace = true), :]
             end
             s.expression_index[dst_host, dst_inf_index] = 1
             s.t_infection[dst_host, dst_inf_index] = t
@@ -442,7 +470,7 @@ function do_mutation!(t, p, s)
         mut_indices_raw
     )
     n_mut = length(mut_indices)
-    println("n_mut_raw = $(n_mut_raw), n_mut = $(n_mut)")
+#     println("n_mut_raw = $(n_mut_raw), n_mut = $(n_mut)")
     
     # Apply mutations by creating new alleles
     # TODO: data-parallelize? (not helpful at low mutation rates.)
@@ -452,6 +480,9 @@ function do_mutation!(t, p, s)
         @assert maximum(s.n_alleles) < typemax(AlleleId)
         s.n_alleles[locus] += 1
         s.infection_genes[host, inf, exp_ind, locus] = s.n_alleles[locus]
+        
+        s.infection_strain_id[host, inf] = s.next_strain_id
+        s.next_strain_id += 1
     end
     
     resize_immunity_if_necessary!(p, s)
@@ -473,7 +504,7 @@ function do_recombination!(t, p, s)
     )
     n_recomb = length(recomb_indices)
     
-    println("n_recomb_raw = $(n_recomb_raw), n_recomb = $(n_recomb)")
+#     println("n_recomb_raw = $(n_recomb_raw), n_recomb = $(n_recomb)")
     
     # Apply recombinations
     # TODO: data-parallelize?
@@ -509,6 +540,9 @@ function do_recombination!(t, p, s)
             
             src_gene_1[:] = new_gene_1
             src_gene_2[:] = new_gene_2
+            
+            s.infection_strain_id[host, inf] = s.next_strain_id
+            s.next_strain_id += 1
         end
     end
 end
@@ -520,7 +554,7 @@ function do_immigration!(t, p, s)
             1 + Int(floor(t)) % p.t_year
         ])
     )
-    println("p_bite = $(p_bite)")
+#     println("p_bite = $(p_bite)")
     n_bites = rand(Binomial(p.n_hosts, p_bite))
     
     
@@ -533,11 +567,13 @@ function do_immigration!(t, p, s)
         hosts_raw
     )
     
-    println("n_imm_raw = $(length(hosts_raw)), n_imm = $(length(hosts))")
+#     println("n_imm_raw = $(length(hosts_raw)), n_imm = $(length(hosts))")
     
     for host in hosts
         inf_ind = findfirst(s.expression_index[host, :] .== 0)
         
+        s.infection_strain_id[host, inf_ind] = s.next_strain_id
+        s.next_strain_id += 1
         s.infection_genes[host, inf_ind, :, :] = s.gene_pool[rand(1:size(s.gene_pool)[1], p.n_genes_per_strain), :]
         s.t_infection[host, inf_ind] = 0.0
         s.expression_index[host, inf_ind] = 1
@@ -547,7 +583,7 @@ end
 function resize_immunity_if_necessary!(p, s)
     immunity_size = size(s.immunity)[2]
     if maximum(s.n_alleles) > immunity_size
-        println("increasing immunity capacity by 25%...")
+#         println("increasing immunity capacity by 25%...")
         new_immunity_size = immunity_size * 5 ÷ 4
         new_immunity = FILL(ImmunityCount(0), p.n_hosts, new_immunity_size, p.n_loci)
         new_immunity[:,1:immunity_size,:] = s.immunity
