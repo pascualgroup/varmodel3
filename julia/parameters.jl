@@ -2,8 +2,8 @@ using Parameters
 using Base.Filesystem
 
 @enum ModelImplementation begin
-    EXACT_GILLESPIE
-    DISCRETE_APPROXIMATION
+    CONTINUOUS_TIME
+    DISCRETE_TIME
 end
 
 @with_kw struct Params
@@ -71,7 +71,7 @@ end
 function validate(p::Params)
     @assert p.implementation != nothing
     
-    if p.implementation == DISCRETE_APPROXIMATION
+    if p.implementation == DISCRETE_TIME
         @assert p.dt != nothing
         @assert p.dt > 0
         @assert p.t_year % p.dt == 0

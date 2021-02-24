@@ -13,7 +13,7 @@ function init_params()
     t_year = 360
     
     Params(
-        implementation = DISCRETE_APPROXIMATION,
+        implementation = DISCRETE_TIME,
         dt = 1,
         
         output_db_filename = "output.sqlite",

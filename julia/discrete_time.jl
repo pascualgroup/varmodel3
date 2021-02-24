@@ -1,105 +1,13 @@
-
-const ARRAY = Array
-const VECTOR = Vector
-const FILL = Base.fill
-const RAND = Base.rand
-
-const StrainId = UInt32
-
-@with_kw mutable struct DiscreteState
-    t_birth::VECTOR{Float32}
-    t_death::VECTOR{Float32}
-    
-    # Number of infections in each host
-#     n_infections::VECTOR{UInt8}
-    
-    # Time of each infection
-    # host X infection
-    t_infection::ARRAY{Float32, 2}
-    
-    # Strain IDs for each infection, used during infection to
-    # compare whether two sets of genes are copies of each other
-    # host X infection
-    infection_strain_id::ARRAY{StrainId, 2}
-    
-    next_strain_id::StrainId
-    
-    # Genes that make up each infection, stored directly as
-    # sequences of sequences of allele IDs
-    # host X infection X expression_index X locus
-    infection_genes::ARRAY{AlleleId, 4}
-    
-    # Current expression index of each infection
-    # host X infection
-    expression_index::ARRAY{ExpressionIndex, 2}
-    
-    # Number of alleles at each locus
-    n_alleles::Vector{AlleleId}
-    
-    # Immunity level for every allele
-    # host X allele_id X locus
-    immunity::ARRAY{ImmunityCount, 3}
-    
-    # Gene pool for immigration events
-    # gene X locus
-    gene_pool::ARRAY{AlleleId, 2}
-end
-
-function DiscreteState(p::Params)
-    lifetime = VECTOR([draw_host_lifetime(p) for i in 1:p.n_hosts])
-    t_birth = -RAND(Float32, p.n_hosts) .* lifetime
-    t_death = t_birth + lifetime
-    
-#     n_infections = FILL(UInt8(0), p.n_hosts)
-    t_infection = FILL(NaN32, p.n_hosts, p.max_infection_count)
-    infection_strain_id = FILL(0, p.n_hosts, p.max_infection_count)
-    infection_genes = FILL(AlleleId(0), p.n_hosts, p.max_infection_count, p.n_genes_per_strain, p.n_loci)
-    expression_index = FILL(ExpressionIndex(0), p.n_hosts, p.max_infection_count)
-    
-    gene_pool = reshape(rand(
-        AlleleId(1):AlleleId(p.n_alleles_per_locus_initial),
-        p.n_genes_initial * p.n_loci
-    ), (p.n_genes_initial, p.n_loci))
-    
-    infection_hosts = sample(1:p.n_hosts, p.n_initial_infections, replace = false)
-#     n_infections[infection_hosts] .= 1
-    t_infection[infection_hosts] .= 0.0
-    
-    infection_strain_id[infection_hosts, 1] = 1:p.n_initial_infections
-    next_strain_id = p.n_initial_infections + 1
-    
-    for i in 1:p.n_genes_per_strain
-        infection_genes[infection_hosts, 1, i, :] = gene_pool[rand(1:p.n_genes_initial, p.n_initial_infections), :]
-    end
-#     rand(
-#         AlleleId(1):AlleleId(p.n_alleles_per_locus_initial), p.n_initial_infections * p.n_genes_per_strain * p.n_loci
-#     )
-    expression_index[infection_hosts, 1] .= 1
-    
-    DiscreteState(
-        t_birth = t_birth,
-        t_death = t_death,
-        
-#         n_infections = n_infections,
-        t_infection = t_infection,
-        
-        infection_strain_id = infection_strain_id,
-        next_strain_id = next_strain_id,
-        
-        infection_genes = infection_genes,
-        
-        expression_index = expression_index,
-        
-        n_alleles = fill(AlleleId(p.n_alleles_per_locus_initial), p.n_loci),
-        immunity = FILL(ImmunityCount(0), p.n_hosts, p.n_alleles_per_locus_initial, p.n_loci),
-        
-        gene_pool = gene_pool
-    )
-end
-
-function run_discrete(p::Params)
-    s = DiscreteState(p)
+function run_discrete_time(p::Params)
+    s = State(p)
     db = initialize_database(p)
+    
+    execute(db, "BEGIN TRANSACTION")
+    write_summary(0, p, s, db)
+    execute(db, "COMMIT")
+    
+    verify(p, s)
+    
     execute(db, "BEGIN TRANSACTION")
     
     # TODO: use dt
@@ -114,7 +22,7 @@ function run_discrete(p::Params)
         do_recombination!(t, p, s)
         do_immigration!(t, p, s)
         
-        if t % 30 == 0
+        if t % 360 == 0
             println("")
             println("t = $(t)")
             println("n_infections = $(sum(s.expression_index .> 0))")
@@ -123,12 +31,15 @@ function run_discrete(p::Params)
             write_summary(t, p, s, db)
             
             execute(db, "COMMIT")
+            
+            verify(p, s)
+            
             execute(db, "BEGIN TRANSACTION")
         end
     end
 end
 
-function write_summary(t, p, s::DiscreteState, db)
+function write_summary(t, p, s::State, db)
     n_infections = sum(s.expression_index .!== 0)
     n_infected = sum(sum(s.expression_index .!== 0, dims = 2) .!== 0)
     n_infected_bites = 0
@@ -149,18 +60,18 @@ function write_summary(t, p, s::DiscreteState, db)
     ])
 end
 
-function count_circulating_genes_and_strains(p::Params, s::DiscreteState)
+function count_circulating_genes_and_strains(p::Params, s::State)
     println("Starting count...")
-    genes::Set{Array{AlleleId, 1}} = Set()
+    genes::Set{SVector{p.n_loci, AlleleId}} = Set()
     strains::BitSet = BitSet()
     
     for j in 1:p.max_infection_count
         for i in 1:p.n_hosts
             strain_id = s.infection_strain_id[i,j]
             if strain_id != 0 && !(strain_id in strains)
-#                 for k in 1:p.n_genes_per_strain
-#                     push!(genes, s.infection_genes[i, j, k, :])
-#                 end
+                for k in 1:p.n_genes_per_strain
+                    push!(genes, @view(s.infection_genes[i, j, k, :]))
+                end
                 push!(strains, strain_id)
             end
         end
@@ -178,7 +89,6 @@ function do_rebirth!(t, p, s)
     
     s.t_birth[dead_hosts] = s.t_death[dead_hosts]
     s.t_death[dead_hosts] = s.t_birth[dead_hosts] + [draw_host_lifetime(p) for i in 1:length(dead_hosts)]
-#     s.n_infections[dead_hosts] .= 0
     s.t_infection[dead_hosts, :, :] .= NaN32
     s.infection_strain_id[dead_hosts, :] .= 0
     s.infection_genes[dead_hosts, :, :, :] .= 0
@@ -435,7 +345,7 @@ function do_biting!(t, p, s)
             if s.infection_strain_id[src_host, i1] == s.infection_strain_id[src_host, i2]
                 # Just copy shuffled genes if the strains are identical
                 s.infection_strain_id[dst_host, dst_inf_index] = s.infection_strain_id[src_host, i1]
-                s.infection_genes[dst_host, dst_inf_index, :, :] = shuffle(strain1)
+                s.infection_genes[dst_host, dst_inf_index, :, :] = strain1[randperm(p.n_genes_per_strain), :]
             else
                 # Recombine genes if the strains are not identical
                 all_genes = vcat(strain1, strain2)
@@ -445,6 +355,10 @@ function do_biting!(t, p, s)
             end
             s.expression_index[dst_host, dst_inf_index] = 1
             s.t_infection[dst_host, dst_inf_index] = t
+            
+#             println("strain1 = $(strain1)")
+#             println("strain2 = $(strain2)")
+#             println("dst_strain = $(s.infection_genes[dst_host, dst_inf_index, :, :])")
         end
     end
 end
@@ -575,7 +489,7 @@ function do_immigration!(t, p, s)
         s.infection_strain_id[host, inf_ind] = s.next_strain_id
         s.next_strain_id += 1
         s.infection_genes[host, inf_ind, :, :] = s.gene_pool[rand(1:size(s.gene_pool)[1], p.n_genes_per_strain), :]
-        s.t_infection[host, inf_ind] = 0.0
+        s.t_infection[host, inf_ind] = t
         s.expression_index[host, inf_ind] = 1
     end
 end
@@ -583,9 +497,9 @@ end
 function resize_immunity_if_necessary!(p, s)
     immunity_size = size(s.immunity)[2]
     if maximum(s.n_alleles) > immunity_size
-#         println("increasing immunity capacity by 25%...")
+        println("increasing immunity capacity by 25%...")
         new_immunity_size = immunity_size * 5 ÷ 4
-        new_immunity = FILL(ImmunityCount(0), p.n_hosts, new_immunity_size, p.n_loci)
+        new_immunity = fill(ImmunityCount(0), p.n_hosts, new_immunity_size, p.n_loci)
         new_immunity[:,1:immunity_size,:] = s.immunity
         s.immunity = new_immunity
     end
