@@ -216,7 +216,7 @@ end
 function do_biting!(t, p, s)
     # TODO: adjust for dt
     p_bite = 1 - exp(
-        -(p.biting_rate_mean * p.daily_biting_rate_distribution[
+        -(p.biting_rate_mean * p.daily_biting_rate_multiplier[
             1 + Int(floor(t)) % p.t_year
         ])
     )
@@ -464,7 +464,7 @@ end
 function do_immigration!(t, p, s)
     # TODO: adjust for dt
     p_bite = 1 - exp(
-        -p.immigration_rate_fraction * (p.biting_rate_mean * p.daily_biting_rate_distribution[
+        -p.immigration_rate_fraction * (p.biting_rate_mean * p.daily_biting_rate_multiplier[
             1 + Int(floor(t)) % p.t_year
         ])
     )

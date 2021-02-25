@@ -36,7 +36,7 @@ end
     n_initial_infections::Union{Int, Nothing} = nothing
     
     biting_rate_mean::Union{Nothing, Float64} = nothing
-    daily_biting_rate_distribution::Union{Nothing, Array{Float64}} = nothing
+    daily_biting_rate_multiplier::Union{Nothing, Array{Float64}} = nothing
     
     n_genes_initial::Union{Int, Nothing} = nothing
     n_genes_per_strain::Union{Int, Nothing} = nothing
@@ -59,15 +59,13 @@ end
     
     transition_rate::Union{Float64, Nothing} = nothing
     
-    moi_transmission_max::Union{Int, Nothing}
-    
     mean_host_lifetime::Union{Float32, Nothing} = nothing
     max_host_lifetime::Union{Float32, Nothing} = nothing
     
     immigration_on::Union{Bool, Nothing} = nothing
     immigration_rate_fraction::Union{Float64, Nothing} = nothing
     
-    max_infection_count::Union{Int, Nothing}
+    max_infection_count::Union{Int, Nothing} = nothing
 end
 
 StructTypes.StructType(::Type{Params}) = StructTypes.Struct()
@@ -125,8 +123,8 @@ function validate(p::Params)
     
     @assert p.biting_rate_mean != nothing
     
-    if p.daily_biting_rate_distribution != nothing
-        @assert length(p.daily_biting_rate_distribution) == p.t_year
+    if p.daily_biting_rate_multiplier != nothing
+        @assert length(p.daily_biting_rate_multiplier) == p.t_year
     end
     
     @assert p.n_genes_initial != nothing
@@ -162,9 +160,6 @@ function validate(p::Params)
     
     @assert p.transition_rate != nothing
     @assert p.transition_rate >= 0.0
-    
-    @assert p.moi_transmission_max != nothing
-    @assert p.moi_transmission_max >= 0
     
     @assert p.mean_host_lifetime != nothing
     @assert p.mean_host_lifetime >= 0.0
