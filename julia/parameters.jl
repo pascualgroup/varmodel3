@@ -1,13 +1,15 @@
+using JSON2
 using Parameters
 using Base.Filesystem
+using StructTypes
 
-@enum ModelImplementation begin
+@enum TimeModel begin
     CONTINUOUS_TIME
     DISCRETE_TIME
 end
 
 @with_kw struct Params
-    implementation::Union{ModelImplementation, Nothing} = nothing
+    implementation::Union{TimeModel, Nothing} = nothing
     
     dt::Union{Int, Nothing} = nothing
     
@@ -67,6 +69,8 @@ end
     
     max_infection_count::Union{Int, Nothing}
 end
+
+StructTypes.StructType(::Type{Params}) = StructTypes.Struct()
 
 function validate(p::Params)
     @assert p.implementation != nothing
