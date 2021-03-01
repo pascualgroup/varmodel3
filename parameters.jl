@@ -57,7 +57,8 @@ end
     
     t_liver_stage::Union{Float64, Nothing} = nothing
     
-    transition_rate::Union{Float64, Nothing} = nothing
+    transition_rate_max::Union{Float64, Nothing} = nothing
+    transition_rate_multiplier::Union{Array{Float64}, Nothing} = nothing
     
     mean_host_lifetime::Union{Float32, Nothing} = nothing
     max_host_lifetime::Union{Float32, Nothing} = nothing
@@ -158,8 +159,12 @@ function validate(p::Params)
     @assert p.t_liver_stage != nothing
     @assert p.t_liver_stage >= 0.0
     
-    @assert p.transition_rate != nothing
-    @assert p.transition_rate >= 0.0
+    @assert p.transition_rate_max != nothing
+    @assert p.transition_rate_max >= 0.0
+    
+    @assert p.transition_rate_multiplier != nothing
+    @assert length(p.transition_rate_multiplier) == p.n_loci
+    @assert all(0.0 .<= p.transition_rate_multiplier .<= 1.0)
     
     @assert p.mean_host_lifetime != nothing
     @assert p.mean_host_lifetime >= 0.0

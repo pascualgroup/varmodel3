@@ -128,7 +128,7 @@ end
 function do_transition!(t, p, s)
 #     println("do_transition!()")
     # TODO: adjust for dt
-    p_transition = 1 - exp(-p.transition_rate)
+    p_transition = 1 - exp(-p.transition_rate_max)
     
     n_infections = p.n_hosts * p.max_infection_count
     
@@ -160,7 +160,6 @@ function do_transition!(t, p, s)
     # Compute host and infection indices from sampled linear indices
     host_indices = ((indices .- 1) .% p.n_hosts) .+ 1
     inf_indices = ((indices .- 1) .÷ p.n_hosts) .+ 1
-#     host_inf_indices = [CartesianIndex(x) for x in zip(host_indices, inf_indices)]
     
     # Advance expression for each transition
     # TODO: make CUDA-friendly
@@ -168,6 +167,16 @@ function do_transition!(t, p, s)
     for i in 1:n_trans
         host_index = host_indices[i]
         inf_index = inf_indices[i]
+        
+        # Accept transition with probability transition_rate[n_immune_loci + 1] / transition_rate_max
+        # I.e., transition rate depends on number of loci at which host is immune;
+        # heterogeneous rates are handled via this rejection step.
+        n_immune_loci = count_immune_loci(p, s, host_index, inf_index, s.expression_index[host_index, inf_index])
+        if n_immune_loci < p.n_loci # (It's possible to have become fully immune since the last timestep)
+            if rand() < 1.0 - p.transition_rate_multiplier[n_immune_loci + 1]
+                continue
+            end
+        end
         
         # Advance expression until non-immune gene is reached
         while true
@@ -201,6 +210,17 @@ function do_transition!(t, p, s)
             end
         end
     end
+end
+
+function count_immune_loci(p, s, host_index, inf_index, exp_index)
+    n_immune_loci = 0
+    for locus in 1:p.n_loci
+        allele_id = s.infection_genes[host_index, inf_index, exp_index, locus]
+        if s.immunity[host_index, allele_id, locus] > 0
+            n_immune_loci += 1
+        end
+    end
+    n_immune_loci
 end
 
 function is_immune(p, s, host_index, inf_index, exp_index)

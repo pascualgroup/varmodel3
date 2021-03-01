@@ -85,7 +85,8 @@ function init_params()
 
         t_liver_stage = 14.0,
 
-        transition_rate = 1/6.0,
+        transition_rate_max = 1.0/6.0,
+        transition_rate_multiplier = [0.5, 1.0],
 
         mean_host_lifetime = 30 * t_year,
         max_host_lifetime = 80 * t_year,
