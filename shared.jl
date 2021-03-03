@@ -10,6 +10,7 @@ const AlleleId = UInt16
 const Locus = UInt8
 const ExpressionIndex = UInt8
 const ImmunityCount = Int8
+const InfectionCount = Int8
 
 @with_kw mutable struct State
     # Number of alleles at each locus
@@ -18,25 +19,31 @@ const ImmunityCount = Int8
     t_birth::Vector{Float32}
     t_death::Vector{Float32}
     
-    # Current expression index of each infection
+    # Current expression index of each active infection
     # host X infection
     expression_index::Array{ExpressionIndex, 2}
     
+#     n_infections_liver::Array{InfectionCount}
+#     n_infections_active::Array{InfectionCount}
+    
     # Time of each infection
     # host X infection
-    t_infection::Array{Float32, 2}
+    t_infection_liver::Array{Float32, 2}
+    t_infection_active::Array{Float32, 2}
     
     # Strain IDs for each infection, used during infection to
     # compare whether two sets of genes are copies of each other
     # host X infection
-    infection_strain_id::Array{StrainId, 2}
+    infection_strain_id_liver::Array{StrainId, 2}
+    infection_strain_id_active::Array{StrainId, 2}
     
     next_strain_id::StrainId
     
     # Genes that make up each infection, stored directly as
     # sequences of sequences of allele IDs
     # host X infection X expression_index X locus
-    infection_genes::Array{AlleleId, 4}
+    infection_genes_liver::Array{AlleleId, 4}
+    infection_genes_active::Array{AlleleId, 4}
     
     # Immunity level for every allele
     # host X allele_id X locus
@@ -52,11 +59,16 @@ function State(p::Params)
     t_birth = -rand(Float32, p.n_hosts) .* lifetime
     t_death = t_birth + lifetime
     
-#     n_infections = fill(UInt8(0), p.n_hosts)
-    t_infection = fill(NaN32, p.n_hosts, p.max_infection_count)
-    infection_strain_id = fill(0, p.n_hosts, p.max_infection_count)
-    infection_genes = fill(AlleleId(0), p.n_hosts, p.max_infection_count, p.n_genes_per_strain, p.n_loci)
-    expression_index = fill(ExpressionIndex(0), p.n_hosts, p.max_infection_count)
+#     n_infections_liver = fill(0, p.n_hosts)
+#     n_infections_active = fill(0, p.n_hosts)
+    
+    t_infection_liver = fill(NaN32, p.n_hosts, p.infection_count_liver_max)
+    t_infection_active = fill(NaN32, p.n_hosts, p.infection_count_active_max)
+    infection_strain_id_liver = fill(0, p.n_hosts, p.infection_count_liver_max)
+    infection_strain_id_active = fill(0, p.n_hosts, p.infection_count_active_max)
+    infection_genes_liver = fill(AlleleId(0), p.n_hosts, p.infection_count_liver_max, p.n_genes_per_strain, p.n_loci)
+    infection_genes_active = fill(AlleleId(0), p.n_hosts, p.infection_count_active_max, p.n_genes_per_strain, p.n_loci)
+    expression_index = fill(ExpressionIndex(0), p.n_hosts, p.infection_count_active_max)
     
     gene_pool = reshape(rand(
         AlleleId(1):AlleleId(p.n_alleles_per_locus_initial),
@@ -65,27 +77,31 @@ function State(p::Params)
     
     infection_hosts = sample(1:p.n_hosts, p.n_initial_infections, replace = false)
 #     n_infections[infection_hosts] .= 1
-    t_infection[infection_hosts] .= 0.0
+#     n_infections_liver[infection_hosts] .= 1
+    t_infection_liver[infection_hosts] .= 0.0
     
-    infection_strain_id[infection_hosts, 1] = 1:p.n_initial_infections
+    infection_strain_id_liver[infection_hosts, 1] = 1:p.n_initial_infections
     next_strain_id = p.n_initial_infections + 1
     
     for i in 1:p.n_genes_per_strain
-        infection_genes[infection_hosts, 1, i, :] = gene_pool[rand(1:p.n_genes_initial, p.n_initial_infections), :]
+        infection_genes_liver[infection_hosts, 1, i, :] = gene_pool[rand(1:p.n_genes_initial, p.n_initial_infections), :]
     end
-    expression_index[infection_hosts, 1] .= 1
     
     State(
         t_birth = t_birth,
         t_death = t_death,
         
 #         n_infections = n_infections,
-        t_infection = t_infection,
+        t_infection_liver = t_infection_liver,
+        t_infection_active = t_infection_active,
         
-        infection_strain_id = infection_strain_id,
+        infection_strain_id_liver = infection_strain_id_liver,
+        infection_strain_id_active = infection_strain_id_active,
+        
         next_strain_id = next_strain_id,
         
-        infection_genes = infection_genes,
+        infection_genes_liver = infection_genes_liver,
+        infection_genes_active = infection_genes_active,
         
         expression_index = expression_index,
         
@@ -100,27 +116,31 @@ function verify(p::Params, s::State)
     @assert all(.!isnan.(s.t_birth))
     @assert all(.!isnan.(s.t_death))
     
-    # Check expression indices; use to identify active and inactive infections
-    @assert all(s.expression_index .>= 0 .| s.expression_index .<= p.n_genes_per_strain)
-    inactive_inf_indices = findall(s.expression_index .== 0)
-    active_inf_indices = findall(s.expression_index .!= 0)
+    # Check infection times; use isnan to identify liver-stage and active infections
+    liver_indices = findall(.!isnan.(s.t_infection_liver))
+    liver_indices_null = findall(isnan.(s.t_infection_liver))
+    active_indices = findall(.!isnan.(s.t_infection_active))
+    active_indices_null = findall(isnan.(s.t_infection_active))
     
-    # Check that infection time NaNs match expression index 0's
-    @assert all(isnan.(s.t_infection[inactive_inf_indices]))
-    @assert all(.!isnan.(s.t_infection[active_inf_indices]))
+    # Check expression indices
+    @assert all(1 .<= s.expression_index[active_indices] .<= p.n_genes_per_strain)
+    @assert all(s.expression_index[active_indices_null] .== 0)
     
-    # Check that strain ID 0's match expression index 0's
-    @assert all(s.infection_strain_id[inactive_inf_indices] .== 0)
-    @assert all(s.infection_strain_id[active_inf_indices] .> 0)
+    # Check strain IDs
+    @assert all(s.infection_strain_id_liver[liver_indices] .> 0)
+    @assert all(s.infection_strain_id_liver[liver_indices_null] .== 0)
+    @assert all(s.infection_strain_id_active[active_indices] .> 0)
+    @assert all(s.infection_strain_id_active[active_indices_null] .== 0)
     
     # Check next strain ID
-    @assert s.next_strain_id > maximum(s.infection_strain_id)
+    @assert s.next_strain_id > max(maximum(s.infection_strain_id_liver), maximum(s.infection_strain_id_active))
     
-    # Check active and inactive infection genes
-    @assert all(s.infection_genes[inactive_inf_indices, :, :] .== 0)
-    @assert all(s.infection_genes[active_inf_indices, :, :] .> 0)
+    # Check genes
+    @assert all(s.infection_genes_liver[liver_indices_null, :, :] .== 0)
+    @assert all(s.infection_genes_active[active_indices_null, :, :] .== 0)
     for locus in p.n_loci
-        @assert all(s.infection_genes[active_inf_indices, locus, :] .<= s.n_alleles[locus])
+        @assert all(1 .<= s.infection_genes_liver[liver_indices, locus, :] .<= s.n_alleles[locus])
+        @assert all(1 .<= s.infection_genes_active[active_indices, locus, :] .<= s.n_alleles[locus])
     end
     
     # Check immunity levels
@@ -167,4 +187,18 @@ end
 
 function recombine_genes(gene1, gene2, breakpoint)
     vcat(gene1[1:(breakpoint-1)], gene2[breakpoint:end])
+end
+
+function count_infections(s, hosts)
+    sum(s.expression_index[hosts, :] .== 0, dims = 2)
+end
+
+function mask_with_row_limits(mask, limits)
+    count = fill(0, length(limits))
+    new_mask = falses(size(mask))
+    for i in size(mask)[2]
+        new_mask[:,i] = mask[:,i] .& (count .< limits)
+        count[:] .+= new_mask[:,i]
+    end
+    new_mask
 end

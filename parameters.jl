@@ -3,14 +3,8 @@ using Parameters
 using Base.Filesystem
 using StructTypes
 
-@enum TimeModel begin
-    CONTINUOUS_TIME
-    DISCRETE_TIME
-end
-
 @with_kw struct Params
-    implementation::Union{TimeModel, Nothing} = nothing
-    
+    use_discrete_time_approximation::Union{Bool, Nothing} = nothing
     dt::Union{Int, Nothing} = nothing
     
     output_db_filename::Union{String, Nothing} = nothing
@@ -66,15 +60,15 @@ end
     immigration_on::Union{Bool, Nothing} = nothing
     immigration_rate_fraction::Union{Float64, Nothing} = nothing
     
-    max_infection_count::Union{Int, Nothing} = nothing
+    infection_count_liver_max::Union{Int, Nothing} = nothing
+    infection_count_active_max::Union{Int, Nothing} = nothing
 end
 
 StructTypes.StructType(::Type{Params}) = StructTypes.Struct()
 
 function validate(p::Params)
-    @assert p.implementation != nothing
-    
-    if p.implementation == DISCRETE_TIME
+    @assert p.use_discrete_time_approximation != nothing
+    if p.use_discrete_time_approximation
         @assert p.dt != nothing
         @assert p.dt > 0
         @assert p.t_year % p.dt == 0
@@ -176,4 +170,10 @@ function validate(p::Params)
     
     @assert p.immigration_rate_fraction != nothing
     @assert p.immigration_rate_fraction >= 0.0
+    
+    @assert p.infection_count_liver_max != nothing
+    @assert p.infection_count_liver_max >= 0
+    
+    @assert p.infection_count_active_max != nothing
+    @assert p.infection_count_active_max >= 0
 end

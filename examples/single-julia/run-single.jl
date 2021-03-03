@@ -27,7 +27,7 @@ function init_params()
     daily_biting_rate_multiplier = readdlm("../mosquito_population.txt", Float64)[:,1]
     
     Params(
-        implementation = DISCRETE_TIME,
+        use_discrete_time_approximation = true,
         dt = 1,
 
         output_db_filename = "output.sqlite",
@@ -80,7 +80,8 @@ function init_params()
         immigration_on = true,
         immigration_rate_fraction = 0.0026,
 
-        max_infection_count = 9,
+        infection_count_liver_max = 10,
+        infection_count_active_max = 10,
 
         biting_rate_mean = 0.0005,
         daily_biting_rate_multiplier = daily_biting_rate_multiplier

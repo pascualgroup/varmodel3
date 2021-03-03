@@ -55,7 +55,7 @@ function init_base_params()
     daily_biting_rate_multiplier = readdlm("../mosquito_population.txt", Float64)[:,1]
     
     Params(
-        implementation = DISCRETE_TIME,
+        use_discrete_time_approximation = true,
         dt = 1,
 
         output_db_filename = "output.sqlite",
