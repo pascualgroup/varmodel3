@@ -64,7 +64,7 @@ function init_params()
 
         ectopic_recombination_rate = 1.8e-7,
 
-        max_immunity_count = 100,
+        immunity_level_max = 100,
         immunity_loss_rate = 0.001,
 
         mutation_rate = 1.42e-8,
@@ -80,8 +80,8 @@ function init_params()
         immigration_on = true,
         immigration_rate_fraction = 0.0026,
 
-        infection_count_liver_max = 10,
-        infection_count_active_max = 10,
+        n_infections_liver_max = 10,
+        n_infections_active_max = 10,
 
         biting_rate_mean = 0.0005,
         daily_biting_rate_multiplier = daily_biting_rate_multiplier

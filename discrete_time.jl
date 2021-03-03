@@ -75,8 +75,8 @@ function count_circulating_genes_and_strains(p::Params, s::State)
     genes::Set{SVector{p.n_loci, AlleleId}} = Set()
     strains::BitSet = BitSet()
     
-    count_circulating_genes_and_strains!(p, s.infection_strain_id_liver, s.infection_genes_liver, genes, strains)
-    count_circulating_genes_and_strains!(p, s.infection_strain_id_active, s.infection_genes_active, genes, strains)
+    count_circulating_genes_and_strains!(p, s.strain_id_liver, s.genes_liver, genes, strains)
+    count_circulating_genes_and_strains!(p, s.strain_id_active, s.genes_active, genes, strains)
     
     println("Count finished.")
     
@@ -107,10 +107,10 @@ function do_rebirth!(t, p, s)
     s.t_death[dead_hosts] = s.t_birth[dead_hosts] + [draw_host_lifetime(p) for i in 1:length(dead_hosts)]
     s.t_infection_liver[dead_hosts, :, :] .= NaN32
     s.t_infection_active[dead_hosts, :, :] .= NaN32
-    s.infection_strain_id_liver[dead_hosts, :] .= 0
-    s.infection_strain_id_active[dead_hosts, :] .= 0
-    s.infection_genes_liver[dead_hosts, :, :, :] .= 0
-    s.infection_genes_active[dead_hosts, :, :, :] .= 0
+    s.strain_id_liver[dead_hosts, :] .= 0
+    s.strain_id_active[dead_hosts, :] .= 0
+    s.genes_liver[dead_hosts, :, :, :] .= 0
+    s.genes_active[dead_hosts, :, :, :] .= 0
     s.expression_index[dead_hosts, :] .= 0
     s.immunity[dead_hosts, :, :] .= 0
 end
@@ -137,7 +137,7 @@ function do_immunity_loss!(t, p, s)
         )
         
         # Decrement immunity (leaving zeros at zero)
-        immunity_view[indices] = max(zeros(ImmunityCount, n_loss), immunity_view[indices] .- ImmunityCount(1))
+        immunity_view[indices] = max(zeros(ImmunityLevel, n_loss), immunity_view[indices] .- 1)
     end
 end
 
@@ -177,13 +177,13 @@ function do_activation!(t, p, s)
     s.expression_index[host_indices,:][dst_indices] .= 1
     s.t_infection_active[host_indices,:][dst_indices] = s.t_infection_liver[host_indices,:][src_indices]
     
-    s.infection_strain_id_active[host_indices,:][dst_indices] = s.infection_strain_id_liver[host_indices,:][src_indices]
-    s.infection_genes_active[host_indices,:,:,:][dst_indices, :, :] = s.infection_genes_liver[host_indices,:,:,:][src_indices, :, :]
+    s.strain_id_active[host_indices,:][dst_indices] = s.strain_id_liver[host_indices,:][src_indices]
+    s.genes_active[host_indices,:,:,:][dst_indices, :, :] = s.genes_liver[host_indices,:,:,:][src_indices, :, :]
     
     # Deactivate all ready infections (including those that didn't get activated)
     s.t_infection_liver[host_indices,:][src_indices] .= NaN32
-    s.infection_strain_id_liver[host_indices,:][src_indices] .= 0
-    s.infection_genes_liver[host_indices,:,:,:][src_indices, :, :] .= 0
+    s.strain_id_liver[host_indices,:][src_indices] .= 0
+    s.genes_liver[host_indices,:,:,:][src_indices, :, :] .= 0
 end
 
 function do_transition!(t, p, s)
@@ -191,7 +191,7 @@ function do_transition!(t, p, s)
     # TODO: adjust for dt
     p_transition = 1 - exp(-p.transition_rate_max)
     
-    n_infections = p.n_hosts * p.infection_count_active_max
+    n_infections = p.n_hosts * p.n_infections_active_max
     
     n_trans_raw = rand(Binomial(n_infections, p_transition))
 #     println("n_trans_raw: $(n_trans_raw)")
@@ -205,7 +205,7 @@ function do_transition!(t, p, s)
     
     # Get one-dimensional views on infection
     expression_index_view = reshape(s.expression_index, n_infections)
-    infection_genes_view = reshape(s.infection_genes_active, (n_infections, p.n_genes_per_strain, p.n_loci))
+    infection_genes_view = reshape(s.genes_active, (n_infections, p.n_genes_per_strain, p.n_loci))
     
     # Filter indices down to active infections
     indices = indices_raw[expression_index_view[indices_raw] .> 0]
@@ -221,7 +221,7 @@ function do_transition!(t, p, s)
     
     # Advance expression for each transition
     # TODO: make CUDA-friendly
-    max_immunity_count = ImmunityCount(p.max_immunity_count)
+    max_immunity_level = ImmunityLevel(p.max_immunity_level)
     for i in 1:n_trans
         host_index = host_indices[i]
         inf_index = inf_indices[i]
@@ -243,9 +243,9 @@ function do_transition!(t, p, s)
             
             # Gain extra immunity to current gene
             for locus in 1:p.n_loci
-                allele_id = s.infection_genes_active[host_index, inf_index, exp_index, locus]
+                allele_id = s.genes_active[host_index, inf_index, exp_index, locus]
                 s.immunity[host_index, allele_id, locus] = min(
-                    max_immunity_count,
+                    max_immunity_level,
                     s.immunity[host_index, allele_id, locus] + 1
                 )
             end
@@ -253,8 +253,8 @@ function do_transition!(t, p, s)
             if exp_index == p.n_genes_per_strain
                 # Clear infection if we're at the end
                 s.t_infection_active[host_index, inf_index] = NaN32
-                s.infection_strain_id_active[host_index, inf_index] = 0
-                s.infection_genes_active[host_index, inf_index, :, :] .= 0
+                s.strain_id_active[host_index, inf_index] = 0
+                s.genes_active[host_index, inf_index, :, :] .= 0
                 s.expression_index[host_index, inf_index] = 0
                 break
             else
@@ -273,7 +273,7 @@ end
 function count_immune_loci(p, s, host_index, inf_index, exp_index)
     n_immune_loci = 0
     for locus in 1:p.n_loci
-        allele_id = s.infection_genes_active[host_index, inf_index, exp_index, locus]
+        allele_id = s.genes_active[host_index, inf_index, exp_index, locus]
         if s.immunity[host_index, allele_id, locus] > 0
             n_immune_loci += 1
         end
@@ -283,7 +283,7 @@ end
 
 function is_immune(p, s, host_index, inf_index, exp_index)
     for locus in 1:p.n_loci
-        allele_id = s.infection_genes_active[host_index, inf_index, exp_index, locus]
+        allele_id = s.genes_active[host_index, inf_index, exp_index, locus]
         if s.immunity[host_index, allele_id, locus] == 0
             return false
         end
@@ -331,8 +331,8 @@ function do_biting!(t, p, s)
         is_active = falses(length(src_hosts))
         
         next_index = fill(1, length(src_hosts))
-        indices = fill(0, (length(src_hosts), p.infection_count_active_max))
-        for i in 1:p.infection_count_active_max
+        indices = fill(0, (length(src_hosts), p.n_infections_active_max))
+        for i in 1:p.n_infections_active_max
             is_active .= expression_index[:,i] .> 0
             count .+= is_active
             indices[[CartesianIndex(j, next_index[j]) for j in findall(is_active)]] .= i
@@ -366,8 +366,8 @@ function do_biting!(t, p, s)
         is_available = falses(length(dst_hosts))
         
         next_index = fill(1, length(dst_hosts))
-        indices = fill(0, (length(src_hosts), p.infection_count_liver_max))
-        for i in 1:p.infection_count_liver_max
+        indices = fill(0, (length(src_hosts), p.n_infections_liver_max))
+        for i in 1:p.n_infections_liver_max
             is_available .= isnan.(t_infection[:, i])
             count .+= is_available
             indices[[CartesianIndex(j, next_index[j]) for j in findall(is_available)]] .= i
@@ -412,18 +412,18 @@ function do_biting!(t, p, s)
             dst_inf_index = dst_inf_indices[host_subindex, j]
             @assert dst_inf_count[host_subindex] >= j
             
-            strain1 = reshape(@view(s.infection_genes_active[src_host, i1, :, :]), p.n_genes_per_strain, p.n_loci)
-            strain2 = reshape(@view(s.infection_genes_active[src_host, i2, :, :]), p.n_genes_per_strain, p.n_loci)
-            if s.infection_strain_id_active[src_host, i1] == s.infection_strain_id_active[src_host, i2]
+            strain1 = reshape(@view(s.genes_active[src_host, i1, :, :]), p.n_genes_per_strain, p.n_loci)
+            strain2 = reshape(@view(s.genes_active[src_host, i2, :, :]), p.n_genes_per_strain, p.n_loci)
+            if s.strain_id_active[src_host, i1] == s.strain_id_active[src_host, i2]
                 # Just copy shuffled genes if the strains are identical
-                s.infection_strain_id_liver[dst_host, dst_inf_index] = s.infection_strain_id_active[src_host, i1]
-                s.infection_genes_liver[dst_host, dst_inf_index, :, :] = strain1[randperm(p.n_genes_per_strain), :]
+                s.strain_id_liver[dst_host, dst_inf_index] = s.strain_id_active[src_host, i1]
+                s.genes_liver[dst_host, dst_inf_index, :, :] = strain1[randperm(p.n_genes_per_strain), :]
             else
                 # Recombine genes if the strains are not identical
                 all_genes = vcat(strain1, strain2)
-                s.infection_strain_id_liver[dst_host, dst_inf_index] = s.next_strain_id
+                s.strain_id_liver[dst_host, dst_inf_index] = s.next_strain_id
                 s.next_strain_id += 1
-                s.infection_genes_liver[dst_host, dst_inf_index, :, :] = all_genes[sample(1:(2 * p.n_genes_per_strain), p.n_genes_per_strain, replace = true), :]
+                s.genes_liver[dst_host, dst_inf_index, :, :] = all_genes[sample(1:(2 * p.n_genes_per_strain), p.n_genes_per_strain, replace = true), :]
             end
             s.t_infection_liver[dst_host, dst_inf_index] = t
             
@@ -439,12 +439,12 @@ function do_mutation!(t, p, s)
     p_mut = 1 - exp(-p.mutation_rate)
     
     # Draw mutations randomly using linear indexing
-    n_possible_mut = length(s.infection_genes_active)
+    n_possible_mut = length(s.genes_active)
     n_mut_raw = rand(Binomial(n_possible_mut, p_mut))
     mut_indices_raw = sample(1:n_possible_mut, n_mut_raw, replace = false)
     
     # Apply mutations for infections that actually exist
-    genes_cartesian = CartesianIndices(s.infection_genes_active)
+    genes_cartesian = CartesianIndices(s.genes_active)
     mut_indices = filter(
         function (i)
             ind = genes_cartesian[i] # Gets multidimensional index from linear index
@@ -464,9 +464,9 @@ function do_mutation!(t, p, s)
         @assert s.expression_index[host, inf] > 0
         @assert maximum(s.n_alleles) < typemax(AlleleId)
         s.n_alleles[locus] += 1
-        s.infection_genes_active[host, inf, exp_ind, locus] = s.n_alleles[locus]
+        s.genes_active[host, inf, exp_ind, locus] = s.n_alleles[locus]
         
-        s.infection_strain_id_active[host, inf] = s.next_strain_id
+        s.strain_id_active[host, inf] = s.next_strain_id
         s.next_strain_id += 1
     end
     
@@ -480,7 +480,7 @@ function do_recombination!(t, p, s)
         -p.ectopic_recombination_rate * (p.n_genes_per_strain) * (p.n_genes_per_strain - 1) / 2.0
     )
     
-    n_inf_raw = p.n_hosts * p.infection_count_active_max
+    n_inf_raw = p.n_hosts * p.n_infections_active_max
     n_recomb_raw = rand(Binomial(n_inf_raw, p_recomb))
     recomb_indices_raw = sample(1:n_inf_raw, n_recomb_raw, replace = false)
     
@@ -501,8 +501,8 @@ function do_recombination!(t, p, s)
         (host, inf) = Tuple(inf_cartesian[recomb_indices[i]])
         
         i1, i2 = samplepair(p.n_genes_per_strain)
-        src_gene_1 = @view s.infection_genes_active[host, inf, i1, :]
-        src_gene_2 = @view s.infection_genes_active[host, inf, i2, :]
+        src_gene_1 = @view s.genes_active[host, inf, i1, :]
+        src_gene_2 = @view s.genes_active[host, inf, i2, :]
         if src_gene_1 == src_gene_2
             continue
         end
@@ -528,7 +528,7 @@ function do_recombination!(t, p, s)
             src_gene_1[:] = new_gene_1
             src_gene_2[:] = new_gene_2
             
-            s.infection_strain_id_active[host, inf] = s.next_strain_id
+            s.strain_id_active[host, inf] = s.next_strain_id
             s.next_strain_id += 1
         end
     end
@@ -561,9 +561,9 @@ function do_immigration!(t, p, s)
     for host in hosts
         inf_ind = findfirst(isnan.(s.t_infection_liver[host, :]))
         
-        s.infection_strain_id_liver[host, inf_ind] = s.next_strain_id
+        s.strain_id_liver[host, inf_ind] = s.next_strain_id
         s.next_strain_id += 1
-        s.infection_genes_liver[host, inf_ind, :, :] = s.gene_pool[rand(1:size(s.gene_pool)[1], p.n_genes_per_strain), :]
+        s.genes_liver[host, inf_ind, :, :] = s.gene_pool[rand(1:size(s.gene_pool)[1], p.n_genes_per_strain), :]
         s.t_infection_liver[host, inf_ind] = t
     end
 end
@@ -573,7 +573,7 @@ function resize_immunity_if_necessary!(p, s)
     if maximum(s.n_alleles) > immunity_size
         println("increasing immunity capacity by 25%...")
         new_immunity_size = immunity_size * 5 ÷ 4
-        new_immunity = fill(ImmunityCount(0), p.n_hosts, new_immunity_size, p.n_loci)
+        new_immunity = fill(0, p.n_hosts, new_immunity_size, p.n_loci)
         new_immunity[:,1:immunity_size,:] = s.immunity
         s.immunity = new_immunity
     end

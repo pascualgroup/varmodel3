@@ -44,7 +44,7 @@ using StructTypes
     
     ectopic_recombination_rate::Union{Float64, Nothing} = nothing
     
-    max_immunity_count::Union{Int8, Nothing} = nothing
+    immunity_level_max::Union{Int8, Nothing} = nothing
     immunity_loss_rate::Union{Float64, Nothing} = nothing
     
     mutation_rate::Union{Float64, Nothing} = nothing
@@ -60,8 +60,8 @@ using StructTypes
     immigration_on::Union{Bool, Nothing} = nothing
     immigration_rate_fraction::Union{Float64, Nothing} = nothing
     
-    infection_count_liver_max::Union{Int, Nothing} = nothing
-    infection_count_active_max::Union{Int, Nothing} = nothing
+    n_infections_liver_max::Union{Int, Nothing} = nothing
+    n_infections_active_max::Union{Int, Nothing} = nothing
 end
 
 StructTypes.StructType(::Type{Params}) = StructTypes.Struct()
@@ -142,7 +142,7 @@ function validate(p::Params)
     @assert p.ectopic_recombination_rate != nothing
     @assert p.ectopic_recombination_rate >= 0.0
     
-    @assert p.max_immunity_count != nothing
+    @assert p.immunity_level_max != nothing
     
     @assert p.immunity_loss_rate != nothing
     @assert p.immunity_loss_rate >= 0.0
@@ -171,9 +171,9 @@ function validate(p::Params)
     @assert p.immigration_rate_fraction != nothing
     @assert p.immigration_rate_fraction >= 0.0
     
-    @assert p.infection_count_liver_max != nothing
-    @assert p.infection_count_liver_max >= 0
+    @assert p.n_infections_liver_max != nothing
+    @assert p.n_infections_liver_max >= 0
     
-    @assert p.infection_count_active_max != nothing
-    @assert p.infection_count_active_max >= 0
+    @assert p.n_infections_active_max != nothing
+    @assert p.n_infections_active_max >= 0
 end

@@ -9,49 +9,128 @@ const StrainId = UInt32
 const AlleleId = UInt16
 const Locus = UInt8
 const ExpressionIndex = UInt8
-const ImmunityCount = Int8
+const ImmunityLevel = Int8
 const InfectionCount = Int8
 
 @with_kw mutable struct State
-    # Number of alleles at each locus
+    "Number of alleles for each locus (epitope)"
     n_alleles::Vector{AlleleId}
     
-    t_birth::Vector{Float32}
-    t_death::Vector{Float32}
+    """
+        Gene pool used to generate initial infections and immigration events.
+        Entry (i, j) is the allele ID for gene i, locus j.
+        
+        Currently fixed-size.
+        Dimensions: (n_genes_initial, n_loci)
+    """
+    gene_pool::Array{AlleleId, 2}
     
-    # Current expression index of each active infection
-    # host X infection
-    expression_index::Array{ExpressionIndex, 2}
-    
-#     n_infections_liver::Array{InfectionCount}
-#     n_infections_active::Array{InfectionCount}
-    
-    # Time of each infection
-    # host X infection
-    t_infection_liver::Array{Float32, 2}
-    t_infection_active::Array{Float32, 2}
-    
-    # Strain IDs for each infection, used during infection to
-    # compare whether two sets of genes are copies of each other
-    # host X infection
-    infection_strain_id_liver::Array{StrainId, 2}
-    infection_strain_id_active::Array{StrainId, 2}
-    
+    """
+        ID for next strain to be created.
+        
+        Whenever a new strain is created via infection, immigration, mutation,
+        or ectopic recombination, it is given the next strain ID and this
+        counter is incremented.
+    """
     next_strain_id::StrainId
     
-    # Genes that make up each infection, stored directly as
-    # sequences of sequences of allele IDs
-    # host X infection X expression_index X locus
-    infection_genes_liver::Array{AlleleId, 4}
-    infection_genes_active::Array{AlleleId, 4}
+    """
+        Birth time for each host.
+        
+        Dimensions: (n_hosts,)
+    """
+    t_birth::Vector{Float32}
     
-    # Immunity level for every allele
-    # host X allele_id X locus
-    immunity::Array{ImmunityCount, 3}
+    """
+        Death time for each host.
+        
+        Dimensions: (n_hosts,)
+    """
+    t_death::Vector{Float32}
     
-    # Gene pool for immigration events
-    # gene X locus
-    gene_pool::Array{AlleleId, 2}
+    """
+        Immunity level for each host to each epitope allele at each locus.
+        Entry (i, j, k) is the immunity level for host i, allele j, locus k.
+        
+        When a host is exposed to an allele, its immunity level is incremented
+        by 1, up to a maximum of immunity_level_max.
+        
+        During immunity loss events, immunity levels are decremented by 1,
+        down to a minimum of 0.
+        
+        The array has an entry for every allele in the system for every host;
+        the size of the array is an upper bound on the number of alleles at
+        each locus. When the number of alleles exceeds the upper bound,
+        the size of the array is increased by 25%.
+        
+        Dimensions: (n_hosts, n_alleles_upper_bound, n_loci)
+    """
+    immunity::Array{ImmunityLevel, 3}
+    
+    """
+        Time of infection for infections in the liver stage.
+        
+        Fixed-size array for the sake of predictable memory usage.
+        Unused slots are indicated by NaN.
+        
+        Dimensions: (n_hosts, n_infections_liver_max)
+    """
+    t_infection_liver::Array{Float32, 2}
+    
+    """
+        Time of infection for active infections.
+        
+        Fixed-size array for the sake of predictable memory usage.
+        Unused slots are indicated by NaN.
+        
+        Dimensions: (n_hosts, n_infections_active_max)
+    """
+    t_infection_active::Array{Float32, 2}
+    
+    """
+        Strain IDs for infections in the liver stage.
+        
+        Whenever a strain is created or modified, it is given a new strain ID.
+        Unused slots are indicated by 0.
+        
+        Dimensions: (n_hosts, n_infections_liver_max)
+    """
+    strain_id_liver::Array{StrainId, 2}
+    
+    """
+        Strain IDs for active infections, transferred directly from the liver stage.
+        
+        Unused slots are indicated by 0.
+        
+        Dimensions: (n_hosts, n_infections_active_max)
+    """
+    strain_id_active::Array{StrainId, 2}
+    
+    """
+        Sequence of genes for infections in the liver stage.
+        
+        Stored directly as a matrix of allele IDs.
+        
+        Dimensions: (n_hosts, n_infections_liver_max, n_genes_per_strain, n_loci,)
+    """
+    genes_liver::Array{AlleleId, 4}
+    
+    """
+        Sequence of genes for infections in the liver stage.
+        
+        Transferred directly from genes_liver upon activation.
+        Stored directly as a matrix of allele IDs.
+        
+        Dimensions: (n_hosts, n_infections_active_max, n_genes_per_strain, n_loci,)
+    """
+    genes_active::Array{AlleleId, 4}
+    
+    """
+        Index of currently expressed gene for each active infection.
+        
+        Dimensions: (n_hosts, n_infections_active_max,)
+    """
+    expression_index::Array{ExpressionIndex, 2}
 end
 
 function State(p::Params)
@@ -62,13 +141,13 @@ function State(p::Params)
 #     n_infections_liver = fill(0, p.n_hosts)
 #     n_infections_active = fill(0, p.n_hosts)
     
-    t_infection_liver = fill(NaN32, p.n_hosts, p.infection_count_liver_max)
-    t_infection_active = fill(NaN32, p.n_hosts, p.infection_count_active_max)
-    infection_strain_id_liver = fill(0, p.n_hosts, p.infection_count_liver_max)
-    infection_strain_id_active = fill(0, p.n_hosts, p.infection_count_active_max)
-    infection_genes_liver = fill(AlleleId(0), p.n_hosts, p.infection_count_liver_max, p.n_genes_per_strain, p.n_loci)
-    infection_genes_active = fill(AlleleId(0), p.n_hosts, p.infection_count_active_max, p.n_genes_per_strain, p.n_loci)
-    expression_index = fill(ExpressionIndex(0), p.n_hosts, p.infection_count_active_max)
+    t_infection_liver = fill(NaN32, p.n_hosts, p.n_infections_liver_max)
+    t_infection_active = fill(NaN32, p.n_hosts, p.n_infections_active_max)
+    strain_id_liver = fill(0, p.n_hosts, p.n_infections_liver_max)
+    strain_id_active = fill(0, p.n_hosts, p.n_infections_active_max)
+    genes_liver = fill(AlleleId(0), p.n_hosts, p.n_infections_liver_max, p.n_genes_per_strain, p.n_loci)
+    genes_active = fill(AlleleId(0), p.n_hosts, p.n_infections_active_max, p.n_genes_per_strain, p.n_loci)
+    expression_index = fill(ExpressionIndex(0), p.n_hosts, p.n_infections_active_max)
     
     gene_pool = reshape(rand(
         AlleleId(1):AlleleId(p.n_alleles_per_locus_initial),
@@ -80,11 +159,11 @@ function State(p::Params)
 #     n_infections_liver[infection_hosts] .= 1
     t_infection_liver[infection_hosts] .= 0.0
     
-    infection_strain_id_liver[infection_hosts, 1] = 1:p.n_initial_infections
+    strain_id_liver[infection_hosts, 1] = 1:p.n_initial_infections
     next_strain_id = p.n_initial_infections + 1
     
     for i in 1:p.n_genes_per_strain
-        infection_genes_liver[infection_hosts, 1, i, :] = gene_pool[rand(1:p.n_genes_initial, p.n_initial_infections), :]
+        genes_liver[infection_hosts, 1, i, :] = gene_pool[rand(1:p.n_genes_initial, p.n_initial_infections), :]
     end
     
     State(
@@ -95,18 +174,18 @@ function State(p::Params)
         t_infection_liver = t_infection_liver,
         t_infection_active = t_infection_active,
         
-        infection_strain_id_liver = infection_strain_id_liver,
-        infection_strain_id_active = infection_strain_id_active,
+        strain_id_liver = strain_id_liver,
+        strain_id_active = strain_id_active,
         
         next_strain_id = next_strain_id,
         
-        infection_genes_liver = infection_genes_liver,
-        infection_genes_active = infection_genes_active,
+        genes_liver = genes_liver,
+        genes_active = genes_active,
         
         expression_index = expression_index,
         
         n_alleles = fill(AlleleId(p.n_alleles_per_locus_initial), p.n_loci),
-        immunity = fill(ImmunityCount(0), p.n_hosts, p.n_alleles_per_locus_initial, p.n_loci),
+        immunity = fill(0, p.n_hosts, p.n_alleles_per_locus_initial, p.n_loci),
         
         gene_pool = gene_pool
     )
@@ -127,27 +206,27 @@ function verify(p::Params, s::State)
     @assert all(s.expression_index[active_indices_null] .== 0)
     
     # Check strain IDs
-    @assert all(s.infection_strain_id_liver[liver_indices] .> 0)
-    @assert all(s.infection_strain_id_liver[liver_indices_null] .== 0)
-    @assert all(s.infection_strain_id_active[active_indices] .> 0)
-    @assert all(s.infection_strain_id_active[active_indices_null] .== 0)
+    @assert all(s.strain_id_liver[liver_indices] .> 0)
+    @assert all(s.strain_id_liver[liver_indices_null] .== 0)
+    @assert all(s.strain_id_active[active_indices] .> 0)
+    @assert all(s.strain_id_active[active_indices_null] .== 0)
     
     # Check next strain ID
-    @assert s.next_strain_id > max(maximum(s.infection_strain_id_liver), maximum(s.infection_strain_id_active))
+    @assert s.next_strain_id > max(maximum(s.strain_id_liver), maximum(s.strain_id_active))
     
     # Check genes
-    @assert all(s.infection_genes_liver[liver_indices_null, :, :] .== 0)
-    @assert all(s.infection_genes_active[active_indices_null, :, :] .== 0)
+    @assert all(s.genes_liver[liver_indices_null, :, :] .== 0)
+    @assert all(s.genes_active[active_indices_null, :, :] .== 0)
     for locus in p.n_loci
-        @assert all(1 .<= s.infection_genes_liver[liver_indices, locus, :] .<= s.n_alleles[locus])
-        @assert all(1 .<= s.infection_genes_active[active_indices, locus, :] .<= s.n_alleles[locus])
+        @assert all(1 .<= s.genes_liver[liver_indices, locus, :] .<= s.n_alleles[locus])
+        @assert all(1 .<= s.genes_active[active_indices, locus, :] .<= s.n_alleles[locus])
     end
     
     # Check immunity levels
     @assert size(s.immunity)[2] >= maximum(s.n_alleles)
     @assert size(s.immunity)[1] == p.n_hosts
     @assert size(s.immunity)[3] == p.n_loci
-    @assert all(s.immunity .< p.max_immunity_count)
+    @assert all(s.immunity .< p.immunity_level_max)
     for locus in p.n_loci
         @assert all(s.immunity[:, (s.n_alleles[locus] + 1):size(s.immunity)[2], locus] .== 0)
     end
