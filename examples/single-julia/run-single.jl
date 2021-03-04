@@ -31,7 +31,10 @@ function init_params()
         dt = 1,
 
         output_db_filename = "output.sqlite",
-
+        
+        summary_period = 30,
+        strain_count_period = 360,
+        
         host_sampling_period = 30,
         host_sample_size = 100,
         

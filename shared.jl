@@ -4,6 +4,7 @@ using Random
 using Distributions
 using StatsBase
 using StaticArrays
+using Dates
 
 const StrainId = UInt32
 const AlleleId = UInt16

@@ -2,8 +2,14 @@ function run_discrete_time(p::Params)
     s = State(p)
     db = initialize_database(p)
     
+    start_datetime = now()
+    last_summary_datetime = start_datetime
+    n_infected_bites = 0
+    n_infected_bites_with_space = 0
+    n_total_bites = 0
+    
     execute(db, "BEGIN TRANSACTION")
-    write_summary(0, p, s, db)
+    write_summary(0, p, s, db, missing, missing, missing, missing)
     execute(db, "COMMIT")
     
     verify(p, s)
@@ -15,72 +21,96 @@ function run_discrete_time(p::Params)
 #         println("stepping to t = $(t)")
         
         do_rebirth!(t, p, s)
-#         verify(p, s)
         do_immunity_loss!(t, p, s)
-#         verify(p, s)
         do_activation!(t, p, s)
-#         verify(p, s)
         do_switching!(t, p, s)
-#         verify(p, s)
-        do_biting!(t, p, s)
-#         verify(p, s)
-        do_mutation!(t, p, s)
-#         verify(p, s)
-        do_recombination!(t, p, s)
-#         verify(p, s)
-        do_immigration!(t, p, s)
-#         verify(p, s)
         
-        if t % 360 == 0
-            println("")
-            println("t = $(t)")
-            println("n_infections = $(sum(s.expression_index .> 0))")
-            println("n_immunity = $(sum(s.immunity .> 0))")
-            
-            write_summary(t, p, s, db)
-            
+        n_infected_bites_t, n_infected_bites_with_space_t, n_total_bites_t = do_biting!(t, p, s)
+        n_infected_bites += n_infected_bites_t
+        n_infected_bites_with_space += n_infected_bites_with_space_t
+        n_total_bites += n_total_bites_t
+        
+        do_mutation!(t, p, s)
+        do_recombination!(t, p, s)
+        do_immigration!(t, p, s)
+        
+        if t % p.summary_period == 0
             execute(db, "COMMIT")
             
-            verify(p, s)
-            
             execute(db, "BEGIN TRANSACTION")
+            
+            next_summary_datetime = now()
+            write_summary(
+                t, p, s, db,
+                Dates.value(next_summary_datetime - last_summary_datetime),
+                n_infected_bites, n_infected_bites_with_space, n_total_bites
+            )
+            last_summary_datetime = next_summary_datetime
+            n_infected_bites = 0
+            n_infected_bites_with_space = 0
+            n_total_bites = 0
+        end
+        
+        if t % p.strain_count_period == 0
+            write_gene_strain_counts(t, p, s, db)
+        end
+        
+        if t % p.summary_period == 0
+            execute(db, "COMMIT")
+            execute(db, "BEGIN TRANSACTION")
+        end
+        
+        if p.verification_period != nothing && t % p.verification_period == 0
+            verify(p, s)
         end
     end
 end
 
-function write_summary(t, p, s::State, db)
-    n_infections = sum(s.expression_index .!== 0)
-    n_infected = sum(sum(s.expression_index .!== 0, dims = 2) .!== 0)
-    n_infected_bites = 0
-    n_total_bites = 0
-    (n_circulating_genes, n_circulating_strains) = count_circulating_genes_and_strains(p, s)
-    println("n_genes = $(n_circulating_genes), n_strains = $(n_circulating_strains)")
-    exec_time = 0.0
+function write_summary(t, p, s, db, elapsed_time_ms, n_infected_bites, n_infected_bites_with_space, n_total_bites)
+    infections_liver = .!isnan.(s.t_infection_liver)
+    n_infections_liver = sum(infections_liver)
+    
+    infections_active = s.expression_index .!= 0
+    n_infections_active = sum(infections_active)
+    
+    n_infections = n_infections_liver + n_infections_active
+    
+    infected_liver = sum(infections_liver, dims = 2) .!= 0
+    infected_active = sum(infections_active, dims = 2) .!= 0
+    n_infected_liver = sum(infected_liver)
+    n_infected_active = sum(infected_active)
+    n_infected = sum(infected_liver .| infected_active)
+    
+    exec_time = elapsed_time_ms
+    
+    println("")
+    println("t = $(t)")
+    println("n_infections = $(sum(s.expression_index .> 0))")
+    println("n_immunity = $(sum(s.immunity .> 0))")
     
     execute(db.summary, [
         t,
+        n_infections_liver,
+        n_infections_active,
         n_infections,
+        n_infected_liver,
+        n_infected_active,
         n_infected,
         n_infected_bites,
+        n_infected_bites_with_space,
         n_total_bites,
-        n_circulating_strains,
-        n_circulating_genes,
         exec_time
     ])
 end
 
-function count_circulating_genes_and_strains(p::Params, s::State)
-    println("Starting count...")
-    
+function write_gene_strain_counts(t, p, s, db)
     genes::Set{SVector{p.n_loci, AlleleId}} = Set()
     strains::BitSet = BitSet()
     
     count_circulating_genes_and_strains!(p, s.strain_id_liver, s.genes_liver, genes, strains)
     count_circulating_genes_and_strains!(p, s.strain_id_active, s.genes_active, genes, strains)
     
-    println("Count finished.")
-    
-    (length(genes), length(strains))
+    execute(db.gene_strain_counts, [t, length(genes), length(strains)])
 end
 
 function count_circulating_genes_and_strains!(p::Params, infection_strain_id, infection_genes, genes, strains)
@@ -170,20 +200,59 @@ function do_activation!(t, p, s)
     src_indices = findall(src_mask)
     dst_mask = mask_with_row_limits(available_mask, activation_count)
     dst_indices = findall(dst_mask)
+    println("n_hosts = $(length(host_indices))")
+    println("n_activations = $(length(src_indices))")
+    println("n_activations = $(length(dst_indices))")
     
     @assert length(src_indices) == length(dst_indices)
     
     # Update active infection data
-    s.expression_index[host_indices,:][dst_indices] .= 1
-    s.t_infection_active[host_indices,:][dst_indices] = s.t_infection_liver[host_indices,:][src_indices]
+#     @view(s.expression_index[host_indices, :])[dst_indices] .= 1
+#     @view(s.t_infection_active[host_indices, :])[dst_indices] = @view(s.t_infection_liver[host_indices,:])[src_indices]
+#     println("n_active = $(sum(s.expression_index))")
     
-    s.strain_id_active[host_indices,:][dst_indices] = s.strain_id_liver[host_indices,:][src_indices]
-    s.genes_active[host_indices,:,:,:][dst_indices, :, :] = s.genes_liver[host_indices,:,:,:][src_indices, :, :]
+#     @view(s.strain_id_active[host_indices,:])[dst_indices] = @view(s.strain_id_liver[host_indices,:])[src_indices]
+#     @view(s.genes_active[host_indices,:,:,:])[dst_indices, :, :] = @view(s.genes_liver[host_indices,:,:,:])[src_indices, :, :]
     
     # Deactivate all ready infections (including those that didn't get activated)
-    s.t_infection_liver[host_indices,:][src_indices] .= NaN32
-    s.strain_id_liver[host_indices,:][src_indices] .= 0
-    s.genes_liver[host_indices,:,:,:][src_indices, :, :] .= 0
+#     @view(s.t_infection_liver[host_indices,:])[src_indices] .= NaN32
+#     @view(s.strain_id_liver[host_indices,:])[src_indices] .= 0
+#     @view(s.genes_liver[host_indices,:,:,:])[src_indices, :, :] .= 0
+    
+    expression_index = @view(s.expression_index[host_indices, :])
+    t_infection_liver = @view(s.t_infection_liver[host_indices, :])
+    t_infection_active = @view(s.t_infection_active[host_indices, :])
+    strain_id_liver = @view s.strain_id_liver[host_indices, :]
+    strain_id_active = @view s.strain_id_active[host_indices, :]
+    genes_liver = @view s.genes_liver[host_indices, :, :]
+    genes_active = @view s.genes_active[host_indices, :, :]
+    for i in 1:length(src_indices)
+        host1, inf1 = Tuple(src_indices[i])
+        host2, inf2 = Tuple(dst_indices[i])
+        
+        @assert host1 == host2
+        
+        @assert !isnan(t_infection_liver[host1, inf1])
+        @assert strain_id_liver[host1, inf1] != 0
+        @assert all(genes_liver[host1, inf1, :, :] .> 0)
+        
+        expression_index[host2, inf2] = 1
+        t_infection_active[host2, inf2] = t_infection_liver[host1, inf1]
+        strain_id_active[host2, inf2] = strain_id_liver[host1, inf1]
+        genes_active[host2, inf2, :, :] = genes_liver[host1, inf1, :, :]
+        
+        t_infection_liver[host1, inf1] = NaN32
+        strain_id_liver[host1, inf1] = 0
+        genes_liver[host1, inf1, :, :] .= 0
+    end
+    
+#     println("host_indices = $(host_indices)")
+#     println("src_indices = $(src_indices)")
+#     
+#     println("t_infection_liver = $(s.t_infection_liver[host_indices,:][src_indices])")
+#     println("genes_liver = $(s.genes_liver[host_indices,:,:,:][src_indices, :, :])")
+    
+    verify(p, s)
 end
 
 function do_switching!(t, p, s)
@@ -221,7 +290,6 @@ function do_switching!(t, p, s)
     
     # Advance expression for each chosen infection
     # TODO: make CUDA-friendly
-    max_immunity_level = ImmunityLevel(p.max_immunity_level)
     for i in 1:n_trans
         host_index = host_indices[i]
         inf_index = inf_indices[i]
@@ -245,7 +313,7 @@ function do_switching!(t, p, s)
             for locus in 1:p.n_loci
                 allele_id = s.genes_active[host_index, inf_index, exp_index, locus]
                 s.immunity[host_index, allele_id, locus] = min(
-                    max_immunity_level,
+                    p.immunity_level_max,
                     s.immunity[host_index, allele_id, locus] + 1
                 )
             end
@@ -304,21 +372,24 @@ function do_biting!(t, p, s)
     src_hosts_raw = sample(1:p.n_hosts, n_bites, replace = false)
     dst_hosts_raw = sample(1:p.n_hosts, n_bites, replace = false)
     if length(src_hosts_raw) == 0
-        return
+        return (0, 0, 0)
     end
     
     # Identify indices with active source infections and available space in destination
-    src_dst_valid = reshape(
-        any(s.expression_index[src_hosts_raw,:] .> 0, dims = 2), n_bites
-    ) .& reshape(
-        any(isnan.(s.t_infection_liver[dst_hosts_raw,:]), dims = 2), n_bites
-    )
+    src_valid = reshape(any(s.expression_index[src_hosts_raw,:] .> 0, dims = 2), n_bites)
+    dst_valid = reshape(any(isnan.(s.t_infection_liver[dst_hosts_raw,:]), dims = 2), n_bites)
+    
+    n_infected_bites = sum(src_valid)
+    
+    src_dst_valid = src_valid .& dst_valid
     
     src_hosts = src_hosts_raw[src_dst_valid]
     if length(src_hosts) == 0
-        return
+        return (0, 0, 0)
     end
     dst_hosts = dst_hosts_raw[src_dst_valid]
+    
+    n_infected_bites_with_space = length(dst_hosts)
     
     # Compute number of active source infections and their locations in array
     src_inf_count, src_inf_indices = let
@@ -428,6 +499,8 @@ function do_biting!(t, p, s)
 #             println("dst_strain = $(s.infection_genes[dst_host, dst_inf_index, :, :])")
         end
     end
+    println("HERE")
+    (n_infected_bites, n_infected_bites_with_space, n_total_bites)
 end
 
 function do_mutation!(t, p, s)

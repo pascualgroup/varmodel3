@@ -51,12 +51,26 @@ using StructTypes
     
     
     """
+        How often to write summary output.
+    """
+    summary_period::Union{Int, Nothing} = nothing
+    
+    
+    """
+        How often to output the number of circulating genes and strains.
+        
+        Because counts are not kept update dynamically at present, this may be
+        the bottleneck in the simulation.
+    """
+    strain_count_period::Union{Int, Nothing} = nothing
+    
+    """
         How often to verify consistency of simulation state.
         
         Useful primarily during development to find new bugs.
         If set to `nothing` (`null` in JSON), no verification will be performed.
     """
-    verification_period::Union{Float64, Nothing} = nothing
+    verification_period::Union{Int, Nothing} = nothing
     
     """
         Number of time units in a year.
