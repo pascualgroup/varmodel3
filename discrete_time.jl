@@ -20,7 +20,7 @@ function run_discrete_time(p::Params)
 #         verify(p, s)
         do_activation!(t, p, s)
 #         verify(p, s)
-        do_transition!(t, p, s)
+        do_switching!(t, p, s)
 #         verify(p, s)
         do_biting!(t, p, s)
 #         verify(p, s)
@@ -186,14 +186,14 @@ function do_activation!(t, p, s)
     s.genes_liver[host_indices,:,:,:][src_indices, :, :] .= 0
 end
 
-function do_transition!(t, p, s)
-#     println("do_transition!()")
+function do_switching!(t, p, s)
+#     println("do_switching!()")
     # TODO: adjust for dt
-    p_transition = 1 - exp(-p.transition_rate_max)
+    p_switch = 1 - exp(-p.switching_rate_max)
     
     n_infections = p.n_hosts * p.n_infections_active_max
     
-    n_trans_raw = rand(Binomial(n_infections, p_transition))
+    n_trans_raw = rand(Binomial(n_infections, p_switch))
 #     println("n_trans_raw: $(n_trans_raw)")
     if n_trans_raw == 0
         return
@@ -219,19 +219,19 @@ function do_transition!(t, p, s)
     host_indices = ((indices .- 1) .% p.n_hosts) .+ 1
     inf_indices = ((indices .- 1) .÷ p.n_hosts) .+ 1
     
-    # Advance expression for each transition
+    # Advance expression for each chosen infection
     # TODO: make CUDA-friendly
     max_immunity_level = ImmunityLevel(p.max_immunity_level)
     for i in 1:n_trans
         host_index = host_indices[i]
         inf_index = inf_indices[i]
         
-        # Accept transition with probability transition_rate[n_immune_loci + 1] / transition_rate_max
-        # I.e., transition rate depends on number of loci at which host is immune;
+        # Accept with probability switching_rate[n_immune_loci + 1] / switching_rate_max
+        # I.e., switching rate depends on number of epitopes at which host is immune;
         # heterogeneous rates are handled via this rejection step.
         n_immune_loci = count_immune_loci(p, s, host_index, inf_index, s.expression_index[host_index, inf_index])
         if n_immune_loci < p.n_loci # (It's possible to have become fully immune since the last timestep)
-            if rand() < 1.0 - p.transition_rate_multiplier[n_immune_loci + 1]
+            if rand() < 1.0 - p.switching_rate_multiplier[n_immune_loci + 1]
                 continue
             end
         end
@@ -296,11 +296,7 @@ function do_biting!(t, p, s)
 #     println("do_biting!()")
     
     # TODO: adjust for dt
-    p_bite = 1 - exp(
-        -(p.biting_rate_mean * p.daily_biting_rate_multiplier[
-            1 + Int(floor(t)) % p.t_year
-        ])
-    )
+    p_bite = 1 - exp(-p.biting_rate[1 + Int(floor(t)) % p.t_year])
 #     println("p_bite = $(p_bite)")
     n_bites = rand(Binomial(p.n_hosts, p_bite))
     
@@ -539,9 +535,7 @@ function do_immigration!(t, p, s)
     
     # TODO: adjust for dt
     p_bite = 1 - exp(
-        -p.immigration_rate_fraction * (p.biting_rate_mean * p.daily_biting_rate_multiplier[
-            1 + Int(floor(t)) % p.t_year
-        ])
+        -p.immigration_rate_fraction * p.biting_rate[1 + Int(floor(t)) % p.t_year]
     )
 #     println("p_bite = $(p_bite)")
     n_bites = rand(Binomial(p.n_hosts, p_bite))

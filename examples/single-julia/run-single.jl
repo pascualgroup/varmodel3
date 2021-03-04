@@ -32,22 +32,15 @@ function init_params()
 
         output_db_filename = "output.sqlite",
 
-        output_hosts = true,
-        output_strains = false,
-        output_genes = false,
-
         host_sampling_period = 30,
         host_sample_size = 100,
-        expected_equilibrium = 10800,
-
-        verification_on = true,
+        
         verification_period = 30,
 
         rng_seed = nothing,
 
         t_year = t_year,
         t_end = 111 * t_year,
-        t_burnin = 10 * t_year,
 
         n_hosts = 10000,
         n_initial_infections = 20,
@@ -71,20 +64,18 @@ function init_params()
 
         t_liver_stage = 14.0,
 
-        transition_rate_max = 1.0/6.0,
-        transition_rate_multiplier = [0.5, 1.0],
+        switching_rate_max = 1.0/6.0,
+        switching_rate_multiplier = [0.5, 1.0],
 
         mean_host_lifetime = 30 * t_year,
         max_host_lifetime = 80 * t_year,
-
-        immigration_on = true,
+        
         immigration_rate_fraction = 0.0026,
 
         n_infections_liver_max = 10,
         n_infections_active_max = 10,
 
-        biting_rate_mean = 0.0005,
-        daily_biting_rate_multiplier = daily_biting_rate_multiplier
+        biting_rate = 0.0005 * daily_biting_rate_multiplier,
     )
 end
 
