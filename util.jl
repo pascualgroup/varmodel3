@@ -1,9 +1,17 @@
+using Test
+
 import Base.push!
 import Base.delete!
 import Base.rand
 import Base.length
 import Base.iterate
 import Base.in
+
+function test_utils()
+    @testset begin
+        test_mask_with_row_limits()
+    end
+end
 
 """
     A random-samplable mutable set.
@@ -91,4 +99,44 @@ function vcat!(x, y, z)
     empty!(x)
     append!(x, y)
     append!(x, z)
+end
+
+function mask_with_row_limits(mask, limits)
+#     println("mask = $(mask), limits = $(limits)")
+    @assert length(limits) == size(mask)[1]
+    count = fill(0, length(limits))
+    new_mask = falses(size(mask))
+    for i in 1:size(mask)[2]
+        new_mask[:,i] = mask[:,i] .& (count .< limits)
+        count[:] .+= new_mask[:,i]
+    end
+#     println("new_mask = $(new_mask)")
+    new_mask
+end
+
+function test_mask_with_row_limits()
+    testval = mask_with_row_limits(trues(2, 1), [1, 0]) == Bool[1; 0]
+    @testset begin
+        @test begin
+            mask_with_row_limits(falses(1, 1), [0]) == falses(1, 1)
+        end
+        @test begin
+            mask_with_row_limits(trues(1, 1), [0]) == falses(1, 1)
+        end
+        @test begin
+            mask_with_row_limits(trues(1, 1), [1]) == trues(1, 1)
+        end
+        @test begin
+            mask_with_row_limits(falses(2, 1), [0, 0]) == falses(2, 1)
+        end
+        @test begin
+            mask_with_row_limits(trues(2, 1), [0, 0]) == falses(2, 1)
+        end
+        @test begin
+            mask_with_row_limits(trues(2, 1), [1, 0]) == reshape([true false], (2, 1))
+        end
+        @test begin
+            mask_with_row_limits(trues(2, 2), [1, 0]) == [true false; false false]
+        end
+    end
 end

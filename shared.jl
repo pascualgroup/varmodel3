@@ -5,6 +5,7 @@ using Distributions
 using StatsBase
 using StaticArrays
 using Dates
+using Test
 
 const StrainId = UInt32
 const AlleleId = UInt16
@@ -216,11 +217,26 @@ function verify(p::Params, s::State)
     @assert s.next_strain_id > max(maximum(s.strain_id_liver), maximum(s.strain_id_active))
     
     # Check genes
-    @assert all(s.genes_liver[liver_indices_null, :, :] .== 0)
-    @assert all(s.genes_active[active_indices_null, :, :] .== 0)
+    for ci in liver_indices_null
+        if !all(s.genes_liver[ci[1], ci[2], :, :] .== 0)
+            println("genes_liver[$(ci)] = $(s.genes_liver[ci[1], ci[2], :, :])")
+        end
+        @assert all(s.genes_liver[ci[1], ci[2], :, :] .== 0)
+    end
+#     @assert all(s.genes_liver[liver_indices_null, :, :] .== 0)
+    for ci in active_indices_null
+        @assert all(s.genes_active[ci[1], ci[2], :, :] .== 0)
+    end
+#     @assert all(s.genes_active[active_indices_null, :, :] .== 0)
     for locus in p.n_loci
-        @assert all(1 .<= s.genes_liver[liver_indices, locus, :] .<= s.n_alleles[locus])
-        @assert all(1 .<= s.genes_active[active_indices, locus, :] .<= s.n_alleles[locus])
+        for ci in liver_indices
+            @assert all(1 .<= s.genes_liver[ci[1], ci[2], :, locus] .<= s.n_alleles[locus])
+        end
+        for ci in active_indices
+            @assert all(1 .<= s.genes_active[ci[1], ci[2], :, locus] .<= s.n_alleles[locus])
+        end
+#         @assert all(1 .<= s.genes_liver[liver_indices, :, locus] .<= s.n_alleles[locus])
+#         @assert all(1 .<= s.genes_active[active_indices, :, locus] .<= s.n_alleles[locus])
     end
     
     # Check immunity levels
@@ -273,12 +289,3 @@ function count_infections(s, hosts)
     sum(s.expression_index[hosts, :] .== 0, dims = 2)
 end
 
-function mask_with_row_limits(mask, limits)
-    count = fill(0, length(limits))
-    new_mask = falses(size(mask))
-    for i in size(mask)[2]
-        new_mask[:,i] = mask[:,i] .& (count .< limits)
-        count[:] .+= new_mask[:,i]
-    end
-    new_mask
-end

@@ -184,13 +184,14 @@ function do_activation!(t, p, s)
     
     # Identify hosts with infections ready to become active
     ready_mask_raw = s.t_infection_liver .+ p.t_liver_stage .<= t
-    host_indices = findall(sum(ready_mask_raw, dims = 2) .> 0)
+    host_indices = findall(reshape(sum(ready_mask_raw, dims = 2), :) .> 0)
+    println("size(host_indices) = $(size(host_indices))")
     ready_mask = ready_mask_raw[host_indices, :]
-    ready_count = sum(ready_mask, dims = 2)
+    ready_count = reshape(sum(ready_mask, dims = 2), :)
     
     # Identify available slots
     available_mask = s.expression_index[host_indices, :] .== 0
-    available_count = sum(available_mask, dims = 2)
+    available_count = reshape(sum(available_mask, dims = 2), :)
     
     # Compute the number that will actually be activated
     activation_count = min.(ready_count, available_count)
@@ -224,26 +225,39 @@ function do_activation!(t, p, s)
     t_infection_active = @view(s.t_infection_active[host_indices, :])
     strain_id_liver = @view s.strain_id_liver[host_indices, :]
     strain_id_active = @view s.strain_id_active[host_indices, :]
-    genes_liver = @view s.genes_liver[host_indices, :, :]
-    genes_active = @view s.genes_active[host_indices, :, :]
+    genes_liver = @view s.genes_liver[host_indices, :, :, :]
+    println("size(s.genes_liver) = $(size(s.genes_liver))")
+    println("size(genes_liver) = $(size(genes_liver))")
+    genes_active = @view s.genes_active[host_indices, :, :, :]
     for i in 1:length(src_indices)
-        host1, inf1 = Tuple(src_indices[i])
+        println("i = $(i)")
+        host, inf1 = Tuple(src_indices[i])
         host2, inf2 = Tuple(dst_indices[i])
         
-        @assert host1 == host2
+        println("host = $(host)")
+        println("inf1 = $(inf1)")
+        println("inf2 = $(inf2)")
         
-        @assert !isnan(t_infection_liver[host1, inf1])
-        @assert strain_id_liver[host1, inf1] != 0
-        @assert all(genes_liver[host1, inf1, :, :] .> 0)
+        @assert host == host2
         
-        expression_index[host2, inf2] = 1
-        t_infection_active[host2, inf2] = t_infection_liver[host1, inf1]
-        strain_id_active[host2, inf2] = strain_id_liver[host1, inf1]
-        genes_active[host2, inf2, :, :] = genes_liver[host1, inf1, :, :]
+        @assert !isnan(t_infection_liver[host, inf1])
+        @assert strain_id_liver[host, inf1] != 0
+        @assert all(genes_liver[host, inf1, :, :] .> 0)
         
-        t_infection_liver[host1, inf1] = NaN32
-        strain_id_liver[host1, inf1] = 0
-        genes_liver[host1, inf1, :, :] .= 0
+        @assert isnan(t_infection_active[host, inf2])
+        @assert strain_id_active[host, inf2] == 0
+        @assert all(genes_active[host, inf2, :, :] .== 0)
+        @assert expression_index[host, inf2] == 0
+        
+        expression_index[host, inf2] = 1
+        t_infection_active[host, inf2] = t_infection_liver[host, inf1]
+        strain_id_active[host, inf2] = strain_id_liver[host, inf1]
+        genes_active[host, inf2, :, :] = genes_liver[host, inf1, :, :]
+        
+        t_infection_liver[host, inf1] = NaN32
+        strain_id_liver[host, inf1] = 0
+        genes_liver[host, inf1, :, :] .= 0
+        println("genes_liver = $(genes_liver[host, inf1, :, :])")
     end
     
 #     println("host_indices = $(host_indices)")
@@ -500,7 +514,7 @@ function do_biting!(t, p, s)
         end
     end
     println("HERE")
-    (n_infected_bites, n_infected_bites_with_space, n_total_bites)
+    (n_infected_bites, n_infected_bites_with_space, n_bites)
 end
 
 function do_mutation!(t, p, s)
