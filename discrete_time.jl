@@ -86,7 +86,6 @@ function write_summary(t, p, s, db, elapsed_time_ms, n_infected_bites, n_infecte
     println("")
     println("t = $(t)")
     println("n_infections = $(sum(s.expression_index .> 0))")
-    println("n_immunity = $(sum(s.immunity .> 0))")
     
     execute(db.summary, [
         t,
@@ -142,33 +141,12 @@ function do_rebirth!(t, p, s)
     s.genes_liver[dead_hosts, :, :, :] .= 0
     s.genes_active[dead_hosts, :, :, :] .= 0
     s.expression_index[dead_hosts, :] .= 0
-    s.immunity[dead_hosts, :, :] .= 0
+    # TODO: reset immunity
 end
 
 function do_immunity_loss!(t, p, s)
 #     println("do_immunity_loss!()")
-    
-    # TODO: adjust for dt
-    p_loss = 1 - exp(-p.immunity_loss_rate)
-    
-    # Lose immunity one locus at a time
-    for locus in 1:p.n_loci
-        n_immunities = p.n_hosts * s.n_alleles[locus]
-        n_loss = rand(Binomial(n_immunities, p_loss))
-#         println("n_loss($(locus)) = $(n_loss)")
-        
-        # Uniformly randomly sample indices in one-dimensional array
-        indices = sample(1:n_immunities, n_loss, replace = false)
-        
-        # Create view of immunities for this locus as a one-dimensional array
-        immunity_view = reshape(
-            (@view(s.immunity[:, 1:s.n_alleles[locus], locus])),
-            n_immunities
-        )
-        
-        # Decrement immunity (leaving zeros at zero)
-        immunity_view[indices] = max(zeros(ImmunityLevel, n_loss), immunity_view[indices] .- 1)
-    end
+    # TODO
 end
 
 function findfirst_stable(x)
@@ -280,7 +258,7 @@ end
 function do_switching!(t, p, s)
 #     println("do_switching!()")
     # TODO: adjust for dt
-    p_switch = 1 - exp(-p.switching_rate_max)
+    p_switch = 1 - exp(-p.switching_rate)
     
     n_infections = p.n_hosts * p.n_infections_active_max
     
@@ -316,29 +294,12 @@ function do_switching!(t, p, s)
         host_index = host_indices[i]
         inf_index = inf_indices[i]
         
-        # Accept with probability switching_rate[n_immune_loci + 1] / switching_rate_max
-        # I.e., switching rate depends on number of epitopes at which host is immune;
-        # heterogeneous rates are handled via this rejection step.
-        n_immune_loci = count_immune_loci(p, s, host_index, inf_index, s.expression_index[host_index, inf_index])
-        if n_immune_loci < p.n_loci # (It's possible to have become fully immune since the last timestep)
-            if rand() < 1.0 - p.switching_rate_multiplier[n_immune_loci + 1]
-                continue
-            end
-        end
-        
         # Advance expression until non-immune gene is reached
         while true
             exp_index = s.expression_index[host_index, inf_index]
             @assert exp_index > 0
             
-            # Gain extra immunity to current gene
-            for locus in 1:p.n_loci
-                allele_id = s.genes_active[host_index, inf_index, exp_index, locus]
-                s.immunity[host_index, allele_id, locus] = min(
-                    p.immunity_level_max,
-                    s.immunity[host_index, allele_id, locus] + 1
-                )
-            end
+            # TODO: gain extra immunity to current gene
             
             if exp_index == p.n_genes_per_strain
                 # Clear infection if we're at the end
@@ -351,34 +312,12 @@ function do_switching!(t, p, s)
                 # Advance expression if we're not yet at the end
                 s.expression_index[host_index, inf_index] += 1
                 
-                # If we're not immune to this gene, stop advancing expression
-                if !is_immune(p, s, host_index, inf_index, exp_index + 1)
-                    break
-                end
+                # TODO: If we're not immune to this gene, stop advancing expression
+                # in the meantime: always stop advancing.
+                break
             end
         end
     end
-end
-
-function count_immune_loci(p, s, host_index, inf_index, exp_index)
-    n_immune_loci = 0
-    for locus in 1:p.n_loci
-        allele_id = s.genes_active[host_index, inf_index, exp_index, locus]
-        if s.immunity[host_index, allele_id, locus] > 0
-            n_immune_loci += 1
-        end
-    end
-    n_immune_loci
-end
-
-function is_immune(p, s, host_index, inf_index, exp_index)
-    for locus in 1:p.n_loci
-        allele_id = s.genes_active[host_index, inf_index, exp_index, locus]
-        if s.immunity[host_index, allele_id, locus] == 0
-            return false
-        end
-    end
-    return true
 end
 
 # TODO: rewrite this whole function to be cleaner and simpler
@@ -560,8 +499,6 @@ function do_mutation!(t, p, s)
         s.strain_id_active[host, inf] = s.next_strain_id
         s.next_strain_id += 1
     end
-    
-    resize_immunity_if_necessary!(p, s)
 end
 
 function do_recombination!(t, p, s)
@@ -654,16 +591,5 @@ function do_immigration!(t, p, s)
         s.next_strain_id += 1
         s.genes_liver[host, inf_ind, :, :] = s.gene_pool[rand(1:size(s.gene_pool)[1], p.n_genes_per_strain), :]
         s.t_infection_liver[host, inf_ind] = t
-    end
-end
-
-function resize_immunity_if_necessary!(p, s)
-    immunity_size = size(s.immunity)[2]
-    if maximum(s.n_alleles) > immunity_size
-        println("increasing immunity capacity by 25%...")
-        new_immunity_size = immunity_size * 5 ÷ 4
-        new_immunity = fill(0, p.n_hosts, new_immunity_size, p.n_loci)
-        new_immunity[:,1:immunity_size,:] = s.immunity
-        s.immunity = new_immunity
     end
 end

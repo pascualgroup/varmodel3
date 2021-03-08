@@ -51,25 +51,6 @@ const InfectionCount = Int8
     t_death::Vector{Float32}
     
     """
-        Immunity level for each host to each epitope allele at each locus.
-        Entry (i, j, k) is the immunity level for host i, allele j, locus k.
-        
-        When a host is exposed to an allele, its immunity level is incremented
-        by 1, up to a maximum of immunity_level_max.
-        
-        During immunity loss events, immunity levels are decremented by 1,
-        down to a minimum of 0.
-        
-        The array has an entry for every allele in the system for every host;
-        the size of the array is an upper bound on the number of alleles at
-        each locus. When the number of alleles exceeds the upper bound,
-        the size of the array is increased by 25%.
-        
-        Dimensions: (n_hosts, n_alleles_upper_bound, n_loci)
-    """
-    immunity::Array{ImmunityLevel, 3}
-    
-    """
         Time of infection for infections in the liver stage.
         
         Fixed-size array for the sake of predictable memory usage.
@@ -187,7 +168,6 @@ function State(p::Params)
         expression_index = expression_index,
         
         n_alleles = fill(AlleleId(p.n_alleles_per_locus_initial), p.n_loci),
-        immunity = fill(0, p.n_hosts, p.n_alleles_per_locus_initial, p.n_loci),
         
         gene_pool = gene_pool
     )
@@ -239,14 +219,7 @@ function verify(p::Params, s::State)
 #         @assert all(1 .<= s.genes_active[active_indices, :, locus] .<= s.n_alleles[locus])
     end
     
-    # Check immunity levels
-    @assert size(s.immunity)[2] >= maximum(s.n_alleles)
-    @assert size(s.immunity)[1] == p.n_hosts
-    @assert size(s.immunity)[3] == p.n_loci
-    @assert all(s.immunity .< p.immunity_level_max)
-    for locus in p.n_loci
-        @assert all(s.immunity[:, (s.n_alleles[locus] + 1):size(s.immunity)[2], locus] .== 0)
-    end
+    # TODO: Check immunity levels
     
     # Check gene pool
     @assert size(s.gene_pool)[1] .== p.n_genes_initial

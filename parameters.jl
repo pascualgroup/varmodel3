@@ -194,34 +194,11 @@ using StructTypes
     t_liver_stage::Union{Float64, Nothing} = nothing
     
     """
-        Maximum switching rate.
+        Switching rate for genes the host is not immune to.
         
-        The actual switching rate depends on `switching_rate_multiplier`.
+        If the host is immune to the gene, then switching is instantaneous.
     """
-    switching_rate_max::Union{Float64, Nothing} = nothing
-    
-    """
-        Relative switching rate as a function of number of epitopes seen before.
-        
-        The idea is that the switching rate is higher if the host has immunity
-        to one of the epitopes than if it has no immunity.
-        
-        The switching rate is specified as
-        `switching_rate * switching_rate_multiplier[i + 1]`,
-        where `i` is the number of epitopes (loci) at which the host is immune.
-        
-        The maximum value, which will presumably be `switching_rate_multiplier[n_loci]`,
-        must be 1.0.
-        
-        That is, if the host is immune to no epitopes in the expressed gene,
-        then the switching rate is
-        `switching_rate * switching_rate_multiplier[1]`,
-        and if the host is immune to one epitope, then the switching rate is
-        `switching_rate * switching_rate_multiplier[2]`.
-        
-        If the host is immune at all loci, then switching is instantaneous.
-    """
-    switching_rate_multiplier::Union{Array{Float64}, Nothing} = nothing
+    switching_rate::Union{Float64, Nothing} = nothing
     
     """
         Mean of exponential distribution used to draw host lifetime.
@@ -340,13 +317,8 @@ function validate(p::Params)
     @assert p.t_liver_stage != nothing
     @assert p.t_liver_stage >= 0.0
     
-    @assert p.switching_rate_max != nothing
-    @assert p.switching_rate_max >= 0.0
-    
-    @assert p.switching_rate_multiplier != nothing
-    @assert length(p.switching_rate_multiplier) == p.n_loci
-    @assert maximum(p.switching_rate_multiplier) == 1.0
-    @assert all(p.switching_rate_multiplier .>= 0.0)
+    @assert p.switching_rate != nothing
+    @assert p.switching_rate >= 0.0
     
     @assert p.mean_host_lifetime != nothing
     @assert p.mean_host_lifetime >= 0.0
