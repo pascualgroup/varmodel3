@@ -7,6 +7,7 @@ using StaticArrays
 using Dates
 using Test
 
+const HostGeneIndex = UInt16
 const StrainId = UInt32
 const AlleleId = UInt16
 const Locus = UInt8
@@ -20,10 +21,10 @@ const InfectionCount = Int8
     
     """
         Gene pool used to generate initial infections and immigration events.
-        Entry (i, j) is the allele ID for gene i, locus j.
+        Entry (i, j) is the allele ID for gene j, locus i.
         
         Currently fixed-size.
-        Dimensions: (n_genes_initial, n_loci)
+        Dimensions: (n_loci, n_genes_initial)
     """
     gene_pool::Array{AlleleId, 2}
     
@@ -56,7 +57,7 @@ const InfectionCount = Int8
         Fixed-size array for the sake of predictable memory usage.
         Unused slots are indicated by NaN.
         
-        Dimensions: (n_hosts, n_infections_liver_max)
+        Dimensions: (n_infections_liver_max, n_hosts)
     """
     t_infection_liver::Array{Float32, 2}
     
@@ -66,7 +67,7 @@ const InfectionCount = Int8
         Fixed-size array for the sake of predictable memory usage.
         Unused slots are indicated by NaN.
         
-        Dimensions: (n_hosts, n_infections_active_max)
+        Dimensions: (n_infections_active_max, n_hosts)
     """
     t_infection_active::Array{Float32, 2}
     
@@ -76,7 +77,7 @@ const InfectionCount = Int8
         Whenever a strain is created or modified, it is given a new strain ID.
         Unused slots are indicated by 0.
         
-        Dimensions: (n_hosts, n_infections_liver_max)
+        Dimensions: (n_infections_liver_max, n_hosts)
     """
     strain_id_liver::Array{StrainId, 2}
     
@@ -85,33 +86,38 @@ const InfectionCount = Int8
         
         Unused slots are indicated by 0.
         
-        Dimensions: (n_hosts, n_infections_active_max)
+        Dimensions: (n_infections_active_max, n_hosts)
     """
     strain_id_active::Array{StrainId, 2}
     
     """
-        Sequence of genes for infections in the liver stage.
+        The set of genes a host has immunity to or is currently infected by.
         
-        Stored directly as a matrix of allele IDs.
+        The size of this array is maintained to be as large as necessary, for
+        the host with the largest immunity/infection history.
         
-        Dimensions: (n_hosts, n_infections_liver_max, n_genes_per_strain, n_loci,)
+        Dimensions: (n_loci, n_genes_per_strain, n_host_genes_upper_bound, n_hosts)
     """
-    genes_liver::Array{AlleleId, 4}
+    host_genes::Array{AlleleId, 4}
     
     """
-        Sequence of genes for infections in the liver stage.
+        Genes for infections in the liver stage, as indices into the host_genes array.
         
-        Transferred directly from genes_liver upon activation.
-        Stored directly as a matrix of allele IDs.
-        
-        Dimensions: (n_hosts, n_infections_active_max, n_genes_per_strain, n_loci,)
+        Dimensions: (n_genes_per_strain, n_infections_liver_max, n_hosts)
     """
-    genes_active::Array{AlleleId, 4}
+    genes_liver::Array{HostGeneIndex, 3}
+    
+    """
+        Genes for active infections, as indices into the host_genes array.
+        
+        Dimensions: (n_genes_per_strain, n_infections_active_max, n_hosts)
+    """
+    genes_active::Array{HostGeneIndex, 3}
     
     """
         Index of currently expressed gene for each active infection.
         
-        Dimensions: (n_hosts, n_infections_active_max,)
+        Dimensions: (n_infections_active_max, n_hosts)
     """
     expression_index::Array{ExpressionIndex, 2}
 end
@@ -121,32 +127,35 @@ function State(p::Params)
     t_birth = -rand(Float32, p.n_hosts) .* lifetime
     t_death = t_birth + lifetime
     
-#     n_infections_liver = fill(0, p.n_hosts)
-#     n_infections_active = fill(0, p.n_hosts)
+    n_host_genes_max = 120
     
-    t_infection_liver = fill(NaN32, p.n_hosts, p.n_infections_liver_max)
-    t_infection_active = fill(NaN32, p.n_hosts, p.n_infections_active_max)
-    strain_id_liver = fill(0, p.n_hosts, p.n_infections_liver_max)
-    strain_id_active = fill(0, p.n_hosts, p.n_infections_active_max)
-    genes_liver = fill(AlleleId(0), p.n_hosts, p.n_infections_liver_max, p.n_genes_per_strain, p.n_loci)
-    genes_active = fill(AlleleId(0), p.n_hosts, p.n_infections_active_max, p.n_genes_per_strain, p.n_loci)
-    expression_index = fill(ExpressionIndex(0), p.n_hosts, p.n_infections_active_max)
+    n_infections_liver_max = 10
+    n_infections_active_max = 10
+    
+    t_infection_liver = fill(NaN32, n_infections_liver_max, p.n_hosts)
+    t_infection_active = fill(NaN32, n_infections_active_max, p.n_hosts)
+    strain_id_liver = fill(StrainId(0), n_infections_liver_max, p.n_hosts)
+    strain_id_active = fill(StrainId(0), n_infections_active_max, p.n_hosts)
+    genes_liver = fill(HostGeneIndex(0), p.n_genes_per_strain, n_infections_liver_max, p.n_hosts)
+    genes_active = fill(HostGeneIndex(0), p.n_genes_per_strain, n_infections_liver_max, p.n_hosts)
+    expression_index = fill(ExpressionIndex(0), p.n_hosts, n_infections_active_max)
+    
+    host_genes = fill(AlleleId(0), n_host_genes_max, p.n_hosts)
     
     gene_pool = reshape(rand(
         AlleleId(1):AlleleId(p.n_alleles_per_locus_initial),
         p.n_genes_initial * p.n_loci
-    ), (p.n_genes_initial, p.n_loci))
+    ), (p.n_loci, p.n_genes_initial))
     
     infection_hosts = sample(1:p.n_hosts, p.n_initial_infections, replace = false)
-#     n_infections[infection_hosts] .= 1
-#     n_infections_liver[infection_hosts] .= 1
     t_infection_liver[infection_hosts] .= 0.0
     
-    strain_id_liver[infection_hosts, 1] = 1:p.n_initial_infections
+    strain_id_liver[1, infection_hosts] = 1:p.n_initial_infections
     next_strain_id = p.n_initial_infections + 1
     
     for i in 1:p.n_genes_per_strain
-        genes_liver[infection_hosts, 1, i, :] = gene_pool[rand(1:p.n_genes_initial, p.n_initial_infections), :]
+        genes_liver[i, 1, infection_hosts] .= i
+        host_genes[:, i, 1, infection_hosts] = gene_pool[rand(1:p.n_genes_initial, p.n_initial_infections), :]
     end
     
     State(
@@ -166,6 +175,8 @@ function State(p::Params)
         genes_active = genes_active,
         
         expression_index = expression_index,
+        
+        host_genes = host_genes,
         
         n_alleles = fill(AlleleId(p.n_alleles_per_locus_initial), p.n_loci),
         
