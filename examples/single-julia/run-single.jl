@@ -25,19 +25,19 @@ end
 function init_params()
     t_year = 360
     daily_biting_rate_multiplier = readdlm("../mosquito_population.txt", Float64)[:,1]
-    
+
     Params(
         use_discrete_time_approximation = true,
         dt = 1,
 
         output_db_filename = "output.sqlite",
-        
+
         summary_period = 30,
         strain_count_period = 360,
-        
+
         host_sampling_period = 30,
         host_sample_size = 100,
-        
+
         verification_period = 30,
 
         rng_seed = nothing,
@@ -71,7 +71,7 @@ function init_params()
 
         mean_host_lifetime = 30 * t_year,
         max_host_lifetime = 80 * t_year,
-        
+
         immigration_rate_fraction = 0.0026,
 
         n_infections_liver_max = 10,
