@@ -129,16 +129,13 @@ function State(p::Params)
 
     n_host_genes_max = 120
 
-    n_infections_liver_max = 10
-    n_infections_active_max = 10
-
-    t_infection_liver = fill(NaN32, n_infections_liver_max, p.n_hosts)
-    t_infection_active = fill(NaN32, n_infections_active_max, p.n_hosts)
-    strain_id_liver = fill(StrainId(0), n_infections_liver_max, p.n_hosts)
-    strain_id_active = fill(StrainId(0), n_infections_active_max, p.n_hosts)
-    genes_liver = fill(HostGeneIndex(0), p.n_genes_per_strain, n_infections_liver_max, p.n_hosts)
-    genes_active = fill(HostGeneIndex(0), p.n_genes_per_strain, n_infections_liver_max, p.n_hosts)
-    expression_index = fill(ExpressionIndex(0), n_infections_active_max, p.n_hosts)
+    t_infection_liver = fill(NaN32, p.n_infections_liver_max, p.n_hosts)
+    t_infection_active = fill(NaN32, p.n_infections_active_max, p.n_hosts)
+    strain_id_liver = fill(StrainId(0), p.n_infections_liver_max, p.n_hosts)
+    strain_id_active = fill(StrainId(0), p.n_infections_active_max, p.n_hosts)
+    genes_liver = fill(HostGeneIndex(0), p.n_genes_per_strain, p.n_infections_liver_max, p.n_hosts)
+    genes_active = fill(HostGeneIndex(0), p.n_genes_per_strain, p.n_infections_liver_max, p.n_hosts)
+    expression_index = fill(ExpressionIndex(0), p.n_infections_active_max, p.n_hosts)
 
     host_genes = fill(AlleleId(0), p.n_loci, n_host_genes_max, p.n_hosts)
 
@@ -164,8 +161,7 @@ function State(p::Params)
     State(
         t_birth = t_birth,
         t_death = t_death,
-
-#         n_infections = n_infections,
+        
         t_infection_liver = t_infection_liver,
         t_infection_active = t_infection_active,
 
@@ -245,6 +241,18 @@ function verify(p::Params, s::State)
     end
 end
 
+function next_strain_id!(s)
+    strain_id = s.next_strain_id
+    s.next_strain_id += 1
+    strain_id
+end
+
+function next_strain_ids!(s, n)
+    strain_ids = s.next_strain_id:(s.next_strain_id + n - 1)
+    s.next_strain_id += n
+    strain_ids
+end
+
 function draw_host_lifetime(p::Params)
     min(rand(Exponential(p.mean_host_lifetime)), p.max_host_lifetime)
 end
@@ -276,4 +284,12 @@ end
 
 function count_infections(s, hosts)
     sum(s.expression_index[hosts, :] .== 0, dims = 2)
+end
+
+function n_host_genes_max(s::State)
+    size(s.host_genes)[2]
+end
+
+function cartesian_indices_infection_host(s::State)
+    CartesianIndices(s.expression_index)
 end

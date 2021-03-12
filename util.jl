@@ -140,3 +140,53 @@ function test_mask_with_row_limits()
         end
     end
 end
+
+function fill_mask_with_entries(mask, entries)
+    x = fill(entries[1], size(mask))
+    x[mask] .= entries
+    x
+end
+
+function sample_true_indices_by_column(mask)
+    @assert all(sum(mask; dims = 1) .> 0)
+    
+    n, m = size(mask)
+    row_indices = fill(0, m)
+    col_indices = collect(1:m)
+    while length(col_indices) > 0
+        new_row_indices = rand(1:n, length(col_indices))
+        valid_row_indices = mask[zip_cartesian(new_row_indices, col_indices)]
+        row_indices[col_indices] .= new_row_indices .* valid_row_indices
+        col_indices = col_indices[.!valid_row_indices]
+    end
+    
+    row_indices
+end
+
+function sample_each_column_without_replacement(x, n)
+    samples = fill(x[1], (n, size(x)[2]))
+    for j in 1:size(x)[2]
+        samples[:,j] = sample(x[:,j], n; replace = false)
+    end
+    samples
+end
+
+function findfirst_each_column(x)
+    inds = fill(0, size(x)[2])
+    for j in 1:size(x)[2]
+        inds[j] = findfirst(x[:,j])
+    end
+    inds
+end
+
+function zip_cartesian(x...)
+    collect(CartesianIndex(x) for x in zip(x...))
+end
+
+function zip_index(x, i...)
+    x[zip_cartesian(i...)]
+end
+
+function zip_view(x, i...)
+    @view x[zip_cartesian(i...)]
+end

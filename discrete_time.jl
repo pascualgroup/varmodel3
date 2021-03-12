@@ -134,14 +134,16 @@ function do_rebirth!(t, p, s)
 
     s.t_birth[dead_hosts] = s.t_death[dead_hosts]
     s.t_death[dead_hosts] = s.t_birth[dead_hosts] + [draw_host_lifetime(p) for i in 1:length(dead_hosts)]
-    s.t_infection_liver[dead_hosts, :, :] .= NaN32
-    s.t_infection_active[dead_hosts, :, :] .= NaN32
-    s.strain_id_liver[dead_hosts, :] .= 0
-    s.strain_id_active[dead_hosts, :] .= 0
-    s.genes_liver[dead_hosts, :, :, :] .= 0
-    s.genes_active[dead_hosts, :, :, :] .= 0
-    s.expression_index[dead_hosts, :] .= 0
+    s.t_infection_liver[:, dead_hosts] .= NaN32
+    s.t_infection_active[:, dead_hosts] .= NaN32
+    s.strain_id_liver[:, dead_hosts] .= 0
+    s.strain_id_active[:, dead_hosts] .= 0
+    s.genes_liver[:, :, dead_hosts] .= 0
+    s.genes_active[:, :, dead_hosts] .= 0
+    s.expression_index[:, dead_hosts] .= 0
     # TODO: reset immunity
+    
+    verify(p, s)
 end
 
 function do_immunity_loss!(t, p, s)
@@ -156,14 +158,10 @@ end
 
 function do_activation!(t, p, s)
 #     println("do_activation!()")
-
-    # TODO: abstract out index-matching algorithm for reuse?
-    # TODO: clean up that horrible subindexing?
-
+    
     # Identify hosts with infections ready to become active
     ready_mask_raw = s.t_infection_liver .+ p.t_liver_stage .<= t
     host_indices = findall(reshape(sum(ready_mask_raw, dims = 2), :) .> 0)
-#     println("size(host_indices) = $(size(host_indices))")
     ready_mask = ready_mask_raw[host_indices, :]
     ready_count = reshape(sum(ready_mask, dims = 2), :)
 
@@ -179,9 +177,6 @@ function do_activation!(t, p, s)
     src_indices = [CartesianIndex(x[2], x[1]) for x in findall(transpose(src_mask))]
     dst_mask = mask_with_row_limits(available_mask, activation_count)
     dst_indices = [CartesianIndex(x[2], x[1]) for x in findall(transpose(dst_mask))]
-#     println("n_hosts = $(length(host_indices))")
-#     println("n_activations = $(length(src_indices))")
-#     println("n_activations = $(length(dst_indices))")
 
     @assert length(src_indices) == length(dst_indices)
 
@@ -196,7 +191,6 @@ function do_activation!(t, p, s)
     # Update active infection data
     expression_index[dst_indices] .= 1
     t_infection_active[dst_indices] = t_infection_liver[src_indices]
-#     println("n_active = $(sum(s.expression_index))")
 
     strain_id_active[dst_indices] = strain_id_liver[src_indices]
     genes_active[dst_indices, :, :] = genes_liver[src_indices, :, :]
@@ -206,53 +200,7 @@ function do_activation!(t, p, s)
     strain_id_liver[src_indices] .= 0
     genes_liver[src_indices, :, :] .= 0
 
-#     expression_index = @view(s.expression_index[host_indices, :])
-#     t_infection_liver = @view(s.t_infection_liver[host_indices, :])
-#     t_infection_active = @view(s.t_infection_active[host_indices, :])
-#     strain_id_liver = @view s.strain_id_liver[host_indices, :]
-#     strain_id_active = @view s.strain_id_active[host_indices, :]
-#     genes_liver = @view s.genes_liver[host_indices, :, :, :]
-#     println("size(s.genes_liver) = $(size(s.genes_liver))")
-#     println("size(genes_liver) = $(size(genes_liver))")
-#     genes_active = @view s.genes_active[host_indices, :, :, :]
-#     for i in 1:length(src_indices)
-#         println("i = $(i)")
-#         host, inf1 = Tuple(src_indices[i])
-#         host2, inf2 = Tuple(dst_indices[i])
-#
-#         println("host = $(host)")
-#         println("inf1 = $(inf1)")
-#         println("inf2 = $(inf2)")
-#
-#         @assert host == host2
-#
-#         @assert !isnan(t_infection_liver[host, inf1])
-#         @assert strain_id_liver[host, inf1] != 0
-#         @assert all(genes_liver[host, inf1, :, :] .> 0)
-#
-#         @assert isnan(t_infection_active[host, inf2])
-#         @assert strain_id_active[host, inf2] == 0
-#         @assert all(genes_active[host, inf2, :, :] .== 0)
-#         @assert expression_index[host, inf2] == 0
-#
-#         expression_index[host, inf2] = 1
-#         t_infection_active[host, inf2] = t_infection_liver[host, inf1]
-#         strain_id_active[host, inf2] = strain_id_liver[host, inf1]
-#         genes_active[host, inf2, :, :] = genes_liver[host, inf1, :, :]
-#
-#         t_infection_liver[host, inf1] = NaN32
-#         strain_id_liver[host, inf1] = 0
-#         genes_liver[host, inf1, :, :] .= 0
-#         println("genes_liver = $(genes_liver[host, inf1, :, :])")
-#     end
-
-#     println("host_indices = $(host_indices)")
-#     println("src_indices = $(src_indices)")
-#
-#     println("t_infection_liver = $(s.t_infection_liver[host_indices,:][src_indices])")
-#     println("genes_liver = $(s.genes_liver[host_indices,:,:,:][src_indices, :, :])")
-
-#     verify(p, s)
+    verify(p, s)
 end
 
 function do_switching!(t, p, s)
@@ -274,7 +222,7 @@ function do_switching!(t, p, s)
 
     # Get one-dimensional views on infection
     expression_index_view = reshape(s.expression_index, n_infections)
-    infection_genes_view = reshape(s.genes_active, (n_infections, p.n_genes_per_strain, p.n_loci))
+    infection_genes_view = reshape(s.genes_active, (p.n_genes_per_strain, n_infections))
 
     # Filter indices down to active infections
     indices = indices_raw[expression_index_view[indices_raw] .> 0]
@@ -285,32 +233,30 @@ function do_switching!(t, p, s)
     end
 
     # Compute host and infection indices from sampled linear indices
-    host_indices = ((indices .- 1) .% p.n_hosts) .+ 1
-    inf_indices = ((indices .- 1) .÷ p.n_hosts) .+ 1
+    cartesian_indices = cartesian_indices_infection_host(s)[indices]
 
     # Advance expression for each chosen infection
-    # TODO: make CUDA-friendly
-    for i in 1:n_trans
-        host_index = host_indices[i]
-        inf_index = inf_indices[i]
+    for ci in cartesian_indices
+        inf_index = ci[1]
+        host_index = ci[2]
 
         # Advance expression until non-immune gene is reached
         while true
-            exp_index = s.expression_index[host_index, inf_index]
+            exp_index = s.expression_index[ci]
             @assert exp_index > 0
 
             # TODO: gain extra immunity to current gene
 
             if exp_index == p.n_genes_per_strain
                 # Clear infection if we're at the end
-                s.t_infection_active[host_index, inf_index] = NaN32
-                s.strain_id_active[host_index, inf_index] = 0
-                s.genes_active[host_index, inf_index, :, :] .= 0
-                s.expression_index[host_index, inf_index] = 0
+                s.t_infection_active[ci] = NaN32
+                s.strain_id_active[ci] = 0
+                s.genes_active[:, ci] .= 0
+                s.expression_index[ci] = 0
                 break
             else
                 # Advance expression if we're not yet at the end
-                s.expression_index[host_index, inf_index] += 1
+                s.expression_index[ci] += 1
 
                 # TODO: If we're not immune to this gene, stop advancing expression
                 # in the meantime: always stop advancing.
@@ -318,6 +264,8 @@ function do_switching!(t, p, s)
             end
         end
     end
+    
+    verify(p, s)
 end
 
 # TODO: rewrite this whole function to be cleaner and simpler
@@ -326,142 +274,119 @@ function do_biting!(t, p, s)
 
     # TODO: adjust for dt
     p_bite = 1 - exp(-p.biting_rate[1 + Int(floor(t)) % p.t_year])
-#     println("p_bite = $(p_bite)")
-    n_bites = rand(Binomial(p.n_hosts, p_bite))
+    n_bites_raw = rand(Binomial(p.n_hosts, p_bite))
 
     # Sample source hosts and destination hosts
-    src_hosts_raw = sample(1:p.n_hosts, n_bites, replace = false)
-    dst_hosts_raw = sample(1:p.n_hosts, n_bites, replace = false)
+    src_hosts_raw = sample(1:p.n_hosts, n_bites_raw, replace = false)
+    dst_hosts_raw = sample(1:p.n_hosts, n_bites_raw, replace = false)
     if length(src_hosts_raw) == 0
         return (0, 0, 0)
     end
 
     # Identify indices with active source infections and available space in destination
-    src_valid = reshape(any(s.expression_index[src_hosts_raw,:] .> 0, dims = 2), n_bites)
-    dst_valid = reshape(any(isnan.(s.t_infection_liver[dst_hosts_raw,:]), dims = 2), n_bites)
-
-    n_infected_bites = sum(src_valid)
-
+    src_valid = reshape(any(s.expression_index[:,src_hosts_raw] .> 0, dims = 1), n_bites_raw)
+    dst_valid = reshape(any(isnan.(s.t_infection_liver[:,dst_hosts_raw]), dims = 1), n_bites_raw)
     src_dst_valid = src_valid .& dst_valid
-
+    
+    # Record number of infected bites for output
+    n_infected_bites = sum(src_valid)
+    
+    # Filter source and destination host indices
     src_hosts = src_hosts_raw[src_dst_valid]
     if length(src_hosts) == 0
         return (0, 0, 0)
     end
     dst_hosts = dst_hosts_raw[src_dst_valid]
-
-    n_infected_bites_with_space = length(dst_hosts)
+    
+    # Record number of infected bites with space in destination for output
+    n_bites = length(dst_hosts)
 
     # Compute number of active source infections and their locations in array
-    src_inf_count, src_inf_indices = let
-        expression_index = s.expression_index[src_hosts, :]
-        count = fill(0, length(src_hosts))
-        is_active = falses(length(src_hosts))
-
-        next_index = fill(1, length(src_hosts))
-        indices = fill(0, (length(src_hosts), p.n_infections_active_max))
-        for i in 1:p.n_infections_active_max
-            is_active .= expression_index[:,i] .> 0
-            count .+= is_active
-            indices[[CartesianIndex(j, next_index[j]) for j in findall(is_active)]] .= i
-            next_index[is_active] .+= 1
-        end
-
-        count, indices
+    src_active_mask = s.expression_index[:, src_hosts] .> 0
+    src_inf_count = sum(src_active_mask; dims = 1) # dims: (1, n_bites)
+    
+    # Compute probability of infection, dims: (1, n_bites)
+    p_infect = if p.coinfection_reduces_transmission
+        fill(p.transmissibility, (1, n_bites))
+    else
+        p.transmissibility ./ src_inf_count
     end
+    
+    # Identify which source infections will be involved in transmission
+    src_transmit_mask = src_active_mask .& (rand(Float32, size(src_active_mask)) .< p_infect)
+    src_transmit_count = sum(src_transmit_mask; dims = 1)
+    
+    # Identify available slots in destination livers
+    dst_avail_mask = s.strain_id_liver[:, dst_hosts] .> 0
+    dst_avail_count = sum(dst_avail_mask; dims = 1) # dims: (1, n_bites)
 
-    # Draw which source infections will be used to form transmitted strains
-    src_inf_trans_count, src_inf_trans_indices = let
-        p_infect = if p.coinfection_reduces_transmission
-            fill(p.transmissibility, length(src_hosts))
-        else
-            p.transmissibility ./ src_inf_count
-        end
-
-        count = [rand(Binomial(src_inf_count[i], p_infect[i])) for i in 1:length(src_hosts)]
-        indices = [
-            [src_inf_indices[i, j] for j in shuffle(1:count[i])]
-            for i in 1:length(src_hosts)
-        ]
-
-        (count, indices)
+    # Compute how many infections will be transmitted in each bite
+    transmit_count = reshape(min.(src_transmit_count, dst_avail_count), n_bites)
+    transmit_count_total = sum(transmit_count)
+    
+    # Do one transmission at a time in parallel across hosts
+    for i in 1:maximum(transmit_count)
+        bite_mask = transmit_count .<= i
+        n_bites_i = sum(bite_mask)
+        
+        src_hosts_i = src_hosts[bite_mask]
+        dst_hosts_i = dst_hosts[bite_mask]
+        
+        # two vectors of host-specific indices for infections being recombined
+        # dimensions: (n_bites_i,)
+        src_transmit_indices_1 = sample_true_indices_by_column(src_transmit_mask[:, bite_mask])
+        src_transmit_indices_2 = sample_true_indices_by_column(src_transmit_mask[:, bite_mask])
+    
+        # two vectors of strain IDs for strains being recombined
+        # dimensions: (n_bites_i,)
+        strain_ids_1 = zip_index(s.strain_id_active, src_transmit_indices_1, src_hosts_i)
+        strain_ids_2 = zip_index(s.strain_id_active, src_transmit_indices_2, src_hosts_i)
+    
+        @assert all(strain_ids_1 .> 0)
+        @assert all(strain_ids_2 .> 0)
+    
+        # host-specific indices of genes for strains being recombined
+        # first need indices of infections being transmitted
+        # dimensions: (n_genes_per_strain, n_bites_i)
+        gene_inds_1 = s.genes_active[:, zip_cartesian(src_transmit_indices_1, src_hosts_i)]
+        gene_inds_2 = s.genes_active[:, zip_cartesian(src_transmit_indices_2, src_hosts_i)]
+    
+        # extract actual genes for strains being recombined
+        # (1) treat gene_inds as long vectors of stacked columns to extract genes from host_genes
+        # (2) reshape them into arrays corresponding to sequences of genes within infections
+        # dimensions: (n_loci, n_genes_per_strain, n_bites_i)
+        genes_1 = reshape(s.host_genes[:, gene_inds_1[:]], (p.n_loci, p.n_genes_per_strain, n_bites_i))
+        genes_2 = reshape(s.host_genes[:, gene_inds_2[:]], (p.n_loci, p.n_genes_per_strain, n_bites_i))
+    
+        # Recombined strain IDs.
+        # Reuse IDs for paired strains with the same ID. Make new IDs for the other pairs.
+        # Dimensions: (n_bites_i,)
+        same_strain = strain_ids_1 .== strain_ids_2
+        not_same_strain = .!same_strain
+        n_same = sum(same_strain)
+        strain_ids_recombined =
+            (same_strain .* strain_ids_1) .+
+            fill_mask_with_entries(not_same_strain, next_strain_ids!(s, n_same))
+    
+        # Recombined genes.
+        # For non-recombining infections (given by same_strain), shuffle by column.
+        # For recombining infections, sample from genes_1 and genes_2 stacked on top of each other.
+        genes_recombined = fill(0, (p.n_loci, p.n_genes_per_strain, n_bites_i))
+        genes_recombined[:, :, same_strain] = shuffle_columns(genes_1[:, :, same_strain])
+        genes_recombined[:, :, not_same_strain] = sample_each_column_without_replacement(
+            cat(genes_1[:, :, not_same_strain], genes_2[:, :, not_same_strain]; dims = 3),
+            p.n_genes_per_strain
+        )
+    
+        dst_transmit_indices = findfirst_each_column(s.strain_id_liver[:,dst_hosts_i] .== 0)
+        inf_host_indices = zip_cartesian(dst_transmit_indices, dst_hosts_i)
+        s.strain_id_liver[inf_host_indices] = strain_ids_recombined
+        s.genes_liver[:, inf_host_indices] = genes_recombined
     end
-
-    # Compute number of available infection slots in destination livers and their locations in array
-    dst_inf_count, dst_inf_indices = let
-        t_infection = s.t_infection_liver[dst_hosts, :]
-        count = fill(0, length(dst_hosts))
-        is_available = falses(length(dst_hosts))
-
-        next_index = fill(1, length(dst_hosts))
-        indices = fill(0, (length(src_hosts), p.n_infections_liver_max))
-        for i in 1:p.n_infections_liver_max
-            is_available .= isnan.(t_infection[:, i])
-            count .+= is_available
-            indices[[CartesianIndex(j, next_index[j]) for j in findall(is_available)]] .= i
-            next_index[is_available] .+= 1
-        end
-
-        count, indices
-    end
-
-    # Compute how many infections will be transmitted
-    inf_trans_count = min.(src_inf_trans_count, dst_inf_count)
-    inf_trans_count_total = sum(inf_trans_count)
-
-    # Construct flattened arrays whose first dimension identifies hosts
-    host_subindices = let
-        subindices = fill(0, inf_trans_count_total)
-        k = 1
-        for i in 1:length(src_hosts)
-            for j in 1:inf_trans_count[i]
-                subindices[k] = i
-                k += 1
-            end
-        end
-        @assert k == inf_trans_count_total + 1
-        subindices
-    end
-    inf_src_hosts = src_hosts[host_subindices]
-    inf_dst_hosts = dst_hosts[host_subindices]
-
-    # Transmit:
-    # TODO: make this parallel-by-host? (if slow path)
-    for k in 1:inf_trans_count_total
-        host_subindex = host_subindices[k]
-        src_host = src_hosts[host_subindex]
-        dst_host = dst_hosts[host_subindex]
-        for j in 1:inf_trans_count[host_subindex]
-            # Sample two infection indices from transmitting infections in source host
-            (i1, i2) = rand(
-                src_inf_trans_indices[host_subindex][1:src_inf_trans_count[host_subindex]], 2
-            )
-
-            dst_inf_index = dst_inf_indices[host_subindex, j]
-            @assert dst_inf_count[host_subindex] >= j
-
-            strain1 = reshape(@view(s.genes_active[src_host, i1, :, :]), p.n_genes_per_strain, p.n_loci)
-            strain2 = reshape(@view(s.genes_active[src_host, i2, :, :]), p.n_genes_per_strain, p.n_loci)
-            if s.strain_id_active[src_host, i1] == s.strain_id_active[src_host, i2]
-                # Just copy shuffled genes if the strains are identical
-                s.strain_id_liver[dst_host, dst_inf_index] = s.strain_id_active[src_host, i1]
-                s.genes_liver[dst_host, dst_inf_index, :, :] = strain1[randperm(p.n_genes_per_strain), :]
-            else
-                # Recombine genes if the strains are not identical
-                all_genes = vcat(strain1, strain2)
-                s.strain_id_liver[dst_host, dst_inf_index] = s.next_strain_id
-                s.next_strain_id += 1
-                s.genes_liver[dst_host, dst_inf_index, :, :] = all_genes[sample(1:(2 * p.n_genes_per_strain), p.n_genes_per_strain, replace = true), :]
-            end
-            s.t_infection_liver[dst_host, dst_inf_index] = t
-
-#             println("strain1 = $(strain1)")
-#             println("strain2 = $(strain2)")
-#             println("dst_strain = $(s.infection_genes[dst_host, dst_inf_index, :, :])")
-        end
-    end
-#     println("HERE")
-    (n_infected_bites, n_infected_bites_with_space, n_bites)
+    
+    verify(p, s)
+    
+    (n_infected_bites, n_bites, n_bites_raw)
 end
 
 function do_mutation!(t, p, s)
