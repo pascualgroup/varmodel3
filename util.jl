@@ -267,6 +267,22 @@ mutable struct ArrayOfTupleDicts{K, D, V}
     end
 end
 
+function dict_count(x::ArrayOfTupleDicts{K, D, V}) where {K, D, V}
+    size(x.values)[3]
+end
+
+function bucket_count(x::ArrayOfTupleDicts{K, D, V}) where {K, D, V}
+    size(x.values)[2]
+end
+
+function entries_per_bucket(x::ArrayOfTupleDicts{K, D, V}) where {K, D, V}
+    size(x.values)[1]
+end
+
+function tuple_size(x::ArrayOfTupleDicts{K, D, V}) where {K, D, V}
+    size(x.keys)[1]
+end
+
 function guess_max_entries_per_bucket(n, k)
     # The distribution of entries in a single bucket is Binomial(n, 1/k).
     # We'll guess max entries per bucket as 25% more than the number of entries that
