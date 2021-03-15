@@ -149,6 +149,19 @@ function fill_mask_with_entries(mask, entries)
     x
 end
 
+function mask_with_column_limits(mask, limits)
+#     println("mask = $(mask), limits = $(limits)")
+    @assert length(limits) == size(mask)[2]
+    count = fill(0, length(limits))
+    new_mask = falses(size(mask))
+    for i in 1:size(mask)[1]
+        new_mask[i,:] = mask[i,:] .& (count .< limits)
+        count[:] .+= new_mask[i,:]
+    end
+#     println("new_mask = $(new_mask)")
+    new_mask
+end
+
 function sample_true_indices_by_column(mask)
     @assert all(sum(mask; dims = 1) .> 0)
     

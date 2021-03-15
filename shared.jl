@@ -188,29 +188,14 @@ function verify(p::Params, s::State)
 
     # Check next strain ID
     @assert s.next_strain_id > max(maximum(s.strain_id_liver), maximum(s.strain_id_active))
-
-    # Check host genes
-    host_gene_indices = findall(s.host_genes[1, :, :] .> 0)
-    host_gene_indices_null = findall(s.host_genes[1, :, :] .== 0)
-    
-    for i in 1:p.n_loci
-        @assert all(1 .<= s.host_genes[i, host_gene_indices] .<= s.n_alleles[i])
-    end
-    @assert all(s.host_genes[:, host_gene_indices_null] .== 0)
     
     # Check references to host genes
-    @assert all(s.genes_liver[:, liver_indices_null] .== 0)
-    @assert all(s.genes_active[:, active_indices_null] .== 0)
-    host_gene_liver_indices = [
-        CartesianIndex(s.genes_liver[ei, li], li[2])
-        for li in liver_indices for ei in 1:p.n_genes_per_strain
-    ]
-    @assert all(s.host_genes[:, host_gene_liver_indices] .> 0)
-    host_gene_active_indices = [
-        CartesianIndex(s.genes_active[ei, li], li[2])
-        for li in active_indices for ei in 1:p.n_genes_per_strain
-    ]
-    @assert all(s.host_genes[:, host_gene_active_indices] .> 0)
+    for i in 1:p.n_loci
+        @assert all(1 .<= s.genes_liver[i, :, liver_indices] .<= s.n_alleles[i])
+        @assert all(1 .<= s.genes_active[i, :, active_indices] .<= s.n_alleles[i])
+    end
+    @assert all(s.genes_liver[:, :, liver_indices_null] .== 0)
+    @assert all(s.genes_active[:, :, active_indices_null] .== 0)
 
     # TODO: Check immunity levels
 

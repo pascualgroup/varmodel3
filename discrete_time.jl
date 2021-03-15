@@ -22,8 +22,8 @@ function run_discrete_time(p::Params)
 
         do_rebirth!(t, p, s)
 #         do_immunity_loss!(t, p, s)
-#         do_activation!(t, p, s)
-#         do_switching!(t, p, s)
+        do_activation!(t, p, s)
+        do_switching!(t, p, s)
 
         n_infected_bites_t, n_infected_bites_with_space_t, n_total_bites_t = do_biting!(t, p, s)
         n_infected_bites += n_infected_bites_t
@@ -32,7 +32,7 @@ function run_discrete_time(p::Params)
 
 #         do_mutation!(t, p, s)
 #         do_recombination!(t, p, s)
-        do_immigration!(t, p, s)
+#         do_immigration!(t, p, s)
 
         if t % p.summary_period == 0
             execute(db, "COMMIT")
@@ -135,8 +135,8 @@ function do_rebirth!(t, p, s)
     s.t_infection_active[:, dead_hosts] .= NaN32
     s.strain_id_liver[:, dead_hosts] .= 0
     s.strain_id_active[:, dead_hosts] .= 0
-    s.genes_liver[:, :, dead_hosts] .= 0
-    s.genes_active[:, :, dead_hosts] .= 0
+    s.genes_liver[:, :, :, dead_hosts] .= 0
+    s.genes_active[:, :, :, dead_hosts] .= 0
     s.expression_index[:, dead_hosts] .= 0
     # TODO: reset immunity
     
@@ -158,57 +158,57 @@ function do_activation!(t, p, s)
     
     # Identify hosts with infections ready to become active
     ready_mask_raw = s.t_infection_liver .+ p.t_liver_stage .<= t
-    host_indices = findall(reshape(sum(ready_mask_raw, dims = 2), :) .> 0)
-    ready_mask = ready_mask_raw[host_indices, :]
-    ready_count = reshape(sum(ready_mask, dims = 2), :)
+    host_indices = findall(
+        reshape(sum(ready_mask_raw, dims = 1), :) .> 0
+    )
+    ready_mask = ready_mask_raw[:, host_indices]
+    ready_count = reshape(sum(ready_mask, dims = 1), :)
 
     # Identify available slots
-    available_mask = s.expression_index[host_indices, :] .== 0
-    available_count = reshape(sum(available_mask, dims = 2), :)
+    available_mask = s.expression_index[:, host_indices,] .== 0
+    available_count = reshape(sum(available_mask, dims = 1), :)
 
     # Compute the number that will actually be activated
     activation_count = min.(ready_count, available_count)
 
     # Match indices from liver stage arrays to active arrays
-    src_mask = mask_with_row_limits(ready_mask, activation_count)
-    src_indices = [CartesianIndex(x[2], x[1]) for x in findall(transpose(src_mask))]
-    dst_mask = mask_with_row_limits(available_mask, activation_count)
-    dst_indices = [CartesianIndex(x[2], x[1]) for x in findall(transpose(dst_mask))]
+    src_mask = mask_with_column_limits(ready_mask, activation_count)
+    src_indices = findall(src_mask)
+    dst_mask = mask_with_column_limits(available_mask, activation_count)
+    dst_indices = findall(dst_mask)
 
     @assert length(src_indices) == length(dst_indices)
 
-    expression_index = @view(s.expression_index[host_indices, :])
-    t_infection_liver = @view(s.t_infection_liver[host_indices, :])
-    t_infection_active = @view(s.t_infection_active[host_indices, :])
-    strain_id_liver = @view s.strain_id_liver[host_indices, :]
-    strain_id_active = @view s.strain_id_active[host_indices, :]
-    genes_liver = @view s.genes_liver[host_indices, :, :, :]
-    genes_active = @view s.genes_active[host_indices, :, :, :]
+    expression_index = @view(s.expression_index[:, host_indices])
+    t_infection_liver = @view(s.t_infection_liver[:, host_indices])
+    t_infection_active = @view(s.t_infection_active[:, host_indices])
+    strain_id_liver = @view s.strain_id_liver[:, host_indices]
+    strain_id_active = @view s.strain_id_active[:, host_indices]
+    genes_liver = @view s.genes_liver[:, :, :, host_indices]
+    genes_active = @view s.genes_active[:, :, :, host_indices]
 
     # Update active infection data
     expression_index[dst_indices] .= 1
     t_infection_active[dst_indices] = t_infection_liver[src_indices]
 
     strain_id_active[dst_indices] = strain_id_liver[src_indices]
-    genes_active[dst_indices, :, :] = genes_liver[src_indices, :, :]
+    genes_active[:, :, dst_indices] = genes_liver[:, :, src_indices]
 
     # Deactivate all ready infections (including those that didn't get activated)
     t_infection_liver[src_indices] .= NaN32
     strain_id_liver[src_indices] .= 0
-    genes_liver[src_indices, :, :] .= 0
+    genes_liver[:, :, src_indices] .= 0
 
-    verify(p, s)
+#     verify(p, s)
 end
 
 function do_switching!(t, p, s)
 #     println("do_switching!()")
     # TODO: adjust for dt
     p_switch = 1 - exp(-p.switching_rate)
-
     n_infections = p.n_hosts * p.n_infections_active_max
 
     n_trans_raw = rand(Binomial(n_infections, p_switch))
-#     println("n_trans_raw: $(n_trans_raw)")
     if n_trans_raw == 0
         return
     end
@@ -216,56 +216,46 @@ function do_switching!(t, p, s)
     # Uniformly randomly sample indices in one-dimensional array
     # Includes nonexistent infections
     indices_raw = sample(1:n_infections, n_trans_raw, replace = false)
-
-    # Get one-dimensional views on infection
-    expression_index_view = reshape(s.expression_index, n_infections)
-    infection_genes_view = reshape(s.genes_active, (p.n_genes_per_strain, n_infections))
-
+    
     # Filter indices down to active infections
-    indices = indices_raw[expression_index_view[indices_raw] .> 0]
-    n_trans = length(indices)
-#     println("n_trans = $(n_trans)")
-    if n_trans == 0
+    indices = CartesianIndices(s.expression_index)[indices_raw[s.expression_index[indices_raw] .> 0]]
+    if length(indices) == 0
         return
     end
-
-    # Compute host and infection indices from sampled linear indices
-    cartesian_indices = cartesian_indices_infection_host(s)[indices]
-
-    # Advance expression for each chosen infection
-    for ci in cartesian_indices
-        inf_index = ci[1]
-        host_index = ci[2]
-
-        # Advance expression until non-immune gene is reached
-        while true
-            exp_index = s.expression_index[ci]
-            @assert exp_index > 0
-
-            # TODO: gain extra immunity to current gene
-
-            if exp_index == p.n_genes_per_strain
-                # Clear infection if we're at the end
-                s.t_infection_active[ci] = NaN32
-                s.strain_id_active[ci] = 0
-                s.genes_active[:, ci] .= 0
-                s.expression_index[ci] = 0
-                break
-            else
-                # Advance expression if we're not yet at the end
-                s.expression_index[ci] += 1
-
-                # TODO: If we're not immune to this gene, stop advancing expression
-                # in the meantime: always stop advancing.
-                break
-            end
+    
+    # Loop in parallel through advancing expression for all sampled infections
+    # until they have all reached a non-immune gene
+    expression_index = @view s.expression_index[indices]
+    t_infection_active = @view s.t_infection_active[indices]
+    strain_id_active = @view s.strain_id_active[indices]
+    genes_active = @view s.genes_active[:,:,indices]
+    
+    done = falses(length(indices))
+    while true
+        # Clear infections at last index
+        to_clear = expression_index .== p.n_genes_per_strain
+        t_infection_active[to_clear] .= NaN32
+        strain_id_active[to_clear] .= 0
+        genes_active[:, :, to_clear] .= 0
+        expression_index[to_clear] .= 0
+        done[to_clear] .= true
+        
+        # Advance expression for infections not yet done
+        not_done = .!done
+        expression_index[not_done] .+= 1
+        
+        # TODO: only stop advancing if we're immune
+        to_stop = not_done
+        done[to_stop] .= true
+        
+        if all(done)
+            break
         end
     end
     
-    verify(p, s)
+#     verify(p, s)
 end
 
-# TODO: rewrite this whole function to be cleaner and simpler
 function do_biting!(t, p, s)
 #     println("do_biting!()")
 
@@ -297,6 +287,7 @@ function do_biting!(t, p, s)
     
     # Record number of infected bites with space in destination for output
     n_bites = length(dst_hosts)
+    println("n_bites = $(n_bites)")
 
     # Compute number of active source infections and their locations in array
     src_active_mask = s.expression_index[:, src_hosts] .> 0
@@ -312,14 +303,18 @@ function do_biting!(t, p, s)
     # Identify which source infections will be involved in transmission
     src_transmit_mask = src_active_mask .& (rand(Float32, size(src_active_mask)) .< p_infect)
     src_transmit_count = sum(src_transmit_mask; dims = 1)
+    println("src_transmit_count = $(src_transmit_count)")
     
     # Identify available slots in destination livers
-    dst_avail_mask = s.strain_id_liver[:, dst_hosts] .> 0
+    dst_avail_mask = s.strain_id_liver[:, dst_hosts] .== 0
     dst_avail_count = sum(dst_avail_mask; dims = 1) # dims: (1, n_bites)
+    println("dst_avail_count = $(dst_avail_count)")
 
     # Compute how many infections will be transmitted in each bite
     transmit_count = reshape(min.(src_transmit_count, dst_avail_count), n_bites)
+    println("transmit_count = $(transmit_count)")
     transmit_count_total = sum(transmit_count)
+    println("transmit_count_total = $(transmit_count_total)")
     
     # Do one transmission at a time in parallel across hosts
     for i in 1:maximum(transmit_count)
