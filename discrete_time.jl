@@ -287,7 +287,7 @@ function do_biting!(t, p, s)
     
     # Record number of infected bites with space in destination for output
     n_bites = length(dst_hosts)
-    println("n_bites = $(n_bites)")
+#     println("n_bites = $(n_bites)")
 
     # Compute number of active source infections and their locations in array
     src_active_mask = s.expression_index[:, src_hosts] .> 0
@@ -302,23 +302,22 @@ function do_biting!(t, p, s)
     
     # Identify which source infections will be involved in transmission
     src_transmit_mask = src_active_mask .& (rand(Float32, size(src_active_mask)) .< p_infect)
-    src_transmit_count = sum(src_transmit_mask; dims = 1)
-    println("src_transmit_count = $(src_transmit_count)")
+    src_transmit_count = reshape(sum(src_transmit_mask; dims = 1), :)
+#     println("src_transmit_count = $(src_transmit_count)")
     
     # Identify available slots in destination livers
     dst_avail_mask = s.strain_id_liver[:, dst_hosts] .== 0
-    dst_avail_count = sum(dst_avail_mask; dims = 1) # dims: (1, n_bites)
-    println("dst_avail_count = $(dst_avail_count)")
+    dst_avail_count = reshape(sum(dst_avail_mask; dims = 1), :)
+#     println("dst_avail_count = $(dst_avail_count)")
 
     # Compute how many infections will be transmitted in each bite
-    transmit_count = reshape(min.(src_transmit_count, dst_avail_count), n_bites)
-    println("transmit_count = $(transmit_count)")
+    transmit_count = min.(src_transmit_count, dst_avail_count)
+#     println("transmit_count = $(transmit_count)")
     transmit_count_total = sum(transmit_count)
-    println("transmit_count_total = $(transmit_count_total)")
     
     # Do one transmission at a time in parallel across hosts
     for i in 1:maximum(transmit_count)
-        bite_mask = transmit_count .<= i
+        bite_mask = (transmit_count .> 0) .& (i .<= transmit_count)
         n_bites_i = sum(bite_mask)
         
         src_hosts_i = src_hosts[bite_mask]
@@ -331,54 +330,69 @@ function do_biting!(t, p, s)
     
         # two vectors of strain IDs for strains being recombined
         # dimensions: (n_bites_i,)
-        strain_ids_1 = zip_index(s.strain_id_active, src_transmit_indices_1, src_hosts_i)
-        strain_ids_2 = zip_index(s.strain_id_active, src_transmit_indices_2, src_hosts_i)
-    
+        strain_ids_1 = s.strain_id_active[zip_cartesian(src_transmit_indices_1, src_hosts_i)]
+        strain_ids_2 = s.strain_id_active[zip_cartesian(src_transmit_indices_2, src_hosts_i)]
+        
         @assert all(strain_ids_1 .> 0)
         @assert all(strain_ids_2 .> 0)
-    
-        # host-specific indices of genes for strains being recombined
-        # first need indices of infections being transmitted
-        # dimensions: (n_genes_per_strain, n_bites_i)
-        gene_inds_1 = s.genes_active[:, zip_cartesian(src_transmit_indices_1, src_hosts_i)]
-        gene_inds_2 = s.genes_active[:, zip_cartesian(src_transmit_indices_2, src_hosts_i)]
-    
-        # extract actual genes for strains being recombined
-        # (1) treat gene_inds as long vectors of stacked columns to extract genes from host_genes
-        # (2) reshape them into arrays corresponding to sequences of genes within infections
-        # dimensions: (n_loci, n_genes_per_strain, n_bites_i)
-        genes_1 = reshape(s.host_genes[:, gene_inds_1[:]], (p.n_loci, p.n_genes_per_strain, n_bites_i))
-        genes_2 = reshape(s.host_genes[:, gene_inds_2[:]], (p.n_loci, p.n_genes_per_strain, n_bites_i))
+        
+        # Genes being transmitted
+        genes_1 = s.genes_active[:, :, zip_cartesian(src_transmit_indices_1, src_hosts_i)]
+        genes_2 = s.genes_active[:, :, zip_cartesian(src_transmit_indices_2, src_hosts_i)]
     
         # Recombined strain IDs.
         # Reuse IDs for paired strains with the same ID. Make new IDs for the other pairs.
         # Dimensions: (n_bites_i,)
         same_strain = strain_ids_1 .== strain_ids_2
         not_same_strain = .!same_strain
-        n_same = sum(same_strain)
+        n_new = sum(not_same_strain)
         strain_ids_recombined =
             (same_strain .* strain_ids_1) .+
-            fill_mask_with_entries(not_same_strain, next_strain_ids!(s, n_same))
+            fill_mask_with_entries(not_same_strain, next_strain_ids!(s, n_new))
     
         # Recombined genes.
         # For non-recombining infections (given by same_strain), shuffle by column.
         # For recombining infections, sample from genes_1 and genes_2 stacked on top of each other.
         genes_recombined = fill(0, (p.n_loci, p.n_genes_per_strain, n_bites_i))
-        genes_recombined[:, :, same_strain] = shuffle_columns(genes_1[:, :, same_strain])
-        genes_recombined[:, :, not_same_strain] = sample_each_column_without_replacement(
-            cat(genes_1[:, :, not_same_strain], genes_2[:, :, not_same_strain]; dims = 3),
-            p.n_genes_per_strain
+        genes_recombined[:, :, same_strain] = shuffle_genes_within_strains(
+            genes_1[:, :, same_strain]
         )
-    
+        genes_recombined[:, :, not_same_strain] = recombine_multiple_strains(
+            genes_1[:, :, not_same_strain],
+            genes_2[:, :, not_same_strain]
+        )
+        
+        # Copy in new infections
         dst_transmit_indices = findfirst_each_column(s.strain_id_liver[:,dst_hosts_i] .== 0)
         inf_host_indices = zip_cartesian(dst_transmit_indices, dst_hosts_i)
+        s.t_infection_liver[inf_host_indices] .= t
         s.strain_id_liver[inf_host_indices] = strain_ids_recombined
-        s.genes_liver[:, inf_host_indices] = genes_recombined
+        s.genes_liver[:, :, inf_host_indices] = genes_recombined
     end
     
     verify(p, s)
     
     (n_infected_bites, n_bites, n_bites_raw)
+end
+
+function shuffle_genes_within_strains(genes)
+    @assert length(size(genes)) == 3
+    
+    genes_shuffled = Array(genes)
+    for i in 1:size(genes)[3]
+        genes_shuffled[:,:,i] = genes_shuffled[:,randperm(size(genes)[2]),i]
+    end
+    genes_shuffled
+end
+
+function recombine_multiple_strains(genes_1, genes_2)
+    all_genes = cat(genes_1, genes_2; dims = 2)
+    genes_recombined = similar(genes_1)
+    n_genes = size(genes_1)[2]
+    for i in 1:size(genes_1)[3]
+        genes_recombined[:,:,i] = all_genes[:, sample(1:(n_genes * 2), n_genes, replace = false), i]
+    end
+    genes_recombined
 end
 
 function do_mutation!(t, p, s)

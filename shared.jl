@@ -214,7 +214,7 @@ function next_strain_id!(s)
 end
 
 function next_strain_ids!(s, n)
-    strain_ids = s.next_strain_id:(s.next_strain_id + n - 1)
+    strain_ids = s.next_strain_id:StrainId(s.next_strain_id + n - 1)
     s.next_strain_id += n
     strain_ids
 end

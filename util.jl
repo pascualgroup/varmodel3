@@ -143,9 +143,9 @@ function test_mask_with_row_limits()
     end
 end
 
-function fill_mask_with_entries(mask, entries)
-    x = fill(entries[1], size(mask))
-    x[mask] .= entries
+function fill_mask_with_entries(mask, entries::Union{AbstractArray{T}, AbstractRange{T}}) where {T}
+    x = fill(T(0), size(mask))
+    x[mask] = entries
     x
 end
 
@@ -176,14 +176,6 @@ function sample_true_indices_by_column(mask)
     end
     
     row_indices
-end
-
-function sample_each_column_without_replacement(x, n)
-    samples = fill(x[1], (n, size(x)[2]))
-    for j in 1:size(x)[2]
-        samples[:,j] = sample(x[:,j], n; replace = false)
-    end
-    samples
 end
 
 function findfirst_each_column(x)
