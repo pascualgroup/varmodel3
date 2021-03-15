@@ -193,7 +193,7 @@ function verify(p::Params, s::State)
     active_indices = findall(.!isnan.(s.t_infection_active))
     active_indices_null = findall(isnan.(s.t_infection_active))
     
-    println("liver_indices = $(liver_indices)")
+#     println("liver_indices = $(liver_indices)")
 
     # Check expression indices
     @assert all(1 .<= s.expression_index[active_indices] .<= p.n_genes_per_strain)

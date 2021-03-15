@@ -190,3 +190,44 @@ end
 function zip_view(x, i...)
     @view x[zip_cartesian(i...)]
 end
+
+"""
+    Identify columns already present in a matrix, and return column indices
+    for each.
+    
+    Zeros in the returned indices indicate missing columns.
+"""
+function match_columns(mat, cols)
+#     println("size(mat) = $(size(mat))")
+#     println("size(cols) = $(size(cols))")
+    indices = fill(0, size(cols)[2])
+    for j in 1:size(cols)[2]
+        index = findfirst(reshape(
+            all(mat .== cols[:, j:j]; dims = 1),
+            size(mat)[2]
+        ))
+        if index != nothing
+            indices[j] = index
+        end
+    end
+    indices
+end
+
+"""
+    Remove non-monotonic increases
+"""
+function remove_index_gaps(x)
+    xp = fill(0, size(x))
+    index_map = fill(0, size(x))
+    last_max_x = 0
+    last_max_xp = 0
+    for (i, j) in enumerate(x)
+        if j > last_max_x
+            last_max_x = j
+            last_max_xp += 1
+            index_map[last_max_x] = last_max_xp
+        end
+        xp[i] = index_map[j]
+    end
+    xp
+end

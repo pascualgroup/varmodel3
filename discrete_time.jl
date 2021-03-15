@@ -21,17 +21,17 @@ function run_discrete_time(p::Params)
 #         println("stepping to t = $(t)")
 
         do_rebirth!(t, p, s)
-        do_immunity_loss!(t, p, s)
-        do_activation!(t, p, s)
-        do_switching!(t, p, s)
+#         do_immunity_loss!(t, p, s)
+#         do_activation!(t, p, s)
+#         do_switching!(t, p, s)
 
         n_infected_bites_t, n_infected_bites_with_space_t, n_total_bites_t = do_biting!(t, p, s)
         n_infected_bites += n_infected_bites_t
         n_infected_bites_with_space += n_infected_bites_with_space_t
         n_total_bites += n_total_bites_t
 
-        do_mutation!(t, p, s)
-        do_recombination!(t, p, s)
+#         do_mutation!(t, p, s)
+#         do_recombination!(t, p, s)
         do_immigration!(t, p, s)
 
         if t % p.summary_period == 0
@@ -85,7 +85,7 @@ function write_summary(t, p, s, db, elapsed_time_ms, n_infected_bites, n_infecte
 
     println("")
     println("t = $(t)")
-    println("n_infections = $(sum(s.expression_index .> 0))")
+    println("n_infections = $(n_infections)")
 
     execute(db.summary, [
         t,
@@ -105,25 +105,22 @@ end
 function write_gene_strain_counts(t, p, s, db)
     genes::Set{SVector{p.n_loci, AlleleId}} = Set()
     strains::BitSet = BitSet()
-
-    count_circulating_genes_and_strains!(p, s.strain_id_liver, s.genes_liver, genes, strains)
-    count_circulating_genes_and_strains!(p, s.strain_id_active, s.genes_active, genes, strains)
-
-    execute(db.gene_strain_counts, [t, length(genes), length(strains)])
-end
-
-function count_circulating_genes_and_strains!(p::Params, infection_strain_id, infection_genes, genes, strains)
-    for j in 1:size(infection_strain_id)[2]
-        for i in 1:size(infection_strain_id)[1]
-            strain_id = infection_strain_id[i,j]
-            if strain_id != 0 && !(strain_id in strains)
-                for k in 1:size(infection_genes)[3]
-                    push!(genes, @view(infection_genes[i, j, k, :]))
-                end
-                push!(strains, strain_id)
-            end
+    
+    for j in 1:p.n_hosts
+        for i in 1:size(s.strain_id_liver)[1]
+            push!(strains, s.strain_id_liver[i,j])
+        end
+        for i in 1:size(s.strain_id_active)[1]
+            push!(strains, s.strain_id_active[i,j])
+        end
+        for i in 1:size(s.host_genes)[2]
+            push!(s.host_genes[:, i, j])
         end
     end
+    delete!(strains, 0)
+    delete!(genes, [0, 0])
+
+    execute(db.gene_strain_counts, [t, length(genes), length(strains)])
 end
 
 function do_rebirth!(t, p, s)
@@ -143,7 +140,7 @@ function do_rebirth!(t, p, s)
     s.expression_index[:, dead_hosts] .= 0
     # TODO: reset immunity
     
-    verify(p, s)
+#     verify(p, s)
 end
 
 function do_immunity_loss!(t, p, s)
@@ -495,26 +492,83 @@ function do_immigration!(t, p, s)
         -p.immigration_rate_fraction * p.biting_rate[1 + Int(floor(t)) % p.t_year]
     )
 #     println("p_bite = $(p_bite)")
-    n_bites = rand(Binomial(p.n_hosts, p_bite))
-
-
-    # Sample source hosts
-    hosts_raw = sample(1:p.n_hosts, n_bites, replace = false)
-
-    # Filter to hosts with available infection slots
-    hosts = filter(
-        i -> sum(isnan.(s.t_infection_liver[i,:])) > 0,
-        hosts_raw
+    n_bites_raw = rand(Binomial(p.n_hosts, p_bite))
+    
+    # Sample source hosts with available infection slots
+    hosts_raw = sample(1:p.n_hosts, n_bites_raw, replace = false)
+    valid = reshape(any(s.strain_id_liver[:,hosts_raw] .== 0, dims = 1), n_bites_raw)
+    n_bites = sum(valid)
+    
+    if n_bites == 0
+        return
+    end
+    
+    hosts = hosts_raw[valid]
+    
+    inf_inds = findfirst_each_column(s.strain_id_liver[:,hosts] .== 0)
+    inf_host_inds = zip_cartesian(inf_inds, hosts)
+    
+    s.strain_id_liver[inf_host_inds] = next_strain_ids!(s, n_bites)
+    genes = reshape(
+        s.gene_pool[:, rand(1:size(s.gene_pool)[2], n_bites * p.n_genes_per_strain)],
+        (p.n_loci, p.n_genes_per_strain, n_bites)
     )
+    gene_indices = add_host_genes_batch!(s, hosts, genes)
+    s.genes_liver[:, inf_host_inds] = gene_indices
+    s.t_infection_liver[inf_host_inds] .= t
+    
+#     verify(p, s)
+end
 
-#     println("n_imm_raw = $(length(hosts_raw)), n_imm = $(length(hosts))")
+function add_host_genes_batch!(s, hosts, genes)
+    indices = fill(0, size(genes)[2:3])
+    for (i, host) in enumerate(hosts)
+        indices[:,i] = add_host_genes!(s, host, genes[:,:,i])
+    end
+    indices
+end
 
-    for host in hosts
-        inf_ind = findfirst(isnan.(s.t_infection_liver[host, :]))
+function add_host_genes!(s, host, genes)
+#     println("add_host_genes(s, $(host), $(size(genes)))")
+    
+    # Identify duplicate columns in genes and deduplicate
+#     println("genes = $(genes)")
+#     println("identifying duplicates")
+    original_indices = match_columns(genes, genes)
+    # println("original_indices = $(original_indices)")
+    dedup_indices = unique(original_indices)
+    original_indices_ungapped = remove_index_gaps(original_indices)
+    
+#     println("dedup_indices = $(dedup_indices)")
+    genes_dedup = genes[:, dedup_indices]
+    
+    # Identify genes in existing host_genes structure
+#     println("identifying gene locations")
+    indices = match_columns(s.host_genes[:,:,host], genes_dedup)
+#     println("indices = $(indices)")
+    present = indices .!= 0
+    absent = .!present
+    n_absent = sum(absent)
+    
+    # Resize s.host_genes if we need more space
+    n_existing_genes = sum(s.host_genes[1,:,host] .!= 0)
+    resize_host_genes_if_necessary!(s, n_existing_genes + n_absent)
+    
+    # Record the indices of new genes, and assign new genes to s.host_genes
+    new_indices = (n_existing_genes + 1):(n_existing_genes + n_absent)
+    indices[absent] = new_indices
+    s.host_genes[:, new_indices, host] = genes_dedup[:, absent]
+    
+    # Return indices of all genes, including duplicates
+    indices[original_indices_ungapped]
+end
 
-        s.strain_id_liver[host, inf_ind] = s.next_strain_id
-        s.next_strain_id += 1
-        s.genes_liver[host, inf_ind, :, :] = s.gene_pool[rand(1:size(s.gene_pool)[1], p.n_genes_per_strain), :]
-        s.t_infection_liver[host, inf_ind] = t
+function resize_host_genes_if_necessary!(s, n)
+    if n > size(s.host_genes)[2]
+        new_size = n * 5 ÷ 4
+        println("resizing host_genes to $(new_size)")
+        host_genes = fill(AlleleId(0), (size(s.host_genes)[1], new_size, size(s.host_genes)[3]))
+        host_genes[:, 1:size(s.host_genes)[2], :] = s.host_genes
+        s.host_genes = host_genes
     end
 end
