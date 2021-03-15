@@ -7,6 +7,8 @@ import Base.length
 import Base.iterate
 import Base.in
 
+using Distributions
+
 function test_utils()
     @testset begin
         test_mask_with_row_limits()
@@ -231,3 +233,59 @@ function remove_index_gaps(x)
     end
     xp
 end
+
+"""
+    An array of dictionaries stored using large arrays with stable memory
+    layout. Keys are length-D tuples of positive integers of type K,
+    and values are of type V.
+    
+    The dimensions represent:
+    (1) Entries in the hash table corresponding to the same bucket (index).
+    (2) Indices in the hash table corresponding to (hash value) % (size)
+    (3) Index in the array of dictionaries.
+    
+    The structure is dynamically resized by 25% in dimension 1 if the number of
+    entries exceeds the current capacity for any single bucket.
+    
+    The structure is dynamically resized by 25% in dimension 2 if the load
+    factor exceeds 0.75. This triggers reallocation and rehashing of all entries.
+    The load factor is computed as an average across all dicts in the array.
+"""
+mutable struct ArrayOfTupleDicts{K, D, V}
+    keys::Array{K, 4}
+    values::Array{V, 3}
+    
+    function ArrayOfTupleDicts{K, D, V}(n_dicts, n_entries_per_dict_guess) where {K, D, V}
+        n = n_entries_per_dict_guess
+        k = (n + 1) * 4 ÷ 3
+        max_n_per_k = guess_max_entries_per_bucket(n, k)
+        
+        new{K, D, V}(
+            fill(K(0), (D, max_n_per_k, k, n_dicts)),
+            fill(V(0), (max_n_per_k, k, n_dicts))
+        )
+    end
+end
+
+function guess_max_entries_per_bucket(n, k)
+    # The distribution of entries in a single bucket is Binomial(n, 1/k).
+    # We'll guess max entries per bucket as 25% more than the number of entries that
+    # reaches the 1 / n quantile of the CDF of this distribution.
+    # 
+    # The correct guess would be, e.g., the median of the distribution of the
+    # *maximum* number of entries across all n entries, but that seems
+    # hard to figure out.
+    
+    distribution = Binomial(n, 1.0 / k)
+    target_quantile = (n - 1) / n
+    entries_per_bucket = 1
+    while true
+        if cdf(distribution, entries_per_bucket) > target_quantile
+            break
+        end
+        entries_per_bucket *= 2
+    end
+    (entries_per_bucket + 1) * 5 ÷ 4
+end
+
+
