@@ -21,7 +21,7 @@ function run_discrete_time(p::Params)
 #         println("stepping to t = $(t)")
 
         do_rebirth!(t, p, s)
-#         do_immunity_loss!(t, p, s)
+        do_immunity_loss!(t, p, s)
         do_activation!(t, p, s)
         do_switching!(t, p, s)
 
@@ -141,14 +141,40 @@ function do_rebirth!(t, p, s)
     s.genes_liver[:, :, :, dead_hosts] .= 0
     s.genes_active[:, :, :, dead_hosts] .= 0
     s.expression_index[:, dead_hosts] .= 0
-    # TODO: reset immunity
+    
+    for host in dead_hosts
+        empty!(s.immunity[host])
+    end
     
 #     verify(p, s)
 end
 
 function do_immunity_loss!(t, p, s)
 #     println("do_immunity_loss!()")
-    # TODO
+    
+    p_loss = 1 - exp(-p.immunity_loss_rate)
+    n_immunity_max = maximum(length(s.immunity[i]) for i in 1:p.n_hosts)
+    n_loss = rand(Binomial(n_immunity_max * p.n_hosts))
+    
+    indices = CartesianIndices((n_immunity_max, p.n_hosts))[
+        sample(1:(n_immunity_max * p.n_hosts), n_loss)
+    ]
+#     println("n_loss_raw = $(length(indices))")
+    
+    for index in indices
+        immunity_index = index[1]
+        host = index[2]
+        
+        # If the immunity index is greater than the number of immune genes,
+        # do nothing (rejection sampling)
+        # Otherwise, select a key via iteration order (inefficient but maybe not bottleneck...)
+        if immunity_index <= length(s.immunity[host])
+#             println("losing $(host), $(index)")
+            adjust_immunity!(p, s, host, get_key_by_iteration_order(s.immunity[host], immunity_index), -1)
+        end
+    end
+    
+#     verify(p, s)
 end
 
 function findfirst_stable(x)
@@ -235,7 +261,7 @@ function do_switching!(t, p, s)
     
     done = falses(length(indices))
     while true
-        # Increment immunity level for all hosts
+        # Increment immunity level for all infections
         for index in indices[.!done]
             inf = index[1]
             host = index[2]
@@ -254,9 +280,16 @@ function do_switching!(t, p, s)
         not_done = .!done
         expression_index[not_done] .+= 1
         
-        # TODO: only stop advancing if we're immune
-        to_stop = not_done
-        done[to_stop] .= true
+        # Stop advancing if not immune
+        for (i, index) in enumerate(indices)
+            if !done[i]
+                inf = index[1]
+                host = index[2]
+                if !is_immune(p, s, host, (s.genes_active[:, s.expression_index[index], inf, host]))
+                    done[i] = true
+                end
+            end
+        end
         
         if all(done)
             break
@@ -266,32 +299,22 @@ function do_switching!(t, p, s)
 #     verify(p, s)
 end
 
+function is_immune(p, s, host, gene)
+    get(s.immunity[host], gene, 0) > 0
+end
+
 function adjust_immunity!(p, s, host, gene, amount)
     @assert amount != 0
     
     # Get old and new immunity level
-    gene_dict = get(s.immunity, gene, nothing)
-    old_level = if gene_dict === nothing
-        ImmunityLevel(0)
-    else
-        get(gene_dict, host, ImmunityLevel(0))
-    end
+    old_level = get(s.immunity[host], gene, ImmunityLevel(0))
     new_level = clamp(old_level + amount, 0, p.immunity_level_max)
     
     # Update dictionaries
     if new_level == 0
-        @assert !(gene_dict === nothing)
-        
-        delete!(gene_dict, host)
-        if length(gene_dict) == 0
-            delete!(s.immunity, gene)
-        end
+        delete!(s.immunity[host], gene)
     else
-        if gene_dict === nothing
-            gene_dict = Dict{HostId, ImmunityLevel}()
-            s.immunity[gene] = gene_dict
-        end
-        gene_dict[host] = new_level
+        s.immunity[host][gene] = new_level
     end
     nothing
 end

@@ -172,7 +172,7 @@ using StructTypes
     immunity_level_max::Union{Int8, Nothing} = nothing
     
     """
-        Rate at which immunity is lost, per host, per locus, per allele.
+        Rate at which immunity is lost, per host, per gene.
         
         See description in the `immunity` field of struct `State`.
     """

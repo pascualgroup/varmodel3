@@ -113,19 +113,9 @@ const InfectionCount = Int8
     expression_index::Array{ExpressionIndex, 2}
     
     """
-        Immunity for each host, as dict mapping alleles to host-by-host counts.
-        
-        Outer dict:
-        
-        [allele1, allele2] -> inner dict
-        
-        Inner dict:
-        
-        host_id -> count
-        
-        Organized this way because gene keys take 2X the space of host keys.
+        Immunity for each host, as dict mapping alleles to immunity level.
     """
-    immunity::Dict
+    immunity::Array{Dict}
 end
 
 function State(p::Params)
@@ -140,7 +130,7 @@ function State(p::Params)
     genes_liver = fill(AlleleId(0), p.n_loci, p.n_genes_per_strain, p.n_infections_liver_max, p.n_hosts)
     genes_active = fill(AlleleId(0), p.n_loci, p.n_genes_per_strain, p.n_infections_liver_max, p.n_hosts)
     expression_index = fill(ExpressionIndex(0), p.n_infections_active_max, p.n_hosts)
-    immunity = Dict{SVector{p.n_loci, AlleleId}, Dict{HostId, ImmunityLevel}}()
+    immunity = [Dict{SVector{p.n_loci, AlleleId}, ImmunityLevel}() for i in 1:p.n_hosts]
     
     gene_pool = reshape(rand(
         AlleleId(1):AlleleId(p.n_alleles_per_locus_initial),
@@ -216,9 +206,8 @@ function verify(p::Params, s::State)
     @assert all(s.genes_liver[:, :, liver_indices_null] .== 0)
     @assert all(s.genes_active[:, :, active_indices_null] .== 0)
     
-    for (gene, gene_dict) in s.immunity
-        @assert length(gene_dict) > 0
-        for (host, level) in gene_dict
+    for i in 1:p.n_hosts
+        for (gene, level) in s.immunity[i]
             @assert level > 0
         end
     end
