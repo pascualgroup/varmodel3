@@ -10,6 +10,8 @@ function run_discrete_time(p::Params)
 
     execute(db, "BEGIN TRANSACTION")
     write_summary(0, p, s, db, missing, missing, missing, missing)
+    write_gene_strain_counts(0, p, s, db)
+    write_host_samples(0, p, s, db)
     execute(db, "COMMIT")
 
     verify(p, s)
@@ -50,6 +52,10 @@ function run_discrete_time(p::Params)
             n_infected_bites_with_space = 0
             n_total_bites = 0
         end
+        
+        if t % p.host_sampling_period == 0
+            write_host_samples(t, p, s, db)
+        end
 
         if t % p.strain_count_period == 0
             write_gene_strain_counts(t, p, s, db)
@@ -87,7 +93,7 @@ function write_summary(t, p, s, db, elapsed_time_ms, n_infected_bites, n_infecte
     println("t = $(t)")
     println("n_infections = $(n_infections)")
 
-    execute(db.summary, [
+    execute(db.summary, (
         t,
         n_infections_liver,
         n_infections_active,
@@ -99,7 +105,59 @@ function write_summary(t, p, s, db, elapsed_time_ms, n_infected_bites, n_infecte
         n_infected_bites_with_space,
         n_total_bites,
         exec_time
-    ])
+    ))
+end
+
+function write_host_samples(t, p, s, db)
+    hosts = sample(1:p.n_hosts, p.host_sample_size)
+    for host in hosts
+        # TODO: use host IDs
+        execute(db.sampled_hosts, (t, host, s.t_birth[host], s.t_death[host]))
+        
+        for inf in 1:p.n_infections_liver_max
+            if s.strain_id_liver[inf, host] != 0
+                write_liver_infection(t, p, s, db, host, inf)
+            end
+        end
+        
+        for inf in 1:p.n_infections_active_max
+            if s.strain_id_active[inf, host] != 0
+                write_active_infection(t, p, s, db, host, inf)
+            end
+        end
+    end
+end
+
+function write_liver_infection(t, p, s, db, host, inf)
+    write_infection(
+        t, p, s, db, host,
+        s.infection_id_liver[inf, host],
+        s.t_infection_liver[inf, host],
+        Int64(s.strain_id_liver[inf, host]),
+        missing,
+        s.genes_liver[:, :, inf, host]
+    )
+end
+
+function write_active_infection(t, p, s, db, host, inf)
+    write_infection(
+        t, p, s, db, host,
+        s.infection_id_active[inf, host],
+        s.t_infection_active[inf, host],
+        Int64(s.strain_id_active[inf, host]),
+        Int64(s.expression_index[inf, host]),
+        s.genes_active[:, :, inf, host]
+    )
+end
+
+function write_infection(t, p, s, db, host, inf_id, t_infection, strain_id, expression_index, genes)
+    execute(
+        db.sampled_infections,
+        (t, Int64(s.host_id[host]), Int64(inf_id), t_infection, strain_id, expression_index)
+    )
+    for i in 1:p.n_genes_per_strain
+        execute(db.sampled_infection_genes, vcat([inf_id, i], genes[:,i]))
+    end
 end
 
 function write_gene_strain_counts(t, p, s, db)
@@ -109,7 +167,7 @@ function write_gene_strain_counts(t, p, s, db)
     count_circulating_genes_and_strains!(p, s.strain_id_liver, s.genes_liver, genes, strains)
     count_circulating_genes_and_strains!(p, s.strain_id_active, s.genes_active, genes, strains)
     
-    execute(db.gene_strain_counts, [t, length(genes), length(strains)])
+    execute(db.gene_strain_counts, (t, length(genes), length(strains)))
 end
 
 function count_circulating_genes_and_strains!(p, infection_strain_id, infection_genes, genes, strains)
@@ -131,9 +189,12 @@ function do_rebirth!(t, p, s)
 
     dead_hosts = findall(s.t_death .< t)
 #     println("n dead: $(length(dead_hosts))")
-
+    
+    s.host_id[dead_hosts] = next_host_ids!(s, length(dead_hosts))
     s.t_birth[dead_hosts] = s.t_death[dead_hosts]
     s.t_death[dead_hosts] = s.t_birth[dead_hosts] + [draw_host_lifetime(p) for i in 1:length(dead_hosts)]
+    s.infection_id_liver[:, dead_hosts] .= 0
+    s.infection_id_active[:, dead_hosts] .= 0
     s.t_infection_liver[:, dead_hosts] .= NaN32
     s.t_infection_active[:, dead_hosts] .= NaN32
     s.strain_id_liver[:, dead_hosts] .= 0
@@ -209,6 +270,8 @@ function do_activation!(t, p, s)
     @assert length(src_indices) == length(dst_indices)
 
     expression_index = @view(s.expression_index[:, host_indices])
+    infection_id_liver = @view(s.infection_id_liver[:, host_indices])
+    infection_id_active = @view(s.infection_id_active[:, host_indices])
     t_infection_liver = @view(s.t_infection_liver[:, host_indices])
     t_infection_active = @view(s.t_infection_active[:, host_indices])
     strain_id_liver = @view s.strain_id_liver[:, host_indices]
@@ -218,12 +281,15 @@ function do_activation!(t, p, s)
 
     # Update active infection data
     expression_index[dst_indices] .= 1
+    infection_id_active[dst_indices] = infection_id_liver[src_indices]
     t_infection_active[dst_indices] = t_infection_liver[src_indices]
 
     strain_id_active[dst_indices] = strain_id_liver[src_indices]
     genes_active[:, :, dst_indices] = genes_liver[:, :, src_indices]
 
     # Deactivate all ready infections (including those that didn't get activated)
+    # TODO: this is FAILING TO deactivate those that didn't get activated
+    infection_id_liver[src_indices] .= 0
     t_infection_liver[src_indices] .= NaN32
     strain_id_liver[src_indices] .= 0
     genes_liver[:, :, src_indices] .= 0
@@ -255,6 +321,7 @@ function do_switching!(t, p, s)
     # Loop in parallel through advancing expression for all sampled infections
     # until they have all reached a non-immune gene
     expression_index = @view s.expression_index[indices]
+    infection_id_active = @view s.infection_id_active[indices]
     t_infection_active = @view s.t_infection_active[indices]
     strain_id_active = @view s.strain_id_active[indices]
     genes_active = @view s.genes_active[:,:,indices]
@@ -271,6 +338,7 @@ function do_switching!(t, p, s)
         # Clear infections at last index
         to_clear = expression_index .== p.n_genes_per_strain
         t_infection_active[to_clear] .= NaN32
+        infection_id_active[to_clear] .= 0
         strain_id_active[to_clear] .= 0
         genes_active[:, :, to_clear] .= 0
         expression_index[to_clear] .= 0
@@ -428,6 +496,7 @@ function do_biting!(t, p, s)
         # Copy in new infections
         dst_transmit_indices = findfirst_each_column(s.strain_id_liver[:,dst_hosts_i] .== 0)
         inf_host_indices = zip_cartesian(dst_transmit_indices, dst_hosts_i)
+        s.infection_id_liver[inf_host_indices] = next_infection_ids!(s, length(inf_host_indices))
         s.t_infection_liver[inf_host_indices] .= t
         s.strain_id_liver[inf_host_indices] = strain_ids_recombined
         s.genes_liver[:, :, inf_host_indices] = genes_recombined
@@ -582,6 +651,7 @@ function do_immigration!(t, p, s)
     inf_inds = findfirst_each_column(s.strain_id_liver[:,hosts] .== 0)
     inf_host_inds = zip_cartesian(inf_inds, hosts)
     
+    s.infection_id_liver[inf_host_inds] = next_infection_ids!(s, n_bites)
     s.t_infection_liver[inf_host_inds] .= t
     s.strain_id_liver[inf_host_inds] = next_strain_ids!(s, n_bites)
     genes = reshape(
