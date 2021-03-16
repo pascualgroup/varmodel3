@@ -110,6 +110,16 @@ const InfectionCount = Int8
         Dimensions: (n_infections_active_max, n_hosts)
     """
     expression_index::Array{ExpressionIndex, 2}
+    
+    """
+        Immunity for each host, by gene, as ArrayOfTupleDict.
+        
+        One dictionary (hash table) for each host;
+        each dictionary maps gene to immunity level:
+        
+        (allele1, allele2) -> (immunity level)
+    """
+    immunity::ArrayOfTupleDict{AlleleId, ImmunityLevel}
 end
 
 function State(p::Params)
@@ -124,6 +134,12 @@ function State(p::Params)
     genes_liver = fill(AlleleId(0), p.n_loci, p.n_genes_per_strain, p.n_infections_liver_max, p.n_hosts)
     genes_active = fill(AlleleId(0), p.n_loci, p.n_genes_per_strain, p.n_infections_liver_max, p.n_hosts)
     expression_index = fill(ExpressionIndex(0), p.n_infections_active_max, p.n_hosts)
+    
+    # Construct immunity using estimate of number of lifetime immunities per host
+    immunity = ArrayOfTupleDict{AlleleId, ImmunityLevel}(
+        p.n_loci, p.n_hosts,
+        Int(round(p.n_infections_active_max * p.switching_rate * p.mean_host_lifetime))
+    )
     
     gene_pool = reshape(rand(
         AlleleId(1):AlleleId(p.n_alleles_per_locus_initial),
@@ -160,7 +176,9 @@ function State(p::Params)
         
         n_alleles = fill(AlleleId(p.n_alleles_per_locus_initial), p.n_loci),
         
-        gene_pool = gene_pool
+        gene_pool = gene_pool,
+        
+        immunity = immunity
     )
 end
 

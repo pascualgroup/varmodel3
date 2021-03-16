@@ -241,7 +241,7 @@ end
 
 """
     An array of dictionaries stored using large arrays with stable memory
-    layout. Keys are length-D tuples of positive integers of type K,
+    layout. Keys are length-d tuples of positive integers of type K,
     and values are of type V.
     
     The dimensions represent:
@@ -256,35 +256,36 @@ end
     factor exceeds 0.75. This triggers reallocation and rehashing of all entries.
     The load factor is computed as an average across all dicts in the array.
 """
-mutable struct ArrayOfTupleDicts{K, D, V}
+mutable struct ArrayOfTupleDict{K, V}
     keys::Array{K, 4}
     values::Array{V, 3}
     
-    function ArrayOfTupleDicts{K, D, V}(n_dicts, n_entries_per_dict_guess) where {K, D, V}
+    function ArrayOfTupleDict{K, V}(tuple_size, n_dicts, n_entries_per_dict_guess) where {K, V}
+        d = tuple_size
         n = n_entries_per_dict_guess
         k = (n + 1) * 4 ÷ 3
         max_n_per_k = guess_max_entries_per_bucket(n, k)
         
-        new{K, D, V}(
-            fill(K(0), (D, max_n_per_k, k, n_dicts)),
+        new{K, V}(
+            fill(K(0), (d, max_n_per_k, k, n_dicts)),
             fill(V(0), (max_n_per_k, k, n_dicts))
         )
     end
 end
 
-function dict_count(x::ArrayOfTupleDicts{K, D, V}) where {K, D, V}
+function dict_count(x::ArrayOfTupleDict{K, V}) where {K, V}
     size(x.values)[3]
 end
 
-function bucket_count(x::ArrayOfTupleDicts{K, D, V}) where {K, D, V}
+function bucket_count(x::ArrayOfTupleDict{K, V}) where {K, V}
     size(x.values)[2]
 end
 
-function entries_per_bucket(x::ArrayOfTupleDicts{K, D, V}) where {K, D, V}
+function entries_per_bucket(x::ArrayOfTupleDict{K, V}) where {K, V}
     size(x.values)[1]
 end
 
-function tuple_size(x::ArrayOfTupleDicts{K, D, V}) where {K, D, V}
+function tuple_size(x::ArrayOfTupleDict{K, V}) where {K, V}
     size(x.keys)[1]
 end
 
