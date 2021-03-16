@@ -235,6 +235,13 @@ function do_switching!(t, p, s)
     
     done = falses(length(indices))
     while true
+        # Increment immunity level for all hosts
+        for index in indices[.!done]
+            inf = index[1]
+            host = index[2]
+            adjust_immunity!(p, s, host, @view(s.genes_active[:, s.expression_index[index], inf, host]), 1)
+        end
+        
         # Clear infections at last index
         to_clear = expression_index .== p.n_genes_per_strain
         t_infection_active[to_clear] .= NaN32
@@ -257,6 +264,36 @@ function do_switching!(t, p, s)
     end
     
 #     verify(p, s)
+end
+
+function adjust_immunity!(p, s, host, gene, amount)
+    @assert amount != 0
+    
+    # Get old and new immunity level
+    gene_dict = get(s.immunity, gene, nothing)
+    old_level = if gene_dict === nothing
+        ImmunityLevel(0)
+    else
+        get(gene_dict, host, ImmunityLevel(0))
+    end
+    new_level = clamp(old_level + amount, 0, p.immunity_level_max)
+    
+    # Update dictionaries
+    if new_level == 0
+        @assert !(gene_dict === nothing)
+        
+        delete!(gene_dict, host)
+        if length(gene_dict) == 0
+            delete!(s.immunity, gene)
+        end
+    else
+        if gene_dict === nothing
+            gene_dict = Dict{HostId, ImmunityLevel}()
+            s.immunity[gene] = gene_dict
+        end
+        gene_dict[host] = new_level
+    end
+    nothing
 end
 
 function do_biting!(t, p, s)

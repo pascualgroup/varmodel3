@@ -7,6 +7,7 @@ using StaticArrays
 using Dates
 using Test
 
+const HostId = UInt16
 const HostGeneIndex = UInt16
 const StrainId = UInt32
 const AlleleId = UInt16
@@ -112,14 +113,19 @@ const InfectionCount = Int8
     expression_index::Array{ExpressionIndex, 2}
     
     """
-        Immunity for each host, by gene, as ArrayOfTupleDict.
+        Immunity for each host, as dict mapping alleles to host-by-host counts.
         
-        One dictionary (hash table) for each host;
-        each dictionary maps gene to immunity level:
+        Outer dict:
         
-        (allele1, allele2) -> (immunity level)
+        [allele1, allele2] -> inner dict
+        
+        Inner dict:
+        
+        host_id -> count
+        
+        Organized this way because gene keys take 2X the space of host keys.
     """
-    immunity::ArrayOfTupleDict{AlleleId, ImmunityLevel}
+    immunity::Dict
 end
 
 function State(p::Params)
@@ -134,12 +140,7 @@ function State(p::Params)
     genes_liver = fill(AlleleId(0), p.n_loci, p.n_genes_per_strain, p.n_infections_liver_max, p.n_hosts)
     genes_active = fill(AlleleId(0), p.n_loci, p.n_genes_per_strain, p.n_infections_liver_max, p.n_hosts)
     expression_index = fill(ExpressionIndex(0), p.n_infections_active_max, p.n_hosts)
-    
-    # Construct immunity using estimate of number of lifetime immunities per host
-    immunity = ArrayOfTupleDict{AlleleId, ImmunityLevel}(
-        p.n_loci, p.n_hosts,
-        Int(round(p.n_infections_active_max * p.switching_rate * p.mean_host_lifetime))
-    )
+    immunity = Dict{SVector{p.n_loci, AlleleId}, Dict{HostId, ImmunityLevel}}()
     
     gene_pool = reshape(rand(
         AlleleId(1):AlleleId(p.n_alleles_per_locus_initial),
@@ -214,8 +215,13 @@ function verify(p::Params, s::State)
     end
     @assert all(s.genes_liver[:, :, liver_indices_null] .== 0)
     @assert all(s.genes_active[:, :, active_indices_null] .== 0)
-
-    # TODO: Check immunity levels
+    
+    for (gene, gene_dict) in s.immunity
+        @assert length(gene_dict) > 0
+        for (host, level) in gene_dict
+            @assert level > 0
+        end
+    end
 
     # Check gene pool
     @assert size(s.gene_pool)[2] .== p.n_genes_initial
