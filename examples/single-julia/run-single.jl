@@ -38,7 +38,7 @@ function init_params()
         host_sampling_period = 30,
         host_sample_size = 100,
 
-        verification_period = 30,
+        verification_period = 360,
 
         rng_seed = nothing,
 

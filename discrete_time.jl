@@ -30,9 +30,9 @@ function run_discrete_time(p::Params)
         n_infected_bites_with_space += n_infected_bites_with_space_t
         n_total_bites += n_total_bites_t
 
-#         do_mutation!(t, p, s)
-#         do_recombination!(t, p, s)
-#         do_immigration!(t, p, s)
+        do_mutation!(t, p, s)
+        do_recombination!(t, p, s)
+        do_immigration!(t, p, s)
 
         if t % p.summary_period == 0
             execute(db, "COMMIT")
@@ -106,21 +106,24 @@ function write_gene_strain_counts(t, p, s, db)
     genes::Set{SVector{p.n_loci, AlleleId}} = Set()
     strains::BitSet = BitSet()
     
-    for j in 1:p.n_hosts
-        for i in 1:size(s.strain_id_liver)[1]
-            push!(strains, s.strain_id_liver[i,j])
-        end
-        for i in 1:size(s.strain_id_active)[1]
-            push!(strains, s.strain_id_active[i,j])
-        end
-        for i in 1:size(s.host_genes)[2]
-            push!(s.host_genes[:, i, j])
+    count_circulating_genes_and_strains!(p, s.strain_id_liver, s.genes_liver, genes, strains)
+    count_circulating_genes_and_strains!(p, s.strain_id_active, s.genes_active, genes, strains)
+    
+    execute(db.gene_strain_counts, [t, length(genes), length(strains)])
+end
+
+function count_circulating_genes_and_strains!(p, infection_strain_id, infection_genes, genes, strains)
+    for k in 1:size(infection_strain_id)[2]
+        for j in 1:size(infection_strain_id)[1]
+            strain_id = infection_strain_id[j, k]
+            if strain_id != 0 && !(strain_id in strains)
+                for i in 1:size(infection_genes)[2]
+                    push!(genes, @view(infection_genes[:, i, j, k]))
+                end
+                push!(strains, strain_id)
+            end
         end
     end
-    delete!(strains, 0)
-    delete!(genes, [0, 0])
-
-    execute(db.gene_strain_counts, [t, length(genes), length(strains)])
 end
 
 function do_rebirth!(t, p, s)
@@ -370,7 +373,7 @@ function do_biting!(t, p, s)
         s.genes_liver[:, :, inf_host_indices] = genes_recombined
     end
     
-    verify(p, s)
+#     verify(p, s)
     
     (n_infected_bites, n_bites, n_bites_raw)
 end
@@ -407,11 +410,11 @@ function do_mutation!(t, p, s)
     # Apply mutations for infections that actually exist
     genes_cartesian = CartesianIndices(s.genes_active)
     mut_indices = filter(
-        function (i)
+        function(i)
             ind = genes_cartesian[i] # Gets multidimensional index from linear index
-            host = ind[1]
-            inf = ind[2]
-            s.expression_index[host, inf] > 0
+            inf = ind[3]
+            host = ind[4]
+            s.expression_index[inf, host] > 0
         end,
         mut_indices_raw
     )
@@ -419,17 +422,17 @@ function do_mutation!(t, p, s)
 #     println("n_mut_raw = $(n_mut_raw), n_mut = $(n_mut)")
 
     # Apply mutations by creating new alleles
-    # TODO: data-parallelize? (not helpful at low mutation rates.)
     for i in mut_indices
-        (host, inf, exp_ind, locus) = Tuple(genes_cartesian[i])
-        @assert s.expression_index[host, inf] > 0
+        (locus, exp_ind, inf, host) = Tuple(genes_cartesian[i])
+        @assert s.expression_index[inf, host] > 0
         @assert maximum(s.n_alleles) < typemax(AlleleId)
         s.n_alleles[locus] += 1
-        s.genes_active[host, inf, exp_ind, locus] = s.n_alleles[locus]
+        s.genes_active[locus, exp_ind, inf, host] = s.n_alleles[locus]
 
-        s.strain_id_active[host, inf] = s.next_strain_id
-        s.next_strain_id += 1
+        s.strain_id_active[inf, host] = next_strain_id!(s)
     end
+    
+#     verify(p, s)
 end
 
 function do_recombination!(t, p, s)
@@ -457,11 +460,11 @@ function do_recombination!(t, p, s)
     inf_cartesian = CartesianIndices(s.expression_index)
     breakpoints = rand(1:p.n_loci, n_recomb)
     for i in 1:n_recomb
-        (host, inf) = Tuple(inf_cartesian[recomb_indices[i]])
+        (inf, host) = Tuple(inf_cartesian[recomb_indices[i]])
 
         i1, i2 = samplepair(p.n_genes_per_strain)
-        src_gene_1 = @view s.genes_active[host, inf, i1, :]
-        src_gene_2 = @view s.genes_active[host, inf, i2, :]
+        src_gene_1 = @view s.genes_active[:, i1, inf, host]
+        src_gene_2 = @view s.genes_active[:, i2, inf, host]
         if src_gene_1 == src_gene_2
             continue
         end
@@ -487,10 +490,12 @@ function do_recombination!(t, p, s)
             src_gene_1[:] = new_gene_1
             src_gene_2[:] = new_gene_2
 
-            s.strain_id_active[host, inf] = s.next_strain_id
+            s.strain_id_active[inf, host] = s.next_strain_id
             s.next_strain_id += 1
         end
     end
+    
+#     verify(p, s)
 end
 
 function do_immigration!(t, p, s)
@@ -517,14 +522,13 @@ function do_immigration!(t, p, s)
     inf_inds = findfirst_each_column(s.strain_id_liver[:,hosts] .== 0)
     inf_host_inds = zip_cartesian(inf_inds, hosts)
     
+    s.t_infection_liver[inf_host_inds] .= t
     s.strain_id_liver[inf_host_inds] = next_strain_ids!(s, n_bites)
     genes = reshape(
         s.gene_pool[:, rand(1:size(s.gene_pool)[2], n_bites * p.n_genes_per_strain)],
         (p.n_loci, p.n_genes_per_strain, n_bites)
     )
-    gene_indices = add_host_genes_batch!(s, hosts, genes)
-    s.genes_liver[:, inf_host_inds] = gene_indices
-    s.t_infection_liver[inf_host_inds] .= t
+    s.genes_liver[:, :, inf_host_inds] = genes
     
 #     verify(p, s)
 end
