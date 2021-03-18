@@ -1,6 +1,8 @@
 #!/usr/bin/env julia
 
 """
+NB: this is not yet complete.
+
 The purpose of this file is to illustrate how to do a parameter sweep in Julia.
 
 This script loops through parameter combinations, and replicates with different

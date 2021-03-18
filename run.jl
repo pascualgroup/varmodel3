@@ -13,9 +13,11 @@ argument. (If not provided, "parameters.json" is assumed.)
 
 using JSON3
 
-include("varmodel3.jl")
+include("preamble.jl")
 
-function main()
+# Load parameters into a constant global, so that they can be used when compiling
+# the model code.
+const P = let
     params_filename = if length(ARGS) == 0
         "parameters.json"
     elseif length(ARGS) == 1
@@ -25,8 +27,8 @@ function main()
     end
     
     json_str = read(params_filename, String)
-    params = JSON3.read(json_str, Params)
-    run(params)
+    JSON3.read(json_str, Params)
 end
 
-main()
+include("src/model.jl")
+run()

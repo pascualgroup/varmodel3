@@ -1,9 +1,10 @@
 #!/usr/bin/env julia
 
 """
-The purpose of this file is to illustrate how to do a single ad-hoc run in Julia.
+The purpose of this file is to illustrate how to do a single ad-hoc run in Julia
+without an external parameters file. This approach is convenient for testing.
 
-Instead of using the provided `run.jl`, which loads parameters from JSON, you
+Instead of using the standard `run.jl`, which loads parameters from JSON, you
 generate parameters inside Julia and run the model code directly with them.
 
 ```
@@ -14,33 +15,31 @@ generate parameters inside Julia and run the model code directly with them.
 
 using DelimitedFiles
 
-include("../../parameters.jl")
-include("../../varmodel3.jl")
+# Load packages and definition of Params struct
+include("../../preamble.jl")
 
-function main()
-    params = init_params()
-    run(params)
-end
-
-function init_params()
+# Define the parameters variable P, which exposes parameters to be used as
+# compile-time constants when loading the model code below.
+const P = let
     t_year = 360
     daily_biting_rate_multiplier = readdlm("../mosquito_population.txt", Float64)[:,1]
-    
+
     Params(
-        use_discrete_time_approximation = true,
-        dt = 1,
+        use_discrete_time_approximation = false,
+        
+        upper_bound_recomputation_period = 30,
 
         output_db_filename = "output.sqlite",
-        
+
         summary_period = 30,
-        strain_count_period = 360,
-        
+        gene_strain_count_period = 360,
+
         host_sampling_period = 30,
         host_sample_size = 100,
-        
-        verification_period = 30,
 
-        rng_seed = nothing,
+        verification_period = 360,
+
+        rng_seed = missing,
 
         t_year = t_year,
         t_end = 111 * t_year,
@@ -71,7 +70,7 @@ function init_params()
 
         mean_host_lifetime = 30 * t_year,
         max_host_lifetime = 80 * t_year,
-        
+
         immigration_rate_fraction = 0.0026,
 
         n_infections_liver_max = 10,
@@ -81,4 +80,7 @@ function init_params()
     )
 end
 
-main()
+# Load and run the model code, which can now be compiled with reference to
+# parameters constant P.
+include("../../src/model.jl")
+run()
