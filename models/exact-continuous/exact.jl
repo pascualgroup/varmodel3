@@ -364,7 +364,7 @@ function do_immigration!(t, s, stats)
     infection.strain_id = next_strain_id!(s)
     infection.expression_index = 0
     for i in 1:P.n_genes_per_strain
-        infection.genes[:,i] = @view s.gene_pool[:, rand(1:size(s.gene_pool)[2])]
+        infection.genes[:,i] = s.gene_pool[:, rand(1:size(s.gene_pool)[2])]
     end
     
     # Add infection to host
@@ -398,7 +398,7 @@ function do_switching!(t, s, stats)
     # Advance expression until a non-immune gene is reached
     while true
         # Increment immunity level to currently expressed gene
-        increment_immunity!(s, host, @view(infection.genes[:, infection.expression_index]))
+        increment_immunity!(s, host, infection.genes[:, infection.expression_index])
         
         # If we're at the end, clear the infection and return
         if infection.expression_index == P.n_genes_per_strain
@@ -410,7 +410,7 @@ function do_switching!(t, s, stats)
         infection.expression_index += 1
         
         # If the host not immune, stop advancing
-        if !is_immune(host, @view(infection.genes[:, infection.expression_index]))
+        if !is_immune(host, infection.genes[:, infection.expression_index])
             return true
         end
     end
@@ -498,13 +498,13 @@ function do_ectopic_recombination!(t, s, stats)
     
     # Recombine to modify first gene, if viable
     if rand() < p_viable
-        recombine_genes_to!(infection.genes[:, gene_index_1], gene1, gene2, breakpoint)
+        infection.genes[:, gene_index_1] = recombine_genes(gene1, gene2, breakpoint)
         recombined = true
     end
     
     # Recombine to modify second gene, if viable
     if rand() < p_viable
-        recombine_genes_to!(infection.genes[:, gene_index_2], gene2, gene1, breakpoint)
+        infection.genes[:, gene_index_2] = recombine_genes(gene2, gene1, breakpoint)
         recombined = true
     end
     
@@ -541,10 +541,11 @@ function p_recombination_is_viable(gene1, gene2, breakpoint)
     rho^rho_power
 end
 
-function recombine_genes_to!(dst, gene1, gene2, breakpoint)
-    dst[1:(breakpoint - 1)] = gene1[1:(breakpoint - 1)]
-    dst[breakpoint:end] = gene2[breakpoint:end]
-    nothing
+function recombine_genes(gene1, gene2, breakpoint)
+    gene = MGene(undef)
+    gene[1:(breakpoint - 1)] = gene1[1:(breakpoint - 1)]
+    gene[breakpoint:end] = gene2[breakpoint:end]
+    gene
 end
 
 

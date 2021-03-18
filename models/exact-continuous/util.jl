@@ -19,17 +19,20 @@ end
 function shuffle_columns!(mat)
     m = size(mat)[2]
     for i in 1:(m - 1)
-        xor_swap!(@view(mat[:, i]), @view(mat[:, rand((i+1):m)]))
+        tmp = mat[:, i]
+        j = rand((i+1):m)
+        mat[:, i] = mat[:, j]
+        mat[:, j] = tmp
     end
     nothing
 end
 
-function xor_swap!(x, y)
-    x .⊻= y
-    y .⊻= x
-    x .⊻= y
-    nothing
-end
+# function xor_swap!(x, y)
+#     x .⊻= y
+#     y .⊻= x
+#     x .⊻= y
+#     nothing
+# end
 
 function sample_columns_from_two_matrices_to!(dst, src1, src2)
     m_dst = size(dst)[2]
@@ -41,9 +44,9 @@ function sample_columns_from_two_matrices_to!(dst, src1, src2)
     for i_dst in 1:m_dst
         i_src = src_indices[i_dst]
         if i_src <= m_src_1
-            dst[:, i_dst] = @view src1[:, i_src]
+            dst[:, i_dst] = src1[:, i_src]
         else
-            dst[:, i_dst] = @view src2[:, i_src - m_src_1]
+            dst[:, i_dst] = src2[:, i_src - m_src_1]
         end
     end
     nothing
