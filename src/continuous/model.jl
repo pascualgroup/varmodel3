@@ -349,7 +349,9 @@ end
 function do_immigration!(t, s, stats)
 #     println("do_immigration!($(t))")
     
+    # Sample a random host and advance it (rebirth or infection activation)
     host = rand(s.hosts)
+    advance_host!(t, s, host)
     
     # If host doesn't have an available infection slot, reject this sample.
     if length(host.liver_infections) == P.n_infections_liver_max
@@ -429,6 +431,9 @@ function do_mutation!(t, s, stats)
     expression_index = index[3]
     locus = index[4]
     
+    # Advance host (rebirth or infection activation)
+    advance_host!(t, s, host)
+    
     # If there's no active infection at the drawn index, reject this sample.
     if inf_index > length(host.active_infections)
         return false
@@ -463,6 +468,9 @@ function do_ectopic_recombination!(t, s, stats)
     index = rand(CartesianIndices((P.n_hosts, P.n_infections_active_max)))
     host = s.hosts[index[1]]
     inf_index = index[2]
+    
+    # Advance host (rebirth or infection activation)
+    advance_host!(t, s, host)
     
     # If there's no active infection at the drawn index, reject this sample.
     if inf_index > length(host.active_infections)
@@ -558,6 +566,9 @@ function do_immunity_loss!(t, s, stats)
     index = rand(CartesianIndices((P.n_hosts, s.n_immunities_per_host_max)))
     host = s.hosts[index[1]]
     immunity_index = index[2]
+    
+    # Advance host (rebirth or infection activation)
+    advance_host!(t, s, host)
     
     # If the immunity index is beyond this host's immunity count, reject this sample.
     if immunity_index > length(host.immunity)
