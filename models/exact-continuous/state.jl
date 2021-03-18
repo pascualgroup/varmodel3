@@ -10,7 +10,7 @@ const Gene = SVector{P.n_loci, AlleleId}
     id::InfectionId
     t_infection::Float64
     strain_id::StrainId
-    genes::MVector{P.n_genes_per_strain, Gene}
+    genes::MMatrix{P.n_loci, P.n_genes_per_strain, AlleleId}
     expression_index::ExpressionIndex
 end
 
@@ -34,7 +34,7 @@ end
         Currently fixed-size.
         Dimensions: (n_loci, n_genes_initial)
     """
-    gene_pool::SVector{P.n_genes_initial, Gene}
+    gene_pool::SMatrix{P.n_loci, P.n_genes_initial, AlleleId}
 
     """
         ID for next host to be born.

@@ -10,25 +10,32 @@ function direct_sample_linear_scan(weights, total_weight)
     length(weights)
 end
 
-function shuffle_to!(dst, src)
+function shuffle_columns_to!(dst, src)
     copyto!(dst, src)
-    shuffle!(dst)
+    shuffle_columns!(dst)
     nothing
 end
 
-function sample_from_two_vectors_to!(dst, src1, src2)
-    m_dst = length(dst)
-    m_src_1 = length(src1)
-    m_src_2 = length(src2)
+function shuffle_columns!(mat)
+    indices = MVector{size(mat)[2]}
+    shuffle!(indices)
+    mat[:,:] = mat[:,indices]
+    nothing
+end
+
+function sample_columns_from_two_matrices_to!(dst, src1, src2)
+    m_dst = size(dst)[2]
+    m_src_1 = size(src1)[2]
+    m_src_2 = size(src2)[2]
     m_src = m_src_1 + m_src_2
     src_indices = MVector{m_src, Int}(1:m_src)
     shuffle!(src_indices)
     for i_dst in 1:m_dst
         i_src = src_indices[i_dst]
         if i_src <= m_src_1
-            dst[i_dst] = src1[i_src]
+            dst[:, i_dst] = @view src1[:, i_src]
         else
-            dst[i_dst] = src2[i_src - m_src_1]
+            dst[:, i_dst] = @view src2[:, i_src - m_src_1]
         end
     end
     nothing

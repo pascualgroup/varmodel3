@@ -6,6 +6,7 @@ using Random
 using StatsBase
 using Distributions
 
+using Parameters
 using StructTypes
 using JSON3
 using DelimitedFiles
