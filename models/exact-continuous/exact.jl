@@ -7,6 +7,7 @@ const EVENTS = collect(1:N_EVENTS)
 const (BITING, IMMIGRATION, SWITCHING, MUTATION, ECTOPIC_RECOMBINATION, IMMUNITY_LOSS) = EVENTS
 
 function run_exact()
+    println("A")
     db = initialize_database()
     stats = SummaryStats()
     
@@ -29,7 +30,9 @@ function run_exact()
     
     # Initialize state
     t = 0.0
+    println("A")
     s = initialize_state()
+    println("B")
     verify(t, s)
     
     # Run initial output
@@ -41,6 +44,7 @@ function run_exact()
     
     # Loop events until end of simulation
     while total_rate > 0.0 && t < P.t_end
+        println("C")
         # Draw next time with rate equal to the sum of all event rates
         dt = rand(Exponential(1.0 / total_rate))
         @assert dt > 0.0 && !isinf(dt)
@@ -93,12 +97,9 @@ end
 ### INITIALIZATION ###
 
 function initialize_state()
-    # Initialize gene pool as an (n_loci, n_genes_initial) matrix filled with
+    # Initialize gene pool as static mutable vector of genes, with
     # allele IDs drawn uniformly randomly in 1:n_alleles_per_locus_initial.
-    gene_pool = reshape(
-        rand(1:P.n_alleles_per_locus_initial, P.n_loci * P.n_genes_initial),
-        (P.n_loci, P.n_genes_initial)
-    )
+    gene_pool = [Gene(rand(1:P.n_alleles_per_locus_initial, P.n_loci)) for i in 1:P.n_genes_initial]
     
     # Initialize n_hosts hosts, all born at t = 0, with lifetime drawn from a
     # distribution, and no initial infections or immunity.
@@ -118,10 +119,7 @@ function initialize_state()
         infection.id = infection_id
         infection.t_infection = 0.0
         infection.strain_id = infection_id
-        infection.genes[:,:] = reshape(
-            gene_pool[:, rand(1:P.n_genes_initial, P.n_genes_per_strain)],
-            (P.n_loci, P.n_genes_per_strain)
-        )
+        infection.genes[:] = gene_pool[rand(1:P.n_genes_initial, P.n_genes_per_strain)]
         push!(hosts[host_index].liver_infections, infection)
     end
     
@@ -158,7 +156,7 @@ function create_empty_infection()
         id = 0,
         t_infection = NaN,
         strain_id = StrainId(0),
-        genes = fill(AlleleId(0), (P.n_loci, P.n_genes_per_strain)),
+        genes = SVector{P.n_genes_per_strain, Gene}(Gene(undef) for i in 1:P.n_genes_per_strain),
         expression_index = ExpressionIndex(0)
     )
 end
@@ -281,12 +279,12 @@ function do_biting!(t, s, stats)
                 # If both infections have the same strain, then the new infection
                 # is given infection 1's genes with expression order shuffled.
                 dst_inf.strain_id = src_inf_1.strain_id
-                shuffle_columns_to!(dst_inf.genes, src_inf_1.genes)
+                shuffle_to!(dst_inf.genes, src_inf_1.genes)
             else
                 # Otherwise, the new infection is given a new strain constructed by
                 # taking a random sample of the genes in the two source infections.
                 dst_inf.strain_id = next_strain_id!(s)
-                sample_columns_from_two_matrices_to!(dst_inf.genes, src_inf_1.genes, src_inf_2.genes)
+                sample_from_two_vectors_to!(dst_inf.genes, src_inf_1.genes, src_inf_2.genes)
             end
             
             # Add this infection to the destination host
@@ -364,7 +362,7 @@ function do_immigration!(t, s, stats)
     infection.strain_id = next_strain_id!(s)
     infection.expression_index = 0
     for i in 1:P.n_genes_per_strain
-        infection.genes[:,i] = @view s.gene_pool[:, rand(1:size(s.gene_pool)[2])]
+        infection.genes[i] = s.gene_pool[rand(1:size(s.gene_pool)[2])]
     end
     
     # Add infection to host
@@ -398,7 +396,7 @@ function do_switching!(t, s, stats)
     # Advance expression until a non-immune gene is reached
     while true
         # Increment immunity level to currently expressed gene
-        increment_immunity!(s, host, @view(infection.genes[:, infection.expression_index]))
+        increment_immunity!(s, host, infection.genes[infection.expression_index])
         
         # If we're at the end, clear the infection and return
         if infection.expression_index == P.n_genes_per_strain
@@ -410,7 +408,7 @@ function do_switching!(t, s, stats)
         infection.expression_index += 1
         
         # If the host not immune, stop advancing
-        if !is_immune(host, @view(infection.genes[:, infection.expression_index]))
+        if !is_immune(host, infection.genes[infection.expression_index])
             return true
         end
     end
@@ -475,8 +473,8 @@ function do_ectopic_recombination!(t, s, stats)
     gene_index_1 = rand(1:P.n_genes_per_strain)
     gene_index_2 = rand(1:P.n_genes_per_strain)
     
-    gene1 = infection.genes[:, gene_index_1]
-    gene2 = infection.genes[:, gene_index_2]
+    gene1 = infection.genes[gene_index_1]
+    gene2 = infection.genes[gene_index_2]
     
     # If the genes are the same, this is a no-op
     if gene1 == gene2
@@ -498,13 +496,13 @@ function do_ectopic_recombination!(t, s, stats)
     
     # Recombine to modify first gene, if viable
     if rand() < p_viable
-        recombine_genes_to!(infection.genes[:, gene_index_1], gene1, gene2, breakpoint)
+        infection.genes[gene_index_1] = recombine_genes(gene1, gene2, breakpoint)
         recombined = true
     end
     
     # Recombine to modify second gene, if viable
     if rand() < p_viable
-        recombine_genes_to!(infection.genes[:, gene_index_2], gene2, gene1, breakpoint)
+        infection.genes[gene_index_2] = recombine_genes(gene1, gene2, breakpoint)
         recombined = true
     end
     
@@ -541,10 +539,11 @@ function p_recombination_is_viable(gene1, gene2, breakpoint)
     rho^rho_power
 end
 
-function recombine_genes_to!(dst, gene1, gene2, breakpoint)
-    dst[1:(breakpoint - 1)] = gene1[1:(breakpoint - 1)]
-    dst[breakpoint:end] = gene2[breakpoint:end]
-    nothing
+function recombine_genes(gene1, gene2, breakpoint)
+    gene = MVector{P.n_loci, AlleleId}(undef)
+    gene[1:(breakpoint - 1)] = gene1[1:(breakpoint - 1)]
+    gene[breakpoint:end] = gene2[breakpoint:end]
+    SVector(gene)
 end
 
 

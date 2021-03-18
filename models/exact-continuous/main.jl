@@ -29,7 +29,7 @@ const P = let
         rng_seed = missing,
 
         t_year = t_year,
-        t_end = 111 * t_year,
+        t_end = 5 * t_year,
 
         n_hosts = 10000,
         n_initial_infections = 20,

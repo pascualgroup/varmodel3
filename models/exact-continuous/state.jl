@@ -4,12 +4,13 @@ const AlleleId = UInt16
 const StrainId = UInt32
 const ExpressionIndex = UInt8
 const ImmunityLevel = UInt8
+const Gene = SVector{P.n_loci, AlleleId}
 
 @with_kw mutable struct Infection
     id::InfectionId
     t_infection::Float64
     strain_id::StrainId
-    genes::Matrix{AlleleId}
+    genes::MVector{P.n_genes_per_strain, Gene}
     expression_index::ExpressionIndex
 end
 
@@ -19,7 +20,7 @@ end
     t_death::Float64
     liver_infections::Array{Infection}
     active_infections::Array{Infection}
-    immunity::Dict{SVector{P.n_loci, AlleleId}, ImmunityLevel}
+    immunity::Dict{Gene, ImmunityLevel}
 end
 
 @with_kw mutable struct State
@@ -33,7 +34,7 @@ end
         Currently fixed-size.
         Dimensions: (n_loci, n_genes_initial)
     """
-    gene_pool::Array{AlleleId, 2}
+    gene_pool::SVector{P.n_genes_initial, Gene}
 
     """
         ID for next host to be born.
