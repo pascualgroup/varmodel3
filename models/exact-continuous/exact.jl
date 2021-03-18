@@ -500,13 +500,13 @@ function do_ectopic_recombination!(t, s, stats)
     
     # Recombine to modify first gene, if viable
     if rand() < p_viable
-        recombine_genes_to!(infection.genes[:, gene_index_1], gene1, gene2, breakpoint)
+        infection.genes[:, gene_index_1] = recombine_genes(gene1, gene2, breakpoint)
         recombined = true
     end
     
     # Recombine to modify second gene, if viable
     if rand() < p_viable
-        recombine_genes_to!(infection.genes[:, gene_index_2], gene2, gene1, breakpoint)
+        infection.genes[:, gene_index_2] = recombine_genes(gene2, gene1, breakpoint)
         recombined = true
     end
     
@@ -543,10 +543,11 @@ function p_recombination_is_viable(gene1, gene2, breakpoint)
     rho^rho_power
 end
 
-function recombine_genes_to!(dst, gene1, gene2, breakpoint)
-    dst[1:(breakpoint - 1)] = gene1[1:(breakpoint - 1)]
-    dst[breakpoint:end] = gene2[breakpoint:end]
-    nothing
+function recombine_genes(gene1, gene2, breakpoint)
+    gene = MGene(undef)
+    gene[1:(breakpoint - 1)] = gene1[1:(breakpoint - 1)]
+    gene[breakpoint:end] = gene2[breakpoint:end]
+    gene
 end
 
 

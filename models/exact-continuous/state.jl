@@ -5,6 +5,7 @@ const StrainId = UInt32
 const ExpressionIndex = UInt8
 const ImmunityLevel = UInt8
 const Gene = SVector{P.n_loci, AlleleId}
+const MGene = MVector{P.n_loci, AlleleId}
 
 @with_kw mutable struct Infection
     id::InfectionId
@@ -34,7 +35,7 @@ end
         Currently fixed-size.
         Dimensions: (n_loci, n_genes_initial)
     """
-    gene_pool::SMatrix{P.n_loci, P.n_genes_initial, AlleleId}
+    gene_pool::Array{AlleleId, 2}
 
     """
         ID for next host to be born.
