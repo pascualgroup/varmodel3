@@ -67,9 +67,38 @@ end
     hosts::Array{Host}
     
     """
+        Upper bound on number of immunities per host.
+        
+        Updated periodically to prevent excessive growth.
+    """
+    n_immunities_per_host_max::Int
+    
+    """
         Array of old infections.
         
         Used to prevent allocation of new infections.
     """
     old_infections::Array{Infection}
+end
+
+
+function verify(t, s)
+    println("verify($(t), s)")
+    
+    for host in s.hosts
+        if length(host.liver_infections) > P.n_infections_liver_max
+            println("host = $(host.id), n_liver = $(length(host.liver_infections))")
+        end
+        
+        @assert length(host.liver_infections) <= P.n_infections_liver_max
+        @assert length(host.active_infections) <= P.n_infections_active_max
+        
+        for infection in host.liver_infections
+            @assert infection.expression_index == 0
+        end
+        
+        for infection in host.active_infections
+            @assert 1 <= infection.expression_index <= P.n_genes_per_strain
+        end
+    end
 end

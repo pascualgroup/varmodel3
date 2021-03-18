@@ -2,9 +2,9 @@ include("util.jl")
 include("state.jl")
 include("output.jl")
 
-const N_EVENTS = 5
+const N_EVENTS = 6
 const EVENTS = collect(1:N_EVENTS)
-const (BITING, IMMIGRATION, SWITCHING, MUTATION, ECTOPIC_RECOMBINATION) = EVENTS
+const (BITING, IMMIGRATION, SWITCHING, MUTATION, ECTOPIC_RECOMBINATION, IMMUNITY_LOSS) = EVENTS
 
 function run_exact()
     db = initialize_database()
@@ -44,12 +44,10 @@ function run_exact()
         # Draw next time with rate equal to the sum of all event rates
         dt = rand(Exponential(1.0 / total_rate))
         @assert dt > 0.0 && !isinf(dt)
-        event = direct_sample_linear_scan(rates, total_rate)
         
         # At each integer time, write output/state verification (if necessary),
-        # and update the biting rate.
+        # and update the biting/immigration rate.
         # Loop required in case the simulation jumps past two integer times.
-        should_update_biting_rate = false
         while t_next_integer < t + dt
             t_next = Float64(t_next_integer)
             write_output(t_next, s, db)
@@ -57,22 +55,24 @@ function run_exact()
                 verify(t_next, s)
             end
             
-            should_update_biting_rate = true
+            if t_next_integer % P.upper_bound_recomputation_period == 0
+                recompute_rejection_upper_bounds!(s)
+            end
             
             t_next_integer += 1
         end
         
-        # Update time
+        # Draw the event, update time, and execute event
+        event = direct_sample_linear_scan(rates, total_rate)
         t += dt
+        event_happened = do_event!(t, s, stats, event)
         
-        # Execute event.
-        # (Many events are no-ops due to rejection sampling.)
-        do_event!(t, s, stats, event)
-        
-        # If we passed one or more daylong steps, we need to update the biting rate.
-        if should_update_biting_rate
-            rates[BITING] = get_rate_biting(t, s)
-            total_rate = sum(rates)
+        # Many events are no-ops due to rejection sampling.
+        # If an event happened, update all rates.
+        # (This is wasteful but not a bottleneck.)
+        if event_happened
+            total_rate = update_rates!(rates, t, s)
+            stats.n_events += 1
         end
     end
     
@@ -83,6 +83,10 @@ function run_exact()
     went_extinct = total_rate == 0.0
     println("went extinct? $(went_extinct)")
     execute(db.meta, ("went_extinct", Int64(went_extinct)))
+end
+
+function recompute_rejection_upper_bounds!(s)
+    s.n_immunities_per_host_max = maximum(length(host.immunity) for host in s.hosts)
 end
 
 
@@ -128,7 +132,8 @@ function initialize_state()
         next_strain_id = P.n_initial_infections + 1,
         next_infection_id = P.n_initial_infections + 1,
         hosts = hosts,
-        old_infections = []
+        old_infections = [],
+        n_immunities_per_host_max = 0
     )
 end
 
@@ -169,6 +174,13 @@ end
 
 ### EVENT DEMUX ###
 
+function update_rates!(rates, t, s)
+    for event in 1:N_EVENTS
+        rates[event] = get_rate(t, s, event)
+    end
+    sum(rates)
+end
+
 function get_rate(t, s, event)
     if event == BITING
         get_rate_biting(t, s)
@@ -180,20 +192,24 @@ function get_rate(t, s, event)
         get_rate_mutation(t, s)
     elseif event == ECTOPIC_RECOMBINATION
         get_rate_ectopic_recombination(t, s)
+    elseif event == IMMUNITY_LOSS
+        get_rate_immunity_loss(t, s)
     end
 end
 
 function do_event!(t, s, stats, event)
     if event == BITING
-        do_event_biting!(t, s, stats)
+        do_biting!(t, s, stats)
     elseif event == IMMIGRATION
-        do_event_immigration!(t, s, stats)
+        do_immigration!(t, s, stats)
     elseif event == SWITCHING
-        do_event_switching!(t, s, stats)
+        do_switching!(t, s, stats)
     elseif event == MUTATION
-        do_event_mutation!(t, s, stats)
+        do_mutation!(t, s, stats)
     elseif event == ECTOPIC_RECOMBINATION
-        do_event_ectopic_recombination!(t, s, stats)
+        do_ectopic_recombination!(t, s, stats)
+    elseif event == IMMUNITY_LOSS
+        do_immunity_loss!(t, s, stats)
     end
 end
 
@@ -205,8 +221,8 @@ function get_rate_biting(t, s)
     biting_rate * P.n_hosts
 end
 
-function do_event_biting!(t, s, stats)
-#     println("do_event_biting!($(t), s)")
+function do_biting!(t, s, stats)
+#     println("do_biting!($(t), s)")
     
     stats.n_bites += 1
     
@@ -227,7 +243,7 @@ function do_event_biting!(t, s, stats)
     stats.n_infected_bites += 1
     
     # The destination host must have space available in the liver stage.
-    dst_available_count = P.n_infections_liver_max - length(src_host.liver_infections)
+    dst_available_count = P.n_infections_liver_max - length(dst_host.liver_infections)
     if dst_available_count == 0
         return false
     end
@@ -256,6 +272,7 @@ function do_event_biting!(t, s, stats)
             # Get a new infection struct, or recycle an old infection
             # to prevent excess memory allocation.
             dst_inf = recycle_or_create_infection(s)
+            dst_inf.id = next_infection_id!(s)
             dst_inf.t_infection = t
             dst_inf.expression_index = 0
             
@@ -327,11 +344,32 @@ end
 ### IMMIGRATION EVENT ###
 
 function get_rate_immigration(t, s)
-    0.0
+    P.immigration_rate_fraction * get_rate_biting(t, s)
 end
 
-function do_event_immigration!(t, s, stats)
-#     println("do_event_immigration!()")
+function do_immigration!(t, s, stats)
+#     println("do_immigration!($(t))")
+    
+    host = rand(s.hosts)
+    
+    # If host doesn't have an available infection slot, reject this sample.
+    if length(host.liver_infections) == P.n_infections_liver_max
+        return false
+    end
+    
+    # Construct infection by sampling from gene pool
+    infection = recycle_or_create_infection(s)
+    infection.id = next_infection_id!(s)
+    infection.t_infection = t
+    infection.strain_id = next_strain_id!(s)
+    infection.expression_index = 0
+    for i in 1:P.n_genes_per_strain
+        infection.genes[:,i] = @view s.gene_pool[:, rand(1:size(s.gene_pool)[2])]
+    end
+    
+    # Add infection to host
+    push!(host.liver_infections, infection)
+    
     true
 end
 
@@ -342,7 +380,7 @@ function get_rate_switching(t, s)
     P.switching_rate * P.n_hosts * P.n_infections_active_max
 end
 
-function do_event_switching!(t, s, stats)
+function do_switching!(t, s, stats)
     index = rand(CartesianIndices((P.n_hosts, P.n_infections_active_max)))
     host = s.hosts[index[1]]
     inf_index = index[2]
@@ -360,7 +398,7 @@ function do_event_switching!(t, s, stats)
     # Advance expression until a non-immune gene is reached
     while true
         # Increment immunity level to currently expressed gene
-        increment_immunity!(host, @view(infection.genes[:, infection.expression_index]))
+        increment_immunity!(s, host, @view(infection.genes[:, infection.expression_index]))
         
         # If we're at the end, clear the infection and return
         if infection.expression_index == P.n_genes_per_strain
@@ -378,7 +416,184 @@ function do_event_switching!(t, s, stats)
     end
 end
 
-function increment_immunity!(host, gene)
+
+### MUTATION EVENT ###
+
+function get_rate_mutation(t, s)
+    P.mutation_rate * P.n_hosts * P.n_infections_active_max * P.n_genes_per_strain * P.n_loci
+end
+
+function do_mutation!(t, s, stats)
+    index = rand(CartesianIndices((P.n_hosts, P.n_infections_active_max, P.n_genes_per_strain, P.n_loci)))
+    host = s.hosts[index[1]]
+    inf_index = index[2]
+    expression_index = index[3]
+    locus = index[4]
+    
+    # If there's no active infection at the drawn index, reject this sample.
+    if inf_index > length(host.active_infections)
+        return false
+    end
+    
+    infection = host.active_infections[inf_index]
+    
+#     println("do_mutation!($(t))")
+#     println("host = $(host.id), inf = $(infection.id), locus = $(locus)")
+    
+    # If we ever generate too many alleles for 16-bit ints, we'll need to use bigger ones.
+    @assert s.n_alleles[locus] < typemax(AlleleId)
+    
+    # Generate a new allele and insert it at the drawn location.
+    s.n_alleles[locus] += 1
+    infection.genes[locus, expression_index] = s.n_alleles[locus]
+    infection.strain_id = next_strain_id!(s)
+    
+    true
+end
+
+
+### ECTOPIC RECOMBINATION EVENT ###
+
+function get_rate_ectopic_recombination(t, s)
+    P.ectopic_recombination_rate *
+        P.n_hosts * P.n_infections_active_max *
+        P.n_genes_per_strain * (P.n_genes_per_strain - 1) / 2.0
+end
+
+function do_ectopic_recombination!(t, s, stats)
+    index = rand(CartesianIndices((P.n_hosts, P.n_infections_active_max)))
+    host = s.hosts[index[1]]
+    inf_index = index[2]
+    
+    # If there's no active infection at the drawn index, reject this sample.
+    if inf_index > length(host.active_infections)
+        return false
+    end
+    
+    infection = host.active_infections[inf_index]
+    
+    gene_index_1 = rand(1:P.n_genes_per_strain)
+    gene_index_2 = rand(1:P.n_genes_per_strain)
+    
+    gene1 = infection.genes[:, gene_index_1]
+    gene2 = infection.genes[:, gene_index_2]
+    
+    # If the genes are the same, this is a no-op
+    if gene1 == gene2
+        return false
+    end
+    
+    # Choose a breakpoint
+    breakpoint = rand(1:P.n_loci)
+    if breakpoint == 1
+        return false
+    end
+    
+    p_viable = p_recombination_is_viable(gene1, gene2, breakpoint)
+    
+#     println("do_ectopic_recombination!($(t))")
+#     println("host = $(host.id), inf = $(infection.id), breakpoint = $(breakpoint), p_viable = $(p_viable)")
+    
+    recombined = false
+    
+    # Recombine to modify first gene, if viable
+    if rand() < p_viable
+        recombine_genes_to!(infection.genes[:, gene_index_1], gene1, gene2, breakpoint)
+        recombined = true
+    end
+    
+    # Recombine to modify second gene, if viable
+    if rand() < p_viable
+        recombine_genes_to!(infection.genes[:, gene_index_2], gene2, gene1, breakpoint)
+        recombined = true
+    end
+    
+    if recombined
+        infection.strain_id = next_strain_id!(s)
+        true
+    else
+        false
+    end
+end
+
+"""
+    Model for probability that a recombination is viable.
+    
+    TODO: detailed description
+"""
+function p_recombination_is_viable(gene1, gene2, breakpoint)
+    n_diff = 0 # was "p_div"
+    n_diff_before = 0 # was "child_div"
+    rho = 0.8
+    avg_mutation = 5.0
+    for i in 1:P.n_loci
+        if gene1[i] != gene2[i]
+            n_diff += 1
+            if i < breakpoint
+                n_diff_before += 1
+            end
+        end
+    end
+    rho_power = n_diff_before * avg_mutation *
+        (n_diff - n_diff_before) * avg_mutation /
+        (n_diff * avg_mutation - 1.0)
+
+    rho^rho_power
+end
+
+function recombine_genes_to!(dst, gene1, gene2, breakpoint)
+    dst[1:(breakpoint - 1)] = gene1[1:(breakpoint - 1)]
+    dst[breakpoint:end] = gene2[breakpoint:end]
+    nothing
+end
+
+
+### IMMUNITY LOSS EVENT ###
+
+function get_rate_immunity_loss(t, s)
+    P.immunity_loss_rate * P.n_hosts * s.n_immunities_per_host_max
+end
+
+function do_immunity_loss!(t, s, stats)
+    index = rand(CartesianIndices((P.n_hosts, s.n_immunities_per_host_max)))
+    host = s.hosts[index[1]]
+    immunity_index = index[2]
+    
+    # If the immunity index is beyond this host's immunity count, reject this sample.
+    if immunity_index > length(host.immunity)
+        return false
+    end
+    
+    gene = get_key_by_iteration_order(host.immunity, immunity_index)
+    decrement_immunity!(host, gene)
+    
+#     println("do_immunity_loss($(t))")
+#     println("host: $(host.id), gene: $(gene)")
+    
+    false
+end
+
+### MISCELLANEOUS FUNCTIONS ###
+
+function next_host_id!(s)
+    id = s.next_host_id
+    s.next_host_id += 1
+    id
+end
+
+function next_infection_id!(s)
+    id = s.next_infection_id
+    s.next_infection_id += 1
+    id
+end
+
+function next_strain_id!(s)
+    id = s.next_strain_id
+    s.next_strain_id += 1
+    id
+end
+
+function increment_immunity!(s, host, gene)
     # Get old immunity level from immunity dict
     old_level = get(host.immunity, gene, ImmunityLevel(0))
     
@@ -386,6 +601,8 @@ function increment_immunity!(host, gene)
     if old_level < typemax(ImmunityLevel)
         host.immunity[gene] = old_level + 1
     end
+    
+    s.n_immunities_per_host_max = max(s.n_immunities_per_host_max, length(host.immunity))
 end
 
 function decrement_immunity!(host, gene)
@@ -404,50 +621,3 @@ function is_immune(host, gene)
     get(host.immunity, gene, 0) > 0
 end
 
-
-### MUTATION EVENT ###
-
-function get_rate_mutation(t, s)
-    P.mutation_rate * P.n_hosts * P.n_infections_active_max * P.n_loci
-end
-
-function do_event_mutation!(t, s, stats)
-#     println("do_event_mutation!()")
-    false
-end
-
-
-### ECTOPIC RECOMBINATION EVENT ###
-
-function get_rate_ectopic_recombination(t, s)
-    P.ectopic_recombination_rate *
-        P.n_hosts * P.n_infections_active_max *
-        P.n_genes_per_strain * (P.n_genes_per_strain - 1) / 2.0
-end
-
-function do_event_ectopic_recombination!(t, s, stats)
-#     println("do_event_ectopic_recombination!($(t), s, stats)")
-    false
-end
-
-
-### MISCELLANEOUS FUNCTIONS ###
-
-function next_host_id!(s)
-    id = s.next_host_id
-    s.next_host_id += 1
-    id
-end
-
-function next_strain_id!(s)
-    id = s.next_strain_id
-    s.next_strain_id += 1
-    id
-end
-
-
-### STATE VERIFICATION ###
-
-function verify(t, s)
-    println("verify($(t), s)")
-end

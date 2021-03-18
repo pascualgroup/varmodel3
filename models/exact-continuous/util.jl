@@ -58,3 +58,12 @@ function delete_and_swap_with_end!(a, i)
     end
     nothing
 end
+
+function get_key_by_iteration_order(d::Dict{K, V}, index::Int) where {K, V}
+    for (i, k) in enumerate(keys(d))
+        if i == index
+            return k
+        end
+    end
+    @assert false
+end

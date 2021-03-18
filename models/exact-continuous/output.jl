@@ -13,6 +13,7 @@ end
 
 @with_kw mutable struct SummaryStats
     start_datetime::DateTime
+    n_events::Int = 0
     n_bites::Int = 0
     n_infected_bites::Int = 0
     n_infected_bites_with_space::Int = 0

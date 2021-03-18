@@ -14,14 +14,17 @@ const P = let
         dt = 1,
 
         output_db_filename = "output.sqlite",
-
+        
+        upper_bound_recomputation_period = 30,
+        
         summary_period = 30,
         strain_count_period = 360,
 
         host_sampling_period = 30,
         host_sample_size = 100,
 
-        verification_period = 360,
+        
+        verification_period = 30,
 
         rng_seed = missing,
 

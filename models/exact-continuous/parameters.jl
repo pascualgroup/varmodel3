@@ -31,6 +31,11 @@ using StructTypes
     dt::Union{Int, Missing} = missing
     
     """
+        How often to recompute upper bounds for rejection sampling.
+    """
+    upper_bound_recomputation_period::Union{Int, Missing} = missing
+    
+    """
         Filename for output database.
         
         Relative to working directory.
@@ -257,6 +262,9 @@ function validate(p::Params)
         @assert p.t_year % p.dt == 0
     end
     
+    @assert p.upper_bound_recomputation_period !== 0
+    @assert p.upper_bound_recomputation_period > 0
+    
     @assert p.output_db_filename != missing
     @assert p.output_db_filename != ""
     output_dir = dirname(p.output_db_filename)
@@ -278,7 +286,7 @@ function validate(p::Params)
     @assert p.t_end >= 0
     
     @assert p.n_hosts != missing
-    @assert p.n_hosts >= 0
+    @assert p.n_hosts >= s
     
     @assert p.n_initial_infections != missing
     @assert p.n_initial_infections >= 0
@@ -294,6 +302,7 @@ function validate(p::Params)
     
     @assert p.n_loci != missing
     @assert p.n_loci > 0
+    @assert p.n_loci == 2 # If different, need to revisit ectopic recombination model
     
     @assert p.n_alleles_per_locus_initial != missing
     @assert p.n_alleles_per_locus_initial > 0
@@ -305,6 +314,9 @@ function validate(p::Params)
     
     @assert p.ectopic_recombination_rate != missing
     @assert p.ectopic_recombination_rate >= 0.0
+    
+    @assert p.p_ectopic_recombination_is_viable != missing
+    @assert 0.0 <= p.p_ectopic_recombination_is_viable <= 1.0
     
     @assert p.immunity_loss_rate != missing
     @assert p.immunity_loss_rate >= 0.0
