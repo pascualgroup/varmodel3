@@ -11,3 +11,5 @@ using StructTypes
 using JSON3
 using DelimitedFiles
 using SQLite
+
+include("src/parameters.jl")

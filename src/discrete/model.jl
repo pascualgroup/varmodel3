@@ -1,4 +1,4 @@
-function run_discrete_time(p::Params)
+function run(p::Params)
     s = State(p)
     db = initialize_database(p)
 

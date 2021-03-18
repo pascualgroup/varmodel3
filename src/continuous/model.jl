@@ -1,4 +1,3 @@
-include("util.jl")
 include("state.jl")
 include("output.jl")
 
@@ -6,14 +5,13 @@ const N_EVENTS = 6
 const EVENTS = collect(1:N_EVENTS)
 const (BITING, IMMIGRATION, SWITCHING, MUTATION, ECTOPIC_RECOMBINATION, IMMUNITY_LOSS) = EVENTS
 
-function run_exact()
+function run()
     db = initialize_database()
-    stats = SummaryStats()
     
     # Seed the random number generator using the provided seed,
     # or, if absent, by generating one from the OS's source of entropy.
     rng_seed = if P.rng_seed === missing
-        rand(RandomDevice(), UInt64)
+        rand(RandomDevice(), 1:typemax(Int64))
     else
         P.rng_seed
     end
@@ -22,7 +20,6 @@ function run_exact()
     
     # Start recording elapsed time
     start_datetime = now()
-    last_summary_datetime = start_datetime
     
     # Used to decide when to do output and verification
     t_next_integer = 1
@@ -33,7 +30,8 @@ function run_exact()
     verify(t, s)
     
     # Run initial output
-    write_output(0, s, db)
+    stats = SummaryStats()
+    write_output(db, 0, s, stats)
     
     # Initialize event rates
     rates = [get_rate(t, s, event) for event in EVENTS]
@@ -49,10 +47,9 @@ function run_exact()
         # and update the biting/immigration rate.
         # Loop required in case the simulation jumps past two integer times.
         while t_next_integer < t + dt
-            t_next = Float64(t_next_integer)
-            write_output(t_next, s, db)
+            write_output(db, t_next_integer, s, stats)
             if P.verification_period != nothing && t_next_integer % P.verification_period == 0
-                verify(t_next, s)
+                verify(t_next_integer, s)
             end
             
             if t_next_integer % P.upper_bound_recomputation_period == 0
@@ -76,7 +73,7 @@ function run_exact()
         end
     end
     
-    elapsed_time = Dates.value(now() - last_summary_datetime) / 1000.0
+    elapsed_time = Dates.value(now() - start_datetime) / 1000.0
     println("elapsed time (s): $(elapsed_time)")
     execute(db.meta, ("elapsed_time", elapsed_time))
     
