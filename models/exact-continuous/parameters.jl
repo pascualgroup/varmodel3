@@ -306,8 +306,6 @@ function validate(p::Params)
     @assert p.ectopic_recombination_rate != missing
     @assert p.ectopic_recombination_rate >= 0.0
     
-    @assert p.immunity_level_max != missing
-    
     @assert p.immunity_loss_rate != missing
     @assert p.immunity_loss_rate >= 0.0
     

@@ -36,8 +36,8 @@ function run_exact()
     write_output(0, s, db)
     
     # Initialize event rates
-    rates = fill(0.0, N_EVENTS)
-    total_rate = update_rates!(t, s, rates)
+    rates = [get_rate(t, s, event) for event in EVENTS]
+    total_rate = sum(rates)
     
     # Loop events until end of simulation
     while total_rate > 0.0 && t < P.t_end
@@ -46,14 +46,18 @@ function run_exact()
         @assert dt > 0.0 && !isinf(dt)
         event = direct_sample_linear_scan(rates, total_rate)
         
-        # At each integer time, write output/state verification (if necessary).
+        # At each integer time, write output/state verification (if necessary),
+        # and update the biting rate.
         # Loop required in case the simulation jumps past two integer times.
+        should_update_biting_rate = false
         while t_next_integer < t + dt
             t_next = Float64(t_next_integer)
             write_output(t_next, s, db)
             if P.verification_period != nothing && t_next_integer % P.verification_period == 0
                 verify(t_next, s)
             end
+            
+            should_update_biting_rate = true
             
             t_next_integer += 1
         end
@@ -62,11 +66,13 @@ function run_exact()
         t += dt
         
         # Execute event.
-        # Many events are no-ops due to rejection sampling.
-        # If an event actually happened, update event rates.
-        event_happened = do_event!(t, s, stats, event)
-        if event_happened
-            total_rate = update_rates!(t, s, rates)
+        # (Many events are no-ops due to rejection sampling.)
+        do_event!(t, s, stats, event)
+        
+        # If we passed one or more daylong steps, we need to update the biting rate.
+        if should_update_biting_rate
+            rates[BITING] = get_rate_biting(t, s)
+            total_rate = sum(rates)
         end
     end
     
@@ -153,18 +159,11 @@ function create_empty_infection()
 end
 
 function recycle_or_create_infection(s::State)
-    if !empty(s.old_infections)
+    if !isempty(s.old_infections)
         pop!(s.old_infections)
     else
         create_empty_infection()
     end
-end
-
-function update_rates!(t, s, rates)
-    for event in EVENTS
-        rates[event] = get_rate(t, s, event)
-    end
-    sum(rates)
 end
 
 
@@ -216,6 +215,10 @@ function do_event_biting!(t, s, stats)
     src_host = rand(s.hosts)
     dst_host = rand(s.hosts)
     
+    # Advance host (rebirth or infection activation)
+    advance_host!(t, s, src_host)
+    advance_host!(t, s, dst_host)
+    
     # The source host must be infected in order to transmit.
     src_active_count = length(src_host.active_infections)
     if src_active_count == 0
@@ -231,7 +234,7 @@ function do_event_biting!(t, s, stats)
     stats.n_infected_bites_with_space += 1
     
     # Compute probability of each transmission
-    p_transmit = if p.coinfection_reduces_transmission
+    p_transmit = if P.coinfection_reduces_transmission
         P.transmissibility
     else
         P.transmissibility / src_inf_count
@@ -257,27 +260,67 @@ function do_event_biting!(t, s, stats)
             dst_inf.expression_index = 0
             
             # Construct strain for new infection
-            if inf1.strain_id == inf2.strain_id
+            if src_inf_1.strain_id == src_inf_2.strain_id
                 # If both infections have the same strain, then the new infection
                 # is given infection 1's genes with expression order shuffled.
-                dst_inf.strain_id = inf1.strain_id
+                dst_inf.strain_id = src_inf_1.strain_id
                 shuffle_columns_to!(dst_inf.genes, src_inf_1.genes)
             else
                 # Otherwise, the new infection is given a new strain constructed by
                 # taking a random sample of the genes in the two source infections.
-                dst_inf.strain_id = next_strain_id(s)
+                dst_inf.strain_id = next_strain_id!(s)
                 sample_columns_from_two_matrices_to!(dst_inf.genes, src_inf_1.genes, src_inf_2.genes)
             end
-        
+            
             # Add this infection to the destination host
             push!(dst_host.liver_infections, dst_inf)
         end
     end
-    if transmitted
-        stats.n_transmitted_bites += 1
-    end
     
-    true
+    if transmitted
+        stats.n_transmitting_bites += 1
+        true
+    else
+        false
+    end
+end
+
+function advance_host!(t, s, host)
+    if t > host.t_death
+        # If the host is past its death time
+        do_rebirth!(t, s, host)
+    else
+        i = 1
+        while i <= length(host.liver_infections)
+            infection = host.liver_infections[i]
+            if infection.t_infection + P.t_liver_stage < t
+#                 println("t = $(t): activating host $(host.id), inf $(infection.id)")
+                
+                # If the infection is past the liver stage, remove it from the liver.
+                delete_and_swap_with_end!(host.liver_infections, i)
+                # If there's room, move it into the active infections array.
+                # Otherwise, just put it into the recycle bin.
+                if length(host.active_infections) < P.n_infections_active_max
+                    infection.expression_index = 1
+                    push!(host.active_infections, infection)
+                else
+                    push!(s.old_infections, infection)
+                end
+            else
+                i += 1
+            end
+        end
+    end
+    nothing
+end
+
+function do_rebirth!(t, s, host)
+    host.id = next_host_id!(s)
+    host.t_birth = t
+    host.t_death = t = draw_host_lifetime()
+    empty!(host.liver_infections)
+    empty!(host.active_infections)
+    empty!(host.immunity)
 end
 
 
@@ -287,7 +330,7 @@ function get_rate_immigration(t, s)
     0.0
 end
 
-function do_event_immigration!(t, s)
+function do_event_immigration!(t, s, stats)
 #     println("do_event_immigration!()")
     true
 end
@@ -296,40 +339,111 @@ end
 ### SWITCHING EVENT ###
 
 function get_rate_switching(t, s)
-    0.0
+    P.switching_rate * P.n_hosts * P.n_infections_active_max
 end
 
-function do_event_switching!(t, s)
-#     println("do_event_switching!()")
-    true
+function do_event_switching!(t, s, stats)
+    index = rand(CartesianIndices((P.n_hosts, P.n_infections_active_max)))
+    host = s.hosts[index[1]]
+    inf_index = index[2]
+    
+    # Advance host (rebirth or infection activation)
+    advance_host!(t, s, host)
+    
+    # If the infection index is out of range, this is a rejected sample.
+    # Otherwise we'll proceeed.
+    if inf_index > length(host.active_infections)
+        return false
+    end
+    infection = host.active_infections[inf_index]
+    
+    # Advance expression until a non-immune gene is reached
+    while true
+        # Increment immunity level to currently expressed gene
+        increment_immunity!(host, @view(infection.genes[:, infection.expression_index]))
+        
+        # If we're at the end, clear the infection and return
+        if infection.expression_index == P.n_genes_per_strain
+            delete_and_swap_with_end!(host.active_infections, inf_index)
+            return true
+        end
+        
+        # Otherwise, advance expression
+        infection.expression_index += 1
+        
+        # If the host not immune, stop advancing
+        if !is_immune(host, @view(infection.genes[:, infection.expression_index]))
+            return true
+        end
+    end
+end
+
+function increment_immunity!(host, gene)
+    # Get old immunity level from immunity dict
+    old_level = get(host.immunity, gene, ImmunityLevel(0))
+    
+    # Increment immunity if the level is not at the maximum value (255 = 0xFF)
+    if old_level < typemax(ImmunityLevel)
+        host.immunity[gene] = old_level + 1
+    end
+end
+
+function decrement_immunity!(host, gene)
+    # Get old immunity level from immunity dict
+    old_level = get(host.immunity, gene, ImmunityLevel(0))
+    
+    # Decrement immunity, removing it entirely if we reach 0
+    if old_level == 1
+        delete!(host.immunity, gene)
+    else
+        host.immunity[gene] -= 1
+    end
+end
+
+function is_immune(host, gene)
+    get(host.immunity, gene, 0) > 0
 end
 
 
 ### MUTATION EVENT ###
 
 function get_rate_mutation(t, s)
-    0.0
+    P.mutation_rate * P.n_hosts * P.n_infections_active_max * P.n_loci
 end
 
-function do_event_mutation!(t, s)
+function do_event_mutation!(t, s, stats)
 #     println("do_event_mutation!()")
-    true
+    false
 end
 
 
 ### ECTOPIC RECOMBINATION EVENT ###
 
 function get_rate_ectopic_recombination(t, s)
-    0.0
+    P.ectopic_recombination_rate *
+        P.n_hosts * P.n_infections_active_max *
+        P.n_genes_per_strain * (P.n_genes_per_strain - 1) / 2.0
 end
 
-function do_event_ectopic_recombination!(t, s)
-#     println("do_event_ectopic_recombination!()")
-    true
+function do_event_ectopic_recombination!(t, s, stats)
+#     println("do_event_ectopic_recombination!($(t), s, stats)")
+    false
 end
 
 
 ### MISCELLANEOUS FUNCTIONS ###
+
+function next_host_id!(s)
+    id = s.next_host_id
+    s.next_host_id += 1
+    id
+end
+
+function next_strain_id!(s)
+    id = s.next_strain_id
+    s.next_strain_id += 1
+    id
+end
 
 
 ### STATE VERIFICATION ###

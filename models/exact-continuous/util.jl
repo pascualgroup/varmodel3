@@ -24,7 +24,7 @@ function shuffle_columns!(mat)
     nothing
 end
 
-function xor_swap!(x::Array{T}, y::Array{T}) where {T}
+function xor_swap!(x, y)
     x .⊻= y
     y .⊻= x
     x .⊻= y
@@ -45,6 +45,16 @@ function sample_columns_from_two_matrices_to!(dst, src1, src2)
         else
             dst[:, i_dst] = @view src2[:, i_src - m_src_1]
         end
+    end
+    nothing
+end
+
+function delete_and_swap_with_end!(a, i)
+    @assert i <= length(a)
+    
+    x = pop!(a)
+    if i <= length(a)
+        a[i] = x
     end
     nothing
 end

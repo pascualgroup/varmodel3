@@ -22,7 +22,7 @@ end
     immunity::Dict{SVector{P.n_loci, AlleleId}, ImmunityLevel}
 end
 
-@with_kw struct State
+@with_kw mutable struct State
     "Number of alleles for each locus (epitope)"
     n_alleles::MVector{P.n_loci, AlleleId}
 
