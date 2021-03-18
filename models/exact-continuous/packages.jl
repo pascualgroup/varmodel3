@@ -1,8 +1,12 @@
-using SQLite
+using StaticArrays
+
+using Dates
+
+using Random
 using StatsBase
 using Distributions
-using JSON3
+
 using StructTypes
+using JSON3
 using DelimitedFiles
-using Dates
-using StaticArrays
+using SQLite

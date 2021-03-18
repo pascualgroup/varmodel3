@@ -7,6 +7,19 @@ const EVENTS = collect(1:N_EVENTS)
 const (BITING, IMMIGRATION, SWITCHING, MUTATION, ECTOPIC_RECOMBINATION) = EVENTS
 
 function run_exact()
+    db = initialize_database()
+    stats = SummaryStats()
+    
+    # Seed the random number generator using the provided seed,
+    # or, if absent, by generating one from the OS's source of entropy.
+    rng_seed = if P.rng_seed === missing
+        rand(RandomDevice(), UInt64)
+    else
+        P.rng_seed
+    end
+    Random.seed!(rng_seed)
+    execute(db.meta, ("rng_seed", rng_seed))
+    
     # Start recording elapsed time
     start_datetime = now()
     last_summary_datetime = start_datetime
@@ -20,21 +33,20 @@ function run_exact()
     verify(t, s)
     
     # Run initial output
-    db = initialize_database()
     write_output(0, s, db)
     
     # Initialize event rates
     rates = fill(0.0, N_EVENTS)
-    total_rate, dt_dist = update_rates!(t, s, rates)
+    total_rate = update_rates!(t, s, rates)
     
     # Loop events until end of simulation
-    while t < P.t_end
+    while total_rate > 0.0 && t < P.t_end
         # Draw next time with rate equal to the sum of all event rates
-        dt = rand(dt_dist)
+        dt = rand(Exponential(1.0 / total_rate))
+        @assert dt > 0.0 && !isinf(dt)
         event = direct_sample_linear_scan(rates, total_rate)
         
-        # At each integer time, write output/state verification (if necessary)
-        # and update rates to ensure that biting rate is kept current.
+        # At each integer time, write output/state verification (if necessary).
         # Loop required in case the simulation jumps past two integer times.
         while t_next_integer < t + dt
             t_next = Float64(t_next_integer)
@@ -42,7 +54,7 @@ function run_exact()
             if P.verification_period != nothing && t_next_integer % P.verification_period == 0
                 verify(t_next, s)
             end
-            total_rate, dt_dist = update_rates!(t, s, rates)
+            
             t_next_integer += 1
         end
         
@@ -52,27 +64,45 @@ function run_exact()
         # Execute event.
         # Many events are no-ops due to rejection sampling.
         # If an event actually happened, update event rates.
-        event_happened = do_event!(t, s, event)
+        event_happened = do_event!(t, s, stats, event)
         if event_happened
-            total_rate, dt_dist = update_rates!(t, s, rates)
+            total_rate = update_rates!(t, s, rates)
         end
     end
     
-    println("elapsed time (s): $(Dates.value(now() - last_summary_datetime) / 1000.0)")
+    elapsed_time = Dates.value(now() - last_summary_datetime) / 1000.0
+    println("elapsed time (s): $(elapsed_time)")
+    execute(db.meta, ("elapsed_time", elapsed_time))
+    
+    went_extinct = total_rate == 0.0
+    println("went extinct? $(went_extinct)")
+    execute(db.meta, ("went_extinct", Int64(went_extinct)))
 end
 
 
 ### INITIALIZATION ###
 
 function initialize_state()
+    # Initialize gene pool as an (n_loci, n_genes_initial) matrix filled with
+    # allele IDs drawn uniformly randomly in 1:n_alleles_per_locus_initial.
     gene_pool = reshape(
         rand(1:P.n_alleles_per_locus_initial, P.n_loci * P.n_genes_initial),
         (P.n_loci, P.n_genes_initial)
     )
     
-    hosts = [initialize_host(id) for id in 1:P.n_hosts]
+    # Initialize n_hosts hosts, all born at t = 0, with lifetime drawn from a
+    # distribution, and no initial infections or immunity.
+    hosts = [
+        Host(
+            id = id,
+            t_birth = 0.0, t_death = draw_host_lifetime(),
+            liver_infections = [], active_infections = [], immunity = Dict()
+        )
+        for id in 1:P.n_hosts
+    ]
     
-    # Infect n_initial_infections hosts
+    # Infect n_initial_infections hosts at t = 0. Genes in the infection
+    # are sampled uniformly randomly from the gene pool.
     for (infection_id, host_index) in enumerate(sample(1:P.n_hosts, P.n_initial_infections, replace = false))
         infection = create_empty_infection()
         infection.id = infection_id
@@ -96,25 +126,20 @@ function initialize_state()
     )
 end
 
-function initialize_host(id)
-    lifetime = draw_host_lifetime()
-    t_birth = -rand() * lifetime
-    t_death = t_birth + lifetime
+"""
+    Draws host lifetime from a distribution.
     
-    liver_infections = []
-    sizehint!(liver_infections, P.n_infections_liver_max)
-    
-    active_infections = []
-    sizehint!(active_infections, P.n_infections_active_max)
-    
-    Host(
-        id = id,
-        t_birth = t_birth,
-        t_death = t_death,
-        liver_infections = liver_infections,
-        active_infections = active_infections,
-        immunity = Dict()
-    )
+    The distribution is an exponential distribution with mean
+    `mean_host_lifetime`, truncated at `max_host_lifetime`.
+"""
+function draw_host_lifetime()
+    dist = Exponential(P.mean_host_lifetime)
+    while true
+        lifetime = rand(dist)
+        if lifetime < P.max_host_lifetime
+            return lifetime
+        end
+    end
 end
 
 function create_empty_infection()
@@ -127,12 +152,19 @@ function create_empty_infection()
     )
 end
 
+function recycle_or_create_infection(s::State)
+    if !empty(s.old_infections)
+        pop!(s.old_infections)
+    else
+        create_empty_infection()
+    end
+end
+
 function update_rates!(t, s, rates)
     for event in EVENTS
         rates[event] = get_rate(t, s, event)
     end
-    total_rate = sum(rates)
-    (total_rate, Exponential(1.0 / total_rate))
+    sum(rates)
 end
 
 
@@ -152,17 +184,17 @@ function get_rate(t, s, event)
     end
 end
 
-function do_event!(t, s, event)
+function do_event!(t, s, stats, event)
     if event == BITING
-        do_event_biting!(t, s)
+        do_event_biting!(t, s, stats)
     elseif event == IMMIGRATION
-        do_event_immigration!(t, s)
+        do_event_immigration!(t, s, stats)
     elseif event == SWITCHING
-        do_event_switching!(t, s)
+        do_event_switching!(t, s, stats)
     elseif event == MUTATION
-        do_event_mutation!(t, s)
+        do_event_mutation!(t, s, stats)
     elseif event == ECTOPIC_RECOMBINATION
-        do_event_ectopic_recombination!(t, s)
+        do_event_ectopic_recombination!(t, s, stats)
     end
 end
 
@@ -170,11 +202,81 @@ end
 ### BITING EVENT ###
 
 function get_rate_biting(t, s)
-    1.0
+    biting_rate = P.biting_rate[1 + Int(floor(t)) % P.t_year]
+    biting_rate * P.n_hosts
 end
 
-function do_event_biting!(t, s)
-#     println("do_event_biting!()")
+function do_event_biting!(t, s, stats)
+#     println("do_event_biting!($(t), s)")
+    
+    stats.n_bites += 1
+    
+    # Uniformly randomly sample infecting host (source) and host being infected
+    # (destination).
+    src_host = rand(s.hosts)
+    dst_host = rand(s.hosts)
+    
+    # The source host must be infected in order to transmit.
+    src_active_count = length(src_host.active_infections)
+    if src_active_count == 0
+        return false
+    end
+    stats.n_infected_bites += 1
+    
+    # The destination host must have space available in the liver stage.
+    dst_available_count = P.n_infections_liver_max - length(src_host.liver_infections)
+    if dst_available_count == 0
+        return false
+    end
+    stats.n_infected_bites_with_space += 1
+    
+    # Compute probability of each transmission
+    p_transmit = if p.coinfection_reduces_transmission
+        P.transmissibility
+    else
+        P.transmissibility / src_inf_count
+    end
+    
+    # The number of transmissions is bounded by the number of source infections
+    # and the number of available slots in the destination.
+    n_transmissions_max = min(src_active_count, dst_available_count)
+    transmitted = false
+    for i in 1:n_transmissions_max
+        if rand() < P.transmissibility
+            stats.n_transmissions += 1
+            transmitted = true
+            
+            # Randomly sample two source infections to recombine
+            src_inf_1 = rand(src_host.active_infections)
+            src_inf_2 = rand(src_host.active_infections)
+        
+            # Get a new infection struct, or recycle an old infection
+            # to prevent excess memory allocation.
+            dst_inf = recycle_or_create_infection(s)
+            dst_inf.t_infection = t
+            dst_inf.expression_index = 0
+            
+            # Construct strain for new infection
+            if inf1.strain_id == inf2.strain_id
+                # If both infections have the same strain, then the new infection
+                # is given infection 1's genes with expression order shuffled.
+                dst_inf.strain_id = inf1.strain_id
+                shuffle_columns_to!(dst_inf.genes, src_inf_1.genes)
+            else
+                # Otherwise, the new infection is given a new strain constructed by
+                # taking a random sample of the genes in the two source infections.
+                dst_inf.strain_id = next_strain_id(s)
+                sample_columns_from_two_matrices_to!(dst_inf.genes, src_inf_1.genes, src_inf_2.genes)
+            end
+        
+            # Add this infection to the destination host
+            push!(dst_host.liver_infections, dst_inf)
+        end
+    end
+    if transmitted
+        stats.n_transmitted_bites += 1
+    end
+    
     true
 end
 
@@ -182,7 +284,7 @@ end
 ### IMMIGRATION EVENT ###
 
 function get_rate_immigration(t, s)
-    1.0
+    0.0
 end
 
 function do_event_immigration!(t, s)
@@ -194,7 +296,7 @@ end
 ### SWITCHING EVENT ###
 
 function get_rate_switching(t, s)
-    1.0
+    0.0
 end
 
 function do_event_switching!(t, s)
@@ -206,7 +308,7 @@ end
 ### MUTATION EVENT ###
 
 function get_rate_mutation(t, s)
-    1.0
+    0.0
 end
 
 function do_event_mutation!(t, s)
@@ -218,7 +320,7 @@ end
 ### ECTOPIC RECOMBINATION EVENT ###
 
 function get_rate_ectopic_recombination(t, s)
-    1.0
+    0.0
 end
 
 function do_event_ectopic_recombination!(t, s)
@@ -228,10 +330,6 @@ end
 
 
 ### MISCELLANEOUS FUNCTIONS ###
-
-function draw_host_lifetime()
-    min(rand(Exponential(P.mean_host_lifetime)), P.max_host_lifetime)
-end
 
 
 ### STATE VERIFICATION ###

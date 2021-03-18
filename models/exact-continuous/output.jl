@@ -3,6 +3,7 @@ import SQLite.DBInterface.execute
 
 struct Database
     db::DB
+    meta::Stmt
     summary::Stmt
     gene_strain_counts::Stmt
     sampled_hosts::Stmt
@@ -17,6 +18,10 @@ end
     n_infected_bites_with_space::Int = 0
     n_transmitting_bites::Int = 0
     n_transmissions::Int = 0
+end
+
+function SummaryStats()
+    SummaryStats(start_datetime = now())
 end
 
 function reset(stats::SummaryStats)
@@ -98,6 +103,7 @@ function initialize_database()
     
     Database(
         db,
+        make_insert_statement(db, "meta", 2),
         make_insert_statement(db, "summary", 11),
         make_insert_statement(db, "gene_strain_counts", 3),
         make_insert_statement(db, "sampled_hosts", 4),

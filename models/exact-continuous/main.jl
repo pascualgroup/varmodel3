@@ -23,7 +23,7 @@ const P = let
 
         verification_period = 360,
 
-        rng_seed = nothing,
+        rng_seed = missing,
 
         t_year = t_year,
         t_end = 111 * t_year,
