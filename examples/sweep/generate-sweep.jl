@@ -43,11 +43,11 @@ ROOT_RUNMANY_SCRIPT = joinpath(ROOT_PATH, "runmany.jl")
 cd(SCRIPT_PATH)
 
 # Number of replicates for each parameter combination
-const N_REPLICATES = 10
+const N_REPLICATES = 2
 
 # Number of SLURM jobs to generate
-const N_JOBS = 100
-const N_CORES_PER_JOB = 28
+const N_JOBS_MAX = 100
+const N_CORES_PER_JOB_MAX = 14 # Half a node, easier to get scheduled than a whole one
 
 function main()
     # Root run directory
@@ -69,9 +69,9 @@ function main()
     db = SQLite.DB(joinpath("sweep_db.sqlite"))
     execute(db, "CREATE TABLE meta (key, value)")
     execute(db, "CREATE TABLE param_combos (combo_id INTEGER, mutation_rate REAL, transmissibility REAL)")
-    execute(db, "CREATE TABLE runs (combo_id INTEGER, replicate INTEGER, rng_seed INTEGER, run_dir TEXT, params TEXT)")
+    execute(db, "CREATE TABLE runs (run_id INTEGER, combo_id INTEGER, replicate INTEGER, rng_seed INTEGER, run_dir TEXT, params TEXT)")
     execute(db, "CREATE TABLE jobs (job_id INTEGER, job_dir TEXT)")
-    execute(db, "CREATE TABLE job_runs (job_id INTEGER, combo_id INTEGER, replicate INTEGER)")
+    execute(db, "CREATE TABLE job_runs (job_id INTEGER, run_id INTEGER)")
     
     generate_runs(db)
     generate_jobs(db)
@@ -89,6 +89,7 @@ function generate_runs(db)
     # Loop through parameter combinations and replicates, generating a run directory
     # `runs/c<combo_id>/r<replicate>` for each one.
     combo_id = 1
+    run_id = 1
     for mutation_rate in (0.5e-8, 1.0e-8, 1.5e-8, 2.0e-8)
         for transmissibility in (0.25, 0.5, 0.75)
             println("Processing c$(combo_id): mutation_rate = $(mutation_rate), transmissibility = $(transmissibility)")
@@ -121,13 +122,15 @@ function generate_runs(db)
                     #!/bin/sh
 
                     cd `dirname \$0`
-                    julia --check-bounds=no -O3 -t 1 $(ROOT_RUN_SCRIPT) parameters.json > output.txt
+                    julia --check-bounds=no -O3 $(ROOT_RUN_SCRIPT) parameters.json > output.txt
                     """)
                 end
                 run(`chmod +x $(run_script)`) # Make run script executable
                 
                 # Save all run info (including redundant stuff for reference) into DB
-                execute(db, "INSERT INTO runs VALUES (?, ?, ?, ?, ?)", (combo_id, replicate, rng_seed, run_dir, params_json))
+                execute(db, "INSERT INTO runs VALUES (?, ?, ?, ?, ?, ?)", (run_id, combo_id, replicate, rng_seed, run_dir, params_json))
+                
+                run_id += 1
             end
             combo_id += 1
         end
@@ -139,11 +142,11 @@ function generate_jobs(db)
     
     # Assign runs to jobs (round-robin)
     job_id = 1
-    for (combo_id, replicate, run_dir) in execute(db, "SELECT combo_id, replicate, run_dir FROM runs ORDER BY replicate, combo_id")
-        execute(db, "INSERT INTO job_runs VALUES (?,?,?)", (job_id, combo_id, replicate))
+    for (run_id, run_dir) in execute(db, "SELECT run_id, run_dir FROM runs ORDER BY replicate, combo_id")
+        execute(db, "INSERT INTO job_runs VALUES (?,?)", (job_id, run_id))
         
         # Mod-increment job ID
-        job_id = (job_id % N_JOBS) + 1
+        job_id = (job_id % N_JOBS_MAX) + 1
     end
     
     # Create job directories containing job scripts and script to submit all jobs
@@ -162,12 +165,11 @@ function generate_jobs(db)
             """
             SELECT run_dir FROM job_runs, runs
             WHERE job_runs.job_id = ?
-            AND runs.combo_id = job_runs.combo_id
-            AND runs.replicate = job_runs.replicate
+            AND runs.run_id = job_runs.run_id
             """,
             (job_id,)
         )]
-        n_cores = min(length(run_dirs), N_CORES_PER_JOB)
+        n_cores = min(length(run_dirs), N_CORES_PER_JOB_MAX)
         
         # Write out list of runs
         open(joinpath(job_dir, "runs.txt"), "w") do f
@@ -197,9 +199,11 @@ function generate_jobs(db)
             #SBATCH --output=output.txt
             
             module purge
-            module load julia
             
-            julia -t $(n_cores) $(ROOT_RUNMANY_SCRIPT) $(n_cores) runs.txt
+            # Uncomment this to use the Midway-provided Julia:
+            # module load julia
+            
+            julia $(ROOT_RUNMANY_SCRIPT) $(n_cores) runs.txt
             """)
         end
         run(`chmod +x $(job_sbatch)`) # Make run script executable (for local testing)

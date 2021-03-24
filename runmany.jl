@@ -20,7 +20,7 @@ end
     
 function do_run(run_cmd)
     println("$(run_cmd)\n  starting")
-    run(`$(run_cmd)`)
+    run(Cmd(`$(run_cmd)`; ignorestatus = true, dir = dirname(run_cmd)))
     println("$(run_cmd)\n  done")
 end
 
