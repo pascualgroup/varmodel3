@@ -250,9 +250,9 @@ function do_biting!(t, s, stats)
     
     # Compute probability of each transmission
     p_transmit = if P.coinfection_reduces_transmission
-        P.transmissibility
-    else
         P.transmissibility / src_inf_count
+    else
+        P.transmissibility
     end
     
     # The number of transmissions is bounded by the number of source infections
@@ -333,7 +333,7 @@ end
 function do_rebirth!(t, s, host)
     host.id = next_host_id!(s)
     host.t_birth = t
-    host.t_death = t = draw_host_lifetime()
+    host.t_death = t + draw_host_lifetime()
     empty!(host.liver_infections)
     empty!(host.active_infections)
     empty!(host.immunity)
