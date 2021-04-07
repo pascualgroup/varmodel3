@@ -7,10 +7,12 @@ without an external parameters file. This approach is convenient for testing.
 Instead of using the standard `run.jl`, which loads parameters from JSON, you
 generate parameters inside Julia and run the model code directly with them.
 
-```
-./generate-json.jl
-../../run.jl parameters.json
-```
+To use this script, do the following:
+
+1. Copy this file into a new directory
+2. Modify the relative paths to `preamble.jl` and `model.jl` below
+3. Modify parameter values
+4. Run the script: `julia run.jl`, or directly as a shell script, `./run.jl`
 """
 
 using DelimitedFiles

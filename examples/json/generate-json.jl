@@ -13,12 +13,13 @@ For a single ad-hoc run, there's no particular reason to generate JSON; see
 To see this example expanded into a parameter sweep with multiple directories,
 see `examples/sweep`.
 
-To actually perform the run, you need to (1) run this script and then
-(2) run the provided `run.jl` file with the output:
+To use this script, you'll want to copy this file to a different directory,
+modify parameter settings, change the relative path to `preamble.jl` below,
+and then do:
 
 ```
 ./generate-json.jl
-../../run.jl parameters.json
+<path-to>/varmodel3/run.jl parameters.json
 ```
 """
 
