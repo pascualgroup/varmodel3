@@ -31,7 +31,7 @@ function run()
     
     # Run initial output
     stats = SummaryStats()
-    write_output(db, 0, s, stats)
+    write_output!(db, 0, s, stats)
     
     # Initialize event rates
     rates = [get_rate(t, s, event) for event in EVENTS]
@@ -47,7 +47,7 @@ function run()
         # and update the biting/immigration rate.
         # Loop required in case the simulation jumps past two integer times.
         while t_next_integer < t + dt
-            write_output(db, t_next_integer, s, stats)
+            write_output!(db, t_next_integer, s, stats)
             if P.verification_period != nothing && t_next_integer % P.verification_period == 0
                 verify(t_next_integer, s)
             end
@@ -250,7 +250,7 @@ function do_biting!(t, s, stats)
     
     # Compute probability of each transmission
     p_transmit = if P.coinfection_reduces_transmission
-        P.transmissibility / src_inf_count
+        P.transmissibility / src_active_count
     else
         P.transmissibility
     end

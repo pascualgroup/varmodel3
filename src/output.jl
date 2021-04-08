@@ -1,7 +1,32 @@
+"""
+This file defines types and functions for database output.
+
+Currently, it is shared across model variants, but in the future may need to be
+broken up to be variant-specific.
+
+The `write_output!()` function defined here calls three functions defined by the
+code for individual model variants:
+
+* `write_summary()`: writes out summary data
+* `write_host_samples()`: writes out sampled hosts and infections
+* `write_gene_strain_counts()`: writes out gene and strain counts
+
+There is a sophisticated Julia system called Tables.jl that would allow the code
+here to be less repetitive. With the goal of not introducing too many layers
+of abstraction, this code uses SQLite more directly; a future Julia-oriented
+maintainer may want to convert the code.
+"""
+
 using SQLite: DB, Stmt
 import SQLite.DBInterface.execute
 
-struct Database
+"""
+Database type encapsulating SQLite.DB and prepared insert statements for tables.
+
+Prepared insert statements are used for the sake of performance; they allow
+SQLite to avoid parsing and compiling the statements with every inserted row.
+"""
+struct VarModelDB
     db::DB
     meta::Stmt
     summary::Stmt
@@ -11,6 +36,9 @@ struct Database
     sampled_infection_genes::Stmt
 end
 
+"""
+Type encapsulating various summary statistics gathered between summary periods.
+"""
 @with_kw mutable struct SummaryStats
     start_datetime::DateTime
     n_events::Int = 0
@@ -21,10 +49,19 @@ end
     n_transmissions::Int = 0
 end
 
+"""
+SummaryStats constructor.
+"""
 function SummaryStats()
     SummaryStats(start_datetime = now())
 end
 
+"""
+Reset counts and time in a SummaryStats object.
+
+Called after summary statistics are written out in model variant-specific
+`write_summary()` function.
+"""
 function reset!(stats::SummaryStats, start_datetime)
     stats.start_datetime = start_datetime
     stats.n_bites = 0
@@ -34,10 +71,20 @@ function reset!(stats::SummaryStats, start_datetime)
     stats.n_transmissions = 0
 end
 
-function execute(db::Database, cmd)
+"""
+Pass commands issued to a `VarModelDB` on to the underlying `SQLite.DB`.
+"""
+function execute(db::VarModelDB, cmd)
     execute(db.db, cmd)
 end
 
+"""
+Initialize database.
+
+Note: if the number of columns in a table is modified, the corresponding
+`make_insert_statement()` call must be updated to match the number of columns.
+(This could be automated if it seems worth it.)
+"""
 function initialize_database()
     if isfile(P.output_db_filename)
         error("$(P.output_db_filename) already exists; delete first")
@@ -104,7 +151,7 @@ function initialize_database()
         );
     """)
     
-    Database(
+    VarModelDB(
         db,
         make_insert_statement(db, "meta", 2),
         make_insert_statement(db, "summary", 13),
@@ -115,6 +162,12 @@ function initialize_database()
     )
 end
 
+"""
+Construct an prepared insert statement for a particular table.
+
+The statement covers all columns in the table, and `n_columns` must match the
+actual number of columns in the table.
+"""
 function make_insert_statement(db, table_name, n_columns)
     qmarks = join(repeat(["?"], n_columns), ",")
     Stmt(
@@ -126,13 +179,19 @@ end
 
 ### GENERIC TOP-LEVEL OUTPUT FUNCTION ###
 
-function write_output(db, t, s, stats)
+"""
+Construct an prepared insert statement for a particular table.
+
+The statement covers all columns in the table, and `n_columns` must match the
+actual number of columns in the table.
+"""
+function write_output!(db, t, s, stats)
     if t % minimum(
         (P.summary_period, P.host_sampling_period, P.gene_strain_count_period,)
     ) == 0
         println("t = $(t)")
         
-#         println("write_output($(t))")
+#         println("write_output!($(t))")
         
         execute(db, "BEGIN TRANSACTION")
         

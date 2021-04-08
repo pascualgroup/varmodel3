@@ -1,5 +1,12 @@
 #!/usr/bin/env julia
 
+"""
+This script installs packages required by the model code.
+
+This process is not automatic. If the code is modified to require more
+packages, they need to be added manually here.
+"""
+
 import Pkg
 
 Pkg.add("StaticArrays")

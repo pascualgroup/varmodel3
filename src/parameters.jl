@@ -32,6 +32,22 @@ using StructTypes
     
     """
         How often to recompute upper bounds for rejection sampling.
+        
+        Currently, this is related only to immunity loss events.
+        At any time, there is an upper bound `n` on the number of immunities
+        possessed by any host in the system.
+        
+        For simplicity and memory savings, during immunity loss hosts are
+        sampled uniformly randomly. If the host has `m` immune memories, the
+        sampled host loses an immunity with probability `m / n`.
+        
+        Between recomputation periods, the upper bound will only grow.
+        Every `upper_bound_recomputation_period`, the upper bound is reset to
+        the exact value by scanning the number of immunities in each host.
+        
+        If the code is modified to allow for unlimited growth in the number of
+        infections, this logic will apply to infections as well.
+        
     """
     upper_bound_recomputation_period::Union{Int, Missing} = missing
     
