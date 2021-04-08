@@ -260,7 +260,7 @@ function do_biting!(t, s, stats)
     n_transmissions_max = min(src_active_count, dst_available_count)
     transmitted = false
     for i in 1:n_transmissions_max
-        if rand() < P.transmissibility
+        if rand() < p_transmit
             stats.n_transmissions += 1
             transmitted = true
             
