@@ -4,6 +4,14 @@ using Base.Filesystem
 using StructTypes
 
 """
+    Enum definition for the `model` parameter, described below.
+"""
+@enum Model begin
+    VAR_ONLY = 1
+    VAR_WITH_PARASITEMIA = 2
+end
+
+"""
     Parameters for a simulation.
     
     The `@with_kw` macro, provided by the `Parameters` package, generates a
@@ -21,14 +29,25 @@ using StructTypes
     rng_seed::Union{Int, Missing} = missing
     
     """
-        Whether or not to simulate using a discrete-time approximation.
-    """
-    use_discrete_time_approximation::Union{Bool, Missing} = missing
+        Which model to use.
+        
+        `VAR_ONLY` specifies the old model that does not include parasitemia, 
+        which is close to the one implemented in the `varmodel2` C++ project.
     
+        `VAR_WITH_PARASITEMIA` specifies the a model that combines the var-expression model
+        with a parasitemia model based on OpenMalaria.
+    
+        The models are different enough that they are implemented separately, in the
+        `var_only` and `var_with_parasitemia` directories, respectively.
+    
+        Both of these models have a number of switches to control behavior, as
+        described below.
+    
+        In order to use parameter values as JIT-compile-time constants, rather than
+        dynamically dispatching the appropriate version of the model, at compile
+        time a different set of source files is read (see `model.jl`).
     """
-        Timestep of discrete-time approximation.
-    """
-    dt::Union{Int, Missing} = missing
+    model::Union{Model, Missing} = missing
     
     """
         How often to recompute upper bounds for rejection sampling.
@@ -270,16 +289,10 @@ StructTypes.StructType(::Type{Params}) = StructTypes.Struct()
     
 """
 function validate(p::Params)
-    @assert p.use_discrete_time_approximation !== missing
-    if p.use_discrete_time_approximation
-        @assert p.dt !== missing
-        @assert p.dt == 1 # Code currently assumes this
-        @assert p.dt > 0
-        @assert p.t_year % p.dt == 0
-    else
-        @assert p.upper_bound_recomputation_period !== missing
-        @assert p.upper_bound_recomputation_period > 0
-    end
+    @assert p.model !== missing
+    
+    @assert p.upper_bound_recomputation_period !== missing
+    @assert p.upper_bound_recomputation_period > 0
     
     @assert p.output_db_filename !== missing
     @assert p.output_db_filename != ""

@@ -20,10 +20,9 @@ validate(P)
 include("output.jl")
 include("util.jl")
 
-# Load code for the model variant/implementation specified in the parameters
-if P.use_discrete_time_approximation
-    # Discrete-time code needs some updating to work again
-    @assert false
+# Load code for the model specified in the parameters
+if P.model == VAR_ONLY
+    include("var_only/model.jl")
 else
-    include("continuous/model.jl")
+    include("var_with_parasitemia/model.jl")
 end
