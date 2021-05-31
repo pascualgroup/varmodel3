@@ -8,6 +8,8 @@ integer types (which could be controlled by a switch in Params).
 Also contains `verify()`, which does some cursory checks on state consistency.
 """
 
+const PatientId = UInt8
+
 const HostId = UInt32
 const InfectionId = UInt32
 const AlleleId = UInt16
@@ -16,6 +18,28 @@ const ExpressionIndex = UInt8
 const ImmunityLevel = UInt8
 const Gene = SVector{P.n_loci, AlleleId}  # Immutable fixed-size vector
 const MGene = MVector{P.n_loci, AlleleId} # Mutable fixed-size vector
+
+"""
+Struct representing parasitemia samples from a patient.
+"""
+@with_kw struct Patient
+    "Patient ID (integer)"
+    id::PatientId
+    
+    "Patient ID in source data (original string value)"
+    source_id::String
+    
+    "Parasitemia by wave"
+    waves::Vector{Vector{Float64}}
+end
+
+function wave_count(x::Patient)
+    length(x.waves)
+end
+
+function wave_length(x::Patient, wave_index)
+    length(x.waves[wave_index])
+end
 
 """
 Struct representing infections.
@@ -27,9 +51,6 @@ matrix of allele IDs), and the currently expressed index.
 @with_kw mutable struct Infection
     "Infection identifier, unique across all hosts."
     id::InfectionId
-    
-    "Time at which infection occurred (entered the liver stage)."
-    t_infection::Float64
     
     """
     Strain identifier, unique across the simulation.
@@ -50,6 +71,20 @@ matrix of allele IDs), and the currently expressed index.
     strains by their genes, you have to actually compare the genes.
     """
     strain_id::StrainId
+    
+    """
+    Patient ID for parasitemia curve.
+    """
+#     patient_id::PatientId
+    
+    "Time at which infection occurred (entered the liver stage)."
+    t_infection::Float64
+    
+    
+    """
+    Start time of each wave of expression, for 
+    """
+#     t_expression_start::Union{MVector{P.n_waves, Float64}, Nothing}
     
     """
     Genes, specified as an (n_loci, n_genes_per_strain) matrix of `AlleleId`s.
@@ -79,6 +114,9 @@ Infection arrays are dynamically sized but currently limited to
 @with_kw mutable struct Host
     "Host identifier, unique across the simulation."
     id::HostId
+    
+    "Simulation time of within-host model"
+#     t::Float64
     
     "Birth time of host."
     t_birth::Float64
@@ -121,6 +159,11 @@ management auxiliaries.
     Dimensions: (n_loci, n_genes_initial)
     """
     gene_pool::Array{AlleleId, 2}
+    
+    """
+    Array of patients' parasitemia curves.
+    """
+    patients::Vector{Patient}
     
     """
     Array of hosts.

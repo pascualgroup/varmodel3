@@ -27,7 +27,7 @@ const P = let
     daily_biting_rate_multiplier = readdlm("../mosquito_population.txt", Float64)[:,1]
 
     Params(
-        model = VAR_WITH_PARASITEMIA,
+        model = VAR_ONLY,
         
         upper_bound_recomputation_period = 30,
 

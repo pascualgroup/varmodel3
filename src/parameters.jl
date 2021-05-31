@@ -71,6 +71,14 @@ end
     upper_bound_recomputation_period::Union{Int, Missing} = missing
     
     """
+        Filename for parasitemia patient data.
+        
+        Relative to working directory. Therefore, absolute path is recommended
+        for sweeps.
+    """
+    patient_data_filename::Union{String, Missing} = missing
+    
+    """
         Filename for output database.
         
         Relative to working directory.

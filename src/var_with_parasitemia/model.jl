@@ -1,9 +1,9 @@
 include("state.jl")
 include("output.jl")
 
-const N_EVENTS = 6
+const N_EVENTS = 5
 const EVENTS = collect(1:N_EVENTS)
-const (BITING, IMMIGRATION, SWITCHING, MUTATION, ECTOPIC_RECOMBINATION, IMMUNITY_LOSS) = EVENTS
+const (BITING, IMMIGRATION, MUTATION, ECTOPIC_RECOMBINATION, IMMUNITY_LOSS) = EVENTS
 
 function run()
     db = initialize_database()
@@ -99,6 +99,9 @@ function initialize_state()
         (P.n_loci, P.n_genes_initial)
     )
     
+    # Initialize patients from source CSV
+    patients = load_patients(P.patient_data_filename)
+    
     # Initialize n_hosts hosts, all born at t = 0, with lifetime drawn from a
     # distribution, and no initial infections or immunity.
     hosts = [
@@ -126,6 +129,7 @@ function initialize_state()
     
     State(
         n_alleles = fill(P.n_alleles_per_locus_initial, P.n_loci),
+        patients = patients,
         gene_pool = gene_pool,
         next_host_id = P.n_hosts + 1,
         next_strain_id = P.n_initial_infections + 1,
@@ -134,6 +138,68 @@ function initialize_state()
         old_infections = [],
         n_immunities_per_host_max = 0
     )
+end
+
+function load_patients(filename)
+    source_ids = Vector{String}()
+    id_map = Dict{String, Int}()
+    
+    waves_by_patient = Vector{Vector{Vector{Float64}}}()
+    
+    rows = readdlm(filename, ','; skipstart = 1)
+    last_id = 0
+    last_day = 0
+    for i in 1:size(rows)[1]
+        (source_id, day, parasitemia, wave_id_raw) = rows[i,:]
+#         @show source_id, day, parasitemia, wave_id_raw
+        # Get sequential integer patient ID, creating new one if necessary
+        patient_id = if haskey(id_map, source_id)
+            id_map[source_id]
+        else
+            id = length(source_ids) + 1
+            push!(source_ids, source_id)
+            id_map[source_id] = id
+            push!(waves_by_patient, Vector{Vector{Float64}}())
+            id
+        end
+        
+        if patient_id != last_id
+            last_id = patient_id
+            last_day = 0
+        end
+        
+        # Ensure that we're reading in sequential days
+        @assert day == last_day + 1
+        last_day = day
+        
+        # Identify wave, creating longer vectors as necessary
+        patient_waves = waves_by_patient[patient_id]
+        wave_id = if wave_id_raw == 0
+            wave_id = length(patient_waves)
+            @assert wave_id > 0
+            wave_id
+        else
+            wave_id_raw
+        end
+        if wave_id > length(patient_waves)
+            @assert wave_id == length(patient_waves) + 1
+            push!(patient_waves, Vector{Float64}())
+        end
+        
+        # Append parasitemia to vector for identified wave
+        push!(patient_waves[wave_id], parasitemia)
+    end
+    
+    patients = Vector{Patient}()
+    for id in 1:length(waves_by_patient)
+        push!(patients, Patient(
+            id = id,
+            source_id = source_ids[id],
+            waves = waves_by_patient[id]
+        ))
+    end
+    
+    patients
 end
 
 """
@@ -185,8 +251,6 @@ function get_rate(t, s, event)
         get_rate_biting(t, s)
     elseif event == IMMIGRATION
         get_rate_immigration(t, s)
-    elseif event == SWITCHING
-        get_rate_switching(t, s)
     elseif event == MUTATION
         get_rate_mutation(t, s)
     elseif event == ECTOPIC_RECOMBINATION
@@ -201,8 +265,6 @@ function do_event!(t, s, stats, event)
         do_biting!(t, s, stats)
     elseif event == IMMIGRATION
         do_immigration!(t, s, stats)
-    elseif event == SWITCHING
-        do_switching!(t, s, stats)
     elseif event == MUTATION
         do_mutation!(t, s, stats)
     elseif event == ECTOPIC_RECOMBINATION
@@ -377,45 +439,45 @@ end
 
 ### SWITCHING EVENT ###
 
-function get_rate_switching(t, s)
-    P.switching_rate * P.n_hosts * P.n_infections_active_max
-end
-
-function do_switching!(t, s, stats)
-    index = rand(CartesianIndices((P.n_hosts, P.n_infections_active_max)))
-    host = s.hosts[index[1]]
-    inf_index = index[2]
-    
-    # Advance host (rebirth or infection activation)
-    advance_host!(t, s, host)
-    
-    # If the infection index is out of range, this is a rejected sample.
-    # Otherwise we'll proceeed.
-    if inf_index > length(host.active_infections)
-        return false
-    end
-    infection = host.active_infections[inf_index]
-    
-    # Advance expression until a non-immune gene is reached
-    while true
-        # Increment immunity level to currently expressed gene
-        increment_immunity!(s, host, infection.genes[:, infection.expression_index])
-        
-        # If we're at the end, clear the infection and return
-        if infection.expression_index == P.n_genes_per_strain
-            delete_and_swap_with_end!(host.active_infections, inf_index)
-            return true
-        end
-        
-        # Otherwise, advance expression
-        infection.expression_index += 1
-        
-        # If the host not immune, stop advancing
-        if !is_immune(host, infection.genes[:, infection.expression_index])
-            return true
-        end
-    end
-end
+# function get_rate_switching(t, s)
+#     P.switching_rate * P.n_hosts * P.n_infections_active_max
+# end
+# 
+# function do_switching!(t, s, stats)
+#     index = rand(CartesianIndices((P.n_hosts, P.n_infections_active_max)))
+#     host = s.hosts[index[1]]
+#     inf_index = index[2]
+#     
+#     # Advance host (rebirth or infection activation)
+#     advance_host!(t, s, host)
+#     
+#     # If the infection index is out of range, this is a rejected sample.
+#     # Otherwise we'll proceeed.
+#     if inf_index > length(host.active_infections)
+#         return false
+#     end
+#     infection = host.active_infections[inf_index]
+#     
+#     # Advance expression until a non-immune gene is reached
+#     while true
+#         # Increment immunity level to currently expressed gene
+#         increment_immunity!(s, host, infection.genes[:, infection.expression_index])
+#         
+#         # If we're at the end, clear the infection and return
+#         if infection.expression_index == P.n_genes_per_strain
+#             delete_and_swap_with_end!(host.active_infections, inf_index)
+#             return true
+#         end
+#         
+#         # Otherwise, advance expression
+#         infection.expression_index += 1
+#         
+#         # If the host not immune, stop advancing
+#         if !is_immune(host, infection.genes[:, infection.expression_index])
+#             return true
+#         end
+#     end
+# end
 
 
 ### MUTATION EVENT ###
