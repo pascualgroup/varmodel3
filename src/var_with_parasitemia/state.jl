@@ -86,7 +86,10 @@ matrix of allele IDs), and the currently expressed index.
     patient_index::PatientIndex
     
     "Time at which infection occurred (entered the liver stage)."
-    t_start::Float64    
+    t_start::Float64
+    
+    "Time of infection's last event"
+    t::Float64
     
     """
     Genes, specified as an (n_loci, n_genes_per_strain) matrix of `AlleleId`s.

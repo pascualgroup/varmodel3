@@ -120,6 +120,7 @@ function initialize_state()
         infection.id = infection_id
         infection.patient_index = rand(1:length(patients))
         infection.t_start = 0.0
+        infection.t = 0.0
         infection.strain_id = infection_id
         infection.genes[:,:] = reshape(
             gene_pool[:, rand(1:P.n_genes_initial, P.n_genes_per_strain)],
@@ -211,6 +212,7 @@ function create_empty_infection()
         id = 0,
         patient_index = 0,
         t_start = NaN,
+        t = NaN,
         strain_id = StrainId(0),
         genes = fill(AlleleId(0), (P.n_loci, P.n_genes_per_strain)),
         wave_index = WaveIndex(0),
@@ -327,6 +329,7 @@ function do_biting!(t, s, stats)
             dst_inf.id = next_infection_id!(s)
             dst_inf.patient_index = rand(1:length(s.patients))
             dst_inf.t_start = t
+            dst_inf.t = t
             dst_inf.wave_index = 0
             
             # Construct strain for new infection
@@ -392,27 +395,35 @@ function advance_host!(t, s, host)
         # If the host is dead, turn it into a naive newly born host
         do_rebirth!(t, s, host)
     else
-        # If the host is not dead, advance the next infection that needs
+        # If the host is not dead, advance the next infection that needs advancing
         # advancing
-#         while true
-#             t_next, index_next = next_infection_to_advance(s, host)
-#             if t_next <= t
-#                 advance_infection!(s, host, index_next)
-#             else
-#                 break
-#             end
-#         end
+        while true
+            t_next_liver, index_next_liver = next_liver_infection_to_activate(s, host)
+            t_next_active, index_next_active = next_active_infection_to_advance(s, host)
+            
+            if t_next_liver > t && t_next_active > t
+                break
+            end
+            
+            if t_next_liver < t_next_active
+                if t_next_liver <= t
+                    activate_liver_infection!(s, host, index_next_liver)
+                end
+            elseif t_next_active <= t
+                advance_active_infection!(s, host, index_next_active)
+            end
+        end
     end
 end
 
-function next_infection_to_advance(s, host)
+function next_liver_infection_to_activate(s, host)
     t_next = Inf
     index_next = 0
     
-    for (index, infection) in enumerate(host.infections)
-        t_infection = next_event_time(s, host, infection)
-        if t_infection < t_next
-            t_next = t_infection
+    for (index, infection) in enumerate(host.liver_infections)
+        t_activation = infection.t_start + P.t_liver_stage
+        if t_activation < t_next
+            t_next = t_activation
             index_next = index
         end
     end
@@ -420,37 +431,76 @@ function next_infection_to_advance(s, host)
     (t_next, index_next)
 end
 
-function next_event_time(s, host, infection)
-    if infection.wave_index == 0
-        infection.t_start + P.t_liver_stage
+function next_active_infection_to_advance(s, host)
+    t_next = Inf
+    index_next = 0
+    
+    for (index, infection) in enumerate(host.active_infections)
+        t_advance = next_advance_time(s, host, infection)
+        if t_advance < t_next
+            t_next = t_advance
+            index_next = index
+        end
+    end
+    
+    (t_next, index_next)
+end
+
+function next_advance_time(s, host, infection)
+    wave = get_wave(s, infection)
+    
+    if wave.is_gap
+        # Skip over a whole gap (no relevant changes)
+        infection.t + length(wave.parasitemia)
     else
-        infection.t + 1.0 # Advance the parasitemia curve by a single day
+        # Advance waves one day at a time
+        infection.t + 1.0
     end
 end
 
-function advance_infection!(s, host, index)
-    infection = host.infections[index]
-    if infection.wave_index == 0
-        # Activate liver-stage infection
-        println("t = $(infection.t + P.t_liver): activating host $(host.id), inf $(infection.id)")
+function activate_liver_infection!(s, host, index)
+    infection = host.liver_infections[index]
+    delete_and_swap_with_end!(host.liver_infections, index)
+    
+    if length(host.active_infections) < P.n_infections_active_max
+        infection.wave_index = 1
+        infection.wave_day = 1
+        infection.expression_indices = next_non_immune_gene_indices(host, infection, 1)
         
-        if host.n_active < P.n_infections_active_max
-            infection.wave_index = 1
-            host.n_liver -= 1
-            host.n_active += 1
-            infection.t += P.t_liver
-        else
-            delete_and_swap_with_end!(host.infections, index)
-            host.n_liver -= 1
+        if infection.expression_indices[1] == 0
+            # If the first expression index is 0, then we're out of genes the host
+            # is not immune to and we should therefore clear the infection.
+            # TODO: handle situation where specific immunity is off.
             push!(s.old_infections, infection)
+        else
+            infection.t += P.t_liver_stage
+            push!(host.active_infections, infection)
         end
     else
-        println("t = $(infection.t + P.t_liver): activating host $(host.id), inf $(infection.id)")
-        
-        # Advance active infection by one day
-#         if infection.wave_day 
-        
+        push!(s.old_infections, infection)
+    end
+end
+
+function advance_active_infection!(s, host, index)
+    infection = host.active_infections[index]
+    patient = get_patient(s, infection)
+    wave = patient.waves[infection.wave_index]
+    
+    if wave.is_gap
+        infection.t += length(wave.parasitemia)
+    else
         infection.t += 1.0
+    end
+    
+    if wave.is_gap || infection.wave_day == length(wave.parasitemia)
+        if infection.wave_index == length(patient.waves)
+            # Clear infection if this is the last wave
+            delete_and_swap_with_end!(host.active_infections, index)
+            push!(s.old_infections, infection)
+        else
+            infection.wave_index += 1
+            infection.wave_day = 1
+        end
     end
 end
 
@@ -487,6 +537,7 @@ function do_immigration!(t, s, stats)
     infection.id = next_infection_id!(s)
     infection.patient_index = rand(1:length(s.patients))
     infection.t_start = t
+    infection.t = t
     infection.strain_id = next_strain_id!(s)
     infection.wave_index = 0
     for i in 1:P.n_genes_per_strain
@@ -755,7 +806,30 @@ function decrement_immunity!(host, gene)
     end
 end
 
+function next_non_immune_gene_indices(host, infection, start_index)
+    indices = zeros(MVector{P.n_genes_per_wave, ExpressionIndex})
+    i = 1
+    gene_index = start_index
+    while gene_index <= P.n_genes_per_strain && i <= P.n_genes_per_wave
+        if !is_immune(host, infection.genes[:,gene_index])
+            indices[i] = gene_index
+            i += 1
+        end
+        gene_index += 1
+    end
+    
+    indices
+end
+
 function is_immune(host, gene)
     get(host.immunity, gene, 0) > 0
+end
+
+function get_patient(s, infection)
+    s.patients[infection.patient_index]
+end
+
+function get_wave(s, infection)
+    get_patient(s, infection).waves[infection.wave_index]
 end
 
