@@ -71,14 +71,6 @@ end
     upper_bound_recomputation_period::Union{Int, Missing} = missing
     
     """
-        Filename for parasitemia patient data.
-        
-        Relative to working directory. Therefore, absolute path is recommended
-        for sweeps.
-    """
-    patient_data_filename::Union{String, Missing} = missing
-    
-    """
         Filename for output database.
         
         Relative to working directory.
@@ -194,6 +186,7 @@ end
     
     """
         Whether or not transmissibility is reduced with coinfection.
+        Only used for model `VAR_ONLY`.
         
         If `true`, transmissibility is inversely proportional to the number
         of infections in the source host.
@@ -285,6 +278,48 @@ end
         dropped if there are already `n_infections_active_max` infections.
     """
     n_infections_active_max::Union{Int, Missing} = missing
+    
+    
+    ### PARAMETERS USED ONLY BY MODEL VAR_WITH_PARASITEMIA
+    
+    """
+        Filename for parasitemia patient data.
+        
+        Relative to working directory. Therefore, absolute path is recommended
+        for sweeps.
+    """
+    patient_data_filename::Union{String, Missing} = missing
+    
+    """
+        Whether to enable specific immunity.
+        
+        At least one of `enable_specific_immunity` or `enable_general_immunity`
+        must be `true`.
+        
+        If specific immunity is enabled, then waves of parasitemia correspond
+        to the expression of var genes that the host is not yet immune to.
+        After expression, the host gains immunity.
+        If there are waves of parasitemia left but no non-immune genes, then
+        the waves will be cut short.
+    """
+    enable_specific_immunity::Union{Bool, Missing} = missing
+    
+    """
+        Whether to enable general immunity.
+        
+        At least one of `enable_specific_immunity` or `enable_general_immunity`
+        must be `true`.
+        
+        If general immunity is enabled, then hosts acquire general immunity over
+        time. This has the effect of modifying the parasitemia of infections,
+        which affects infection probability (and detection/inferred morbidity).
+    """
+    enable_general_immunity::Union{Bool, Missing} = missing
+    
+    """
+        Number of genes expressed per wave.
+    """
+    n_genes_per_wave::Union{Int, Missing} = missing
 end
 
 """

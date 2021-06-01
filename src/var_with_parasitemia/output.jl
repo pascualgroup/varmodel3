@@ -88,10 +88,21 @@ function write_infection(db, t, host, infection)
     execute(
         db.sampled_infections,
         (
-            t, Int64(host.id), Int64(infection.id), infection.t_infection, Int64(infection.strain_id),
-            infection.expression_index == 0 ? missing : Int64(infection.expression_index)
+            t, Int64(host.id), Int64(infection.id), infection.t_start, Int64(infection.strain_id),
+            missing # For this version of model, expression goes in sampled_infection_expression table
         )
     )
+    
+    for i in 1:P.n_genes_per_wave
+        if infection.expression_indices[i] == 0
+            break
+        end
+        execute(
+            db.sampled_infection_expression,
+            (t, Int64(infection.id), infection.expression_indices[i])
+        )
+    end
+    
     for i in 1:P.n_genes_per_strain
         execute(db.sampled_infection_genes, vcat([infection.id, i], infection.genes[:,i]))
     end

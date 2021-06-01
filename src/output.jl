@@ -33,6 +33,7 @@ struct VarModelDB
     gene_strain_counts::Stmt
     sampled_hosts::Stmt
     sampled_infections::Stmt
+    sampled_infection_expression::Stmt
     sampled_infection_genes::Stmt
 end
 
@@ -142,6 +143,14 @@ function initialize_database()
         );
     """)
     
+    execute(db, """
+        CREATE TABLE sampled_infection_expression (
+            time INTEGER,
+            infection_id INTEGER,
+            expression_index INTEGER
+        );
+    """)
+    
     allele_columns = join(["allele_id_$(i) INTEGER" for i in 1:P.n_loci], ", ")
     execute(db, """
         CREATE TABLE sampled_infection_genes(
@@ -158,6 +167,7 @@ function initialize_database()
         make_insert_statement(db, "gene_strain_counts", 3),
         make_insert_statement(db, "sampled_hosts", 4),
         make_insert_statement(db, "sampled_infections", 6),
+        make_insert_statement(db, "sampled_infection_expression", 3),
         make_insert_statement(db, "sampled_infection_genes", 2 + P.n_loci)
     )
 end

@@ -18,13 +18,13 @@ To use this script, do the following:
 using DelimitedFiles
 
 # Load packages and definition of Params struct
-include("../../preamble.jl")
+include("../../../preamble.jl")
 
 # Define the parameters variable P, which exposes parameters to be used as
 # compile-time constants when loading the model code below.
 const P = let
     t_year = 360
-    daily_biting_rate_multiplier = readdlm("../mosquito_population.txt", Float64)[:,1]
+    daily_biting_rate_multiplier = readdlm("../../mosquito_population.txt", Float64)[:,1]
 
     Params(
         model = VAR_WITH_PARASITEMIA,
@@ -32,7 +32,6 @@ const P = let
         upper_bound_recomputation_period = 30,
 
         output_db_filename = "output.sqlite",
-        patient_data_filename = "../../../2021-05-26-data/VarModel_Parasitemia_Input.csv",
 
         summary_period = 30,
         gene_strain_count_period = 360,
@@ -61,7 +60,7 @@ const P = let
         coinfection_reduces_transmission = true,
 
         ectopic_recombination_rate = 1.8e-7,
-
+        
         immunity_level_max = 100,
         immunity_loss_rate = 0.001,
 
@@ -80,10 +79,15 @@ const P = let
         n_infections_active_max = 10,
 
         biting_rate = 0.0005 * daily_biting_rate_multiplier,
+        
+        ### VAR_WITH_PARASITEMIA-only parameters
+        
+        patient_data_filename = "../../../../2021-05-26-data/VarModel_Parasitemia_Input.csv",
+        n_genes_per_wave = 1
     )
 end
 
 # Load and run the model code, which can now be compiled with reference to
 # parameters constant P.
-include("../../src/model.jl")
+include("../../../src/model.jl")
 run()

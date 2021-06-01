@@ -118,7 +118,8 @@ function initialize_state()
     for (infection_id, host_index) in enumerate(sample(1:P.n_hosts, P.n_initial_infections, replace = false))
         infection = create_empty_infection()
         infection.id = infection_id
-        infection.t_infection = 0.0
+        infection.patient_index = rand(1:length(patients))
+        infection.t_start = 0.0
         infection.strain_id = infection_id
         infection.genes[:,:] = reshape(
             gene_pool[:, rand(1:P.n_genes_initial, P.n_genes_per_strain)],
@@ -141,62 +142,49 @@ function initialize_state()
 end
 
 function load_patients(filename)
-    source_ids = Vector{String}()
-    id_map = Dict{String, Int}()
-    
-    waves_by_patient = Vector{Vector{Vector{Float64}}}()
+    patients = Vector{Patient}()
     
     rows = readdlm(filename, ','; skipstart = 1)
-    last_id = 0
-    last_day = 0
-    for i in 1:size(rows)[1]
-        (source_id, day, parasitemia, wave_id_raw) = rows[i,:]
-#         @show source_id, day, parasitemia, wave_id_raw
-        # Get sequential integer patient ID, creating new one if necessary
-        patient_id = if haskey(id_map, source_id)
-            id_map[source_id]
-        else
-            id = length(source_ids) + 1
-            push!(source_ids, source_id)
-            id_map[source_id] = id
-            push!(waves_by_patient, Vector{Vector{Float64}}())
-            id
-        end
-        
-        if patient_id != last_id
-            last_id = patient_id
-            last_day = 0
-        end
-        
-        # Ensure that we're reading in sequential days
-        @assert day == last_day + 1
-        last_day = day
-        
-        # Identify wave, creating longer vectors as necessary
-        patient_waves = waves_by_patient[patient_id]
-        wave_id = if wave_id_raw == 0
-            wave_id = length(patient_waves)
-            @assert wave_id > 0
-            wave_id
-        else
-            wave_id_raw
-        end
-        if wave_id > length(patient_waves)
-            @assert wave_id == length(patient_waves) + 1
-            push!(patient_waves, Vector{Float64}())
-        end
-        
-        # Append parasitemia to vector for identified wave
-        push!(patient_waves[wave_id], parasitemia)
-    end
     
-    patients = Vector{Patient}()
-    for id in 1:length(waves_by_patient)
-        push!(patients, Patient(
-            id = id,
-            source_id = source_ids[id],
-            waves = waves_by_patient[id]
-        ))
+    last_patient_id = nothing
+    last_wave_id = nothing
+    last_day = nothing
+    patient = nothing
+    wave = nothing
+    for i in 1:size(rows)[1]
+        (patient_id, day, parasitemia, wave_id) = rows[i,:]
+        @show patient_id, day, parasitemia, wave_id
+        
+        if patient_id == last_patient_id
+            @assert day == last_day + 1
+        end
+        
+        # If this is a new source ID, we've moved on to a different patient
+        if patient_id != last_patient_id
+            @assert wave_id == 1
+            last_wave_id = 1
+            
+            @assert day == 1
+            
+            patient = Patient(source_id = patient_id, waves = Vector{Wave}())
+            push!(patients, patient)
+        end
+        
+        # If this is a new patient ID or wave ID, we've moved onto a new wave
+        if patient_id != last_patient_id || wave_id != last_wave_id
+            wave = Wave(
+                source_id = wave_id,
+                is_gap = (wave_id == 0), parasitemia = Vector{Float64}()
+            )
+            push!(patient.waves, wave)
+        end
+        
+        # Append parasitemia to wave parasitemia vector
+        push!(wave.parasitemia, parasitemia)
+        
+        last_day = day
+        last_patient_id = patient_id
+        last_wave_id = wave_id
     end
     
     patients
@@ -221,10 +209,13 @@ end
 function create_empty_infection()
     Infection(
         id = 0,
-        t_infection = NaN,
+        patient_index = 0,
+        t_start = NaN,
         strain_id = StrainId(0),
         genes = fill(AlleleId(0), (P.n_loci, P.n_genes_per_strain)),
-        expression_index = ExpressionIndex(0)
+        wave_index = WaveIndex(0),
+        expression_indices = fill(0, P.n_genes_per_wave),
+        wave_day = 0
     )
 end
 
@@ -334,8 +325,9 @@ function do_biting!(t, s, stats)
             # to prevent excess memory allocation.
             dst_inf = recycle_or_create_infection(s)
             dst_inf.id = next_infection_id!(s)
-            dst_inf.t_infection = t
-            dst_inf.expression_index = 0
+            dst_inf.patient_index = rand(1:length(s.patients))
+            dst_inf.t_start = t
+            dst_inf.wave_index = 0
             
             # Construct strain for new infection
             if src_inf_1.strain_id == src_inf_2.strain_id
@@ -363,33 +355,103 @@ function do_biting!(t, s, stats)
     end
 end
 
+# function advance_host!(t, s, host)
+#     if t > host.t_death
+#         # If the host is past its death time
+#         do_rebirth!(t, s, host)
+#     else
+#         i = 1
+#         while i <= length(host.liver_infections)
+#             infection = host.liver_infections[i]
+#             if infection.t_infection + P.t_liver_stage < t
+# #                 println("t = $(t): activating host $(host.id), inf $(infection.id)")
+#                 
+#                 # If the infection is past the liver stage, remove it from the liver.
+#                 delete_and_swap_with_end!(host.liver_infections, i)
+#                 # If there's room, move it into the active infections array.
+#                 # Otherwise, just put it into the recycle bin.
+#                 if length(host.active_infections) < P.n_infections_active_max
+#                     infection.expression_index = 1
+#                     push!(host.active_infections, infection)
+#                 else
+#                     push!(s.old_infections, infection)
+#                 end
+#             else
+#                 i += 1
+#             end
+#         end
+#     end
+#     nothing
+# end
+
+
+### ADVANCE HOST (WITHIN-HOST DYNAMICS) ###
+
 function advance_host!(t, s, host)
     if t > host.t_death
-        # If the host is past its death time
+        # If the host is dead, turn it into a naive newly born host
         do_rebirth!(t, s, host)
     else
-        i = 1
-        while i <= length(host.liver_infections)
-            infection = host.liver_infections[i]
-            if infection.t_infection + P.t_liver_stage < t
-#                 println("t = $(t): activating host $(host.id), inf $(infection.id)")
-                
-                # If the infection is past the liver stage, remove it from the liver.
-                delete_and_swap_with_end!(host.liver_infections, i)
-                # If there's room, move it into the active infections array.
-                # Otherwise, just put it into the recycle bin.
-                if length(host.active_infections) < P.n_infections_active_max
-                    infection.expression_index = 1
-                    push!(host.active_infections, infection)
-                else
-                    push!(s.old_infections, infection)
-                end
-            else
-                i += 1
-            end
+        # If the host is not dead, advance the next infection that needs
+        # advancing
+#         while true
+#             t_next, index_next = next_infection_to_advance(s, host)
+#             if t_next <= t
+#                 advance_infection!(s, host, index_next)
+#             else
+#                 break
+#             end
+#         end
+    end
+end
+
+function next_infection_to_advance(s, host)
+    t_next = Inf
+    index_next = 0
+    
+    for (index, infection) in enumerate(host.infections)
+        t_infection = next_event_time(s, host, infection)
+        if t_infection < t_next
+            t_next = t_infection
+            index_next = index
         end
     end
-    nothing
+    
+    (t_next, index_next)
+end
+
+function next_event_time(s, host, infection)
+    if infection.wave_index == 0
+        infection.t_start + P.t_liver_stage
+    else
+        infection.t + 1.0 # Advance the parasitemia curve by a single day
+    end
+end
+
+function advance_infection!(s, host, index)
+    infection = host.infections[index]
+    if infection.wave_index == 0
+        # Activate liver-stage infection
+        println("t = $(infection.t + P.t_liver): activating host $(host.id), inf $(infection.id)")
+        
+        if host.n_active < P.n_infections_active_max
+            infection.wave_index = 1
+            host.n_liver -= 1
+            host.n_active += 1
+            infection.t += P.t_liver
+        else
+            delete_and_swap_with_end!(host.infections, index)
+            host.n_liver -= 1
+            push!(s.old_infections, infection)
+        end
+    else
+        println("t = $(infection.t + P.t_liver): activating host $(host.id), inf $(infection.id)")
+        
+        # Advance active infection by one day
+#         if infection.wave_day 
+        
+        infection.t += 1.0
+    end
 end
 
 function do_rebirth!(t, s, host)
@@ -423,9 +485,10 @@ function do_immigration!(t, s, stats)
     # Construct infection by sampling from gene pool
     infection = recycle_or_create_infection(s)
     infection.id = next_infection_id!(s)
-    infection.t_infection = t
+    infection.patient_index = rand(1:length(s.patients))
+    infection.t_start = t
     infection.strain_id = next_strain_id!(s)
-    infection.expression_index = 0
+    infection.wave_index = 0
     for i in 1:P.n_genes_per_strain
         infection.genes[:,i] = s.gene_pool[:, rand(1:size(s.gene_pool)[2])]
     end
@@ -490,7 +553,7 @@ function do_mutation!(t, s, stats)
     index = rand(CartesianIndices((P.n_hosts, P.n_infections_active_max, P.n_genes_per_strain, P.n_loci)))
     host = s.hosts[index[1]]
     inf_index = index[2]
-    expression_index = index[3]
+    wave_index = index[3]
     locus = index[4]
     
     # Advance host (rebirth or infection activation)
@@ -510,9 +573,11 @@ function do_mutation!(t, s, stats)
     @assert s.n_alleles[locus] < typemax(AlleleId)
     
     # Generate a new allele and insert it at the drawn location.
-    s.n_alleles[locus] += 1
-    infection.genes[locus, expression_index] = s.n_alleles[locus]
-    infection.strain_id = next_strain_id!(s)
+#     s.n_alleles[locus] += 1
+#     infection.genes[locus, wave_index] = s.n_alleles[locus]
+#     infection.strain_id = next_strain_id!(s)
+    
+    # TODO: rewrite this to handle multiple simultaneous expression
     
     true
 end

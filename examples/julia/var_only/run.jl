@@ -18,13 +18,13 @@ To use this script, do the following:
 using DelimitedFiles
 
 # Load packages and definition of Params struct
-include("../../preamble.jl")
+include("../../../../preamble.jl")
 
 # Define the parameters variable P, which exposes parameters to be used as
 # compile-time constants when loading the model code below.
 const P = let
     t_year = 360
-    daily_biting_rate_multiplier = readdlm("../mosquito_population.txt", Float64)[:,1]
+    daily_biting_rate_multiplier = readdlm("../../mosquito_population.txt", Float64)[:,1]
 
     Params(
         model = VAR_ONLY,
@@ -84,5 +84,5 @@ end
 
 # Load and run the model code, which can now be compiled with reference to
 # parameters constant P.
-include("../../src/model.jl")
+include("../../../src/model.jl")
 run()
