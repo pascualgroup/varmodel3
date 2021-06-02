@@ -57,7 +57,13 @@ function write_host_samples(db, t, s)
     
     # For each host, write out birth/death time and each infection.
     for host in hosts
-        execute(db.sampled_hosts, (t, Int64(host.id), host.t_birth, host.t_death))
+        execute(
+            db.sampled_hosts,
+            (
+                t, Int64(host.id), host.t_birth, host.t_death,
+                length(host.liver_infections), length(host.active_infections)
+            )
+        )
         
         for infection in host.liver_infections
             write_infection(db, t, host, infection)

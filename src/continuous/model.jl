@@ -84,6 +84,7 @@ end
 
 function recompute_rejection_upper_bounds!(s)
     s.n_immunities_per_host_max = maximum(length(host.immunity) for host in s.hosts)
+    s.n_active_infections_per_host_max = maximum(length(host.active_infections) for host in s.hosts)
 end
 
 
@@ -132,7 +133,8 @@ function initialize_state()
         next_infection_id = P.n_initial_infections + 1,
         hosts = hosts,
         old_infections = [],
-        n_immunities_per_host_max = 0
+        n_immunities_per_host_max = 0,
+        n_active_infections_per_host_max = 0
     )
 end
 
@@ -242,7 +244,11 @@ function do_biting!(t, s, stats)
     stats.n_infected_bites += 1
     
     # The destination host must have space available in the liver stage.
-    dst_available_count = P.n_infections_liver_max - length(dst_host.liver_infections)
+    dst_available_count = if P.n_infections_liver_max === missing
+        src_active_count
+    else
+        P.n_infections_liver_max - length(dst_host.liver_infections)
+    end
     if dst_available_count == 0
         return false
     end
@@ -316,9 +322,13 @@ function advance_host!(t, s, host)
                 delete_and_swap_with_end!(host.liver_infections, i)
                 # If there's room, move it into the active infections array.
                 # Otherwise, just put it into the recycle bin.
-                if length(host.active_infections) < P.n_infections_active_max
+                if P.n_infections_active_max === missing || length(host.active_infections) < P.n_infections_active_max
                     infection.expression_index = 1
                     push!(host.active_infections, infection)
+                    
+                    if length(host.active_infections) > s.n_active_infections_per_host_max
+                        s.n_active_infections_per_host_max = length(host.active_infections)
+                    end
                 else
                     push!(s.old_infections, infection)
                 end
@@ -354,8 +364,10 @@ function do_immigration!(t, s, stats)
     advance_host!(t, s, host)
     
     # If host doesn't have an available infection slot, reject this sample.
-    if length(host.liver_infections) == P.n_infections_liver_max
-        return false
+    if P.n_infections_liver_max !== missing
+        if length(host.liver_infections) == P.n_infections_liver_max
+            return false
+        end
     end
     
     # Construct infection by sampling from gene pool
@@ -378,11 +390,11 @@ end
 ### SWITCHING EVENT ###
 
 function get_rate_switching(t, s)
-    P.switching_rate * P.n_hosts * P.n_infections_active_max
+    P.switching_rate * P.n_hosts * s.n_active_infections_per_host_max
 end
 
 function do_switching!(t, s, stats)
-    index = rand(CartesianIndices((P.n_hosts, P.n_infections_active_max)))
+    index = rand(CartesianIndices((P.n_hosts, s.n_active_infections_per_host_max)))
     host = s.hosts[index[1]]
     inf_index = index[2]
     
@@ -390,7 +402,7 @@ function do_switching!(t, s, stats)
     advance_host!(t, s, host)
     
     # If the infection index is out of range, this is a rejected sample.
-    # Otherwise we'll proceeed.
+    # Otherwise we'll proceed.
     if inf_index > length(host.active_infections)
         return false
     end
@@ -421,11 +433,11 @@ end
 ### MUTATION EVENT ###
 
 function get_rate_mutation(t, s)
-    P.mutation_rate * P.n_hosts * P.n_infections_active_max * P.n_genes_per_strain * P.n_loci
+    P.mutation_rate * P.n_hosts * s.n_active_infections_per_host_max * P.n_genes_per_strain * P.n_loci
 end
 
 function do_mutation!(t, s, stats)
-    index = rand(CartesianIndices((P.n_hosts, P.n_infections_active_max, P.n_genes_per_strain, P.n_loci)))
+    index = rand(CartesianIndices((P.n_hosts, s.n_active_infections_per_host_max, P.n_genes_per_strain, P.n_loci)))
     host = s.hosts[index[1]]
     inf_index = index[2]
     expression_index = index[3]
@@ -460,12 +472,12 @@ end
 
 function get_rate_ectopic_recombination(t, s)
     P.ectopic_recombination_rate *
-        P.n_hosts * P.n_infections_active_max *
+        P.n_hosts * s.n_active_infections_per_host_max *
         P.n_genes_per_strain * (P.n_genes_per_strain - 1) / 2.0
 end
 
 function do_ectopic_recombination!(t, s, stats)
-    index = rand(CartesianIndices((P.n_hosts, P.n_infections_active_max)))
+    index = rand(CartesianIndices((P.n_hosts, s.n_active_infections_per_host_max)))
     host = s.hosts[index[1]]
     inf_index = index[2]
     
