@@ -355,9 +355,11 @@ function validate(p::Params)
     @assert p.immigration_rate_fraction !== missing
     @assert p.immigration_rate_fraction >= 0.0
     
-    @assert p.n_infections_liver_max !== missing
-    @assert p.n_infections_liver_max >= 0
+    if p.n_infections_liver_max !== missing
+        @assert p.n_infections_liver_max >= 0
+    end
     
-    @assert p.n_infections_active_max !== missing
-    @assert p.n_infections_active_max >= 0
+    if p.n_infections_active_max !== missing
+        @assert p.n_infections_active_max >= 0
+    end
 end

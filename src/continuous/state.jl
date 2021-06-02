@@ -196,12 +196,13 @@ function verify(t, s::State)
     println("verify($(t), s)")
     
     for host in s.hosts
-        if length(host.liver_infections) > P.n_infections_liver_max
-            println("host = $(host.id), n_liver = $(length(host.liver_infections))")
+        if P.n_infections_liver_max !== missing
+            @assert length(host.liver_infections) <= P.n_infections_liver_max
         end
         
-        @assert length(host.liver_infections) <= P.n_infections_liver_max
-        @assert length(host.active_infections) <= P.n_infections_active_max
+        if P.n_infections_active_max !== missing
+            @assert length(host.active_infections) <= P.n_infections_active_max
+        end
         
         for infection in host.liver_infections
             @assert infection.expression_index == 0

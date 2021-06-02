@@ -242,7 +242,11 @@ function do_biting!(t, s, stats)
     stats.n_infected_bites += 1
     
     # The destination host must have space available in the liver stage.
-    dst_available_count = P.n_infections_liver_max - length(dst_host.liver_infections)
+    dst_available_count = if P.n_infections_liver_max === missing
+        src_active_count
+    else
+        P.n_infections_liver_max - length(dst_host.liver_infections)
+    end
     if dst_available_count == 0
         return false
     end
@@ -354,8 +358,10 @@ function do_immigration!(t, s, stats)
     advance_host!(t, s, host)
     
     # If host doesn't have an available infection slot, reject this sample.
-    if length(host.liver_infections) == P.n_infections_liver_max
-        return false
+    if P.n_infections_liver_max !== missing
+        if length(host.liver_infections) == P.n_infections_liver_max
+            return false
+        end
     end
     
     # Construct infection by sampling from gene pool

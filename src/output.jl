@@ -127,7 +127,9 @@ function initialize_database()
             time INTEGER,
             id INTEGER,
             birth_time REAL,
-            death_time REAL
+            death_time REAL,
+            n_infections_liver INTEGER,
+            n_infections_active INTEGER
         )
     """)
     
@@ -156,7 +158,7 @@ function initialize_database()
         make_insert_statement(db, "meta", 2),
         make_insert_statement(db, "summary", 13),
         make_insert_statement(db, "gene_strain_counts", 3),
-        make_insert_statement(db, "sampled_hosts", 4),
+        make_insert_statement(db, "sampled_hosts", 6),
         make_insert_statement(db, "sampled_infections", 6),
         make_insert_statement(db, "sampled_infection_genes", 2 + P.n_loci)
     )
