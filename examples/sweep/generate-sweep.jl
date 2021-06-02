@@ -258,10 +258,12 @@ function init_base_params()
         verification_period = 360,
 
         rng_seed = missing,
-
+        
         t_year = t_year,
-        t_end = 111 * t_year,
-
+        t_end = (111) * t_year,
+        
+        t_burnin = 61 * t_year,
+        
         n_hosts = 10000,
         n_initial_infections = 20,
 
