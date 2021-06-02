@@ -216,7 +216,7 @@ function create_empty_infection()
         strain_id = StrainId(0),
         genes = fill(AlleleId(0), (P.n_loci, P.n_genes_per_strain)),
         wave_index = WaveIndex(0),
-        expression_indices = fill(0, P.n_genes_per_wave),
+        expression_indices = zeros(MVector{P.n_genes_per_wave, ExpressionIndex}),
         wave_day = 0
     )
 end
@@ -331,6 +331,8 @@ function do_biting!(t, s, stats)
             dst_inf.t_start = t
             dst_inf.t = t
             dst_inf.wave_index = 0
+            dst_inf.wave_day = 0
+            dst_inf.expression_indices = zeros(MVector{P.n_genes_per_wave, ExpressionIndex})
             
             # Construct strain for new infection
             if src_inf_1.strain_id == src_inf_2.strain_id
@@ -486,6 +488,11 @@ function advance_active_infection!(s, host, index)
     patient = get_patient(s, infection)
     wave = patient.waves[infection.wave_index]
     
+    println("advance_active_infection(): $(host.id), $(infection.id)")
+    println("patient, wave: $(patient.source_id), $(wave.source_id)")
+    println("starting wave_index, day: $(infection.wave_index), $(infection.wave_day)")
+    println("starting t = $(infection.t)")
+    
     if wave.is_gap
         infection.t += length(wave.parasitemia)
     else
@@ -494,14 +501,25 @@ function advance_active_infection!(s, host, index)
     
     if wave.is_gap || infection.wave_day == length(wave.parasitemia)
         if infection.wave_index == length(patient.waves)
+            println("clearing infection!")
             # Clear infection if this is the last wave
             delete_and_swap_with_end!(host.active_infections, index)
             push!(s.old_infections, infection)
         else
+            println("jumping to next wave")
             infection.wave_index += 1
             infection.wave_day = 1
+            
+            println("ending wave_index = $(infection.wave_index), day = $(infection.wave_day), t = $(infection.t)")
         end
+    else
+        println("staying with current wave")
+        
+        infection.wave_day += 1
+        
+        println("ending t = $(infection.t)")
     end
+    println("")
 end
 
 function do_rebirth!(t, s, host)
@@ -540,6 +558,8 @@ function do_immigration!(t, s, stats)
     infection.t = t
     infection.strain_id = next_strain_id!(s)
     infection.wave_index = 0
+    infection.wave_day = 0
+    infection.expression_indices = zeros(MVector{P.n_genes_per_wave, ExpressionIndex})
     for i in 1:P.n_genes_per_strain
         infection.genes[:,i] = s.gene_pool[:, rand(1:size(s.gene_pool)[2])]
     end
