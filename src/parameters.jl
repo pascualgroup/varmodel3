@@ -106,6 +106,13 @@ using StructTypes
     t_end::Union{Int, Missing} = missing
     
     """
+        Burn-in time.
+        
+        Begin writing output starting at `t == t_burnin`.
+    """
+    t_burnin::Union{Int, Missing} = missing
+    
+    """
         Number of hosts.
         
         Currently constant through a simulation; deaths are coupled to births.
@@ -303,6 +310,8 @@ function validate(p::Params)
     
     @assert p.t_end !== missing
     @assert p.t_end >= 0
+    
+    @assert p.t_burnin === missing || p.t_burnin >= 0
     
     @assert p.n_hosts !== missing
     @assert p.n_hosts > 0
