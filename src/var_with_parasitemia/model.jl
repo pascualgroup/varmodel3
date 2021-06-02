@@ -188,6 +188,12 @@ function load_patients(filename)
         last_wave_id = wave_id
     end
     
+    for patient in patients
+        if last(patient.waves).is_gap
+            pop!(patient.waves)
+        end
+    end
+    
     patients
 end
 
