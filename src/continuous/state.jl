@@ -182,6 +182,13 @@ management auxiliaries.
     n_immunities_per_host_max::Int
     
     """
+    Upper bound on number of active infections per host.
+    
+    See explanation of rejection sampling under `n_immunities_per_host_max`.
+    """
+    n_active_infections_per_host_max::Int
+    
+    """
         Array of old infections.
         
         Used to prevent allocation of new infections.
