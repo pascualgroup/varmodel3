@@ -186,6 +186,10 @@ The statement covers all columns in the table, and `n_columns` must match the
 actual number of columns in the table.
 """
 function write_output!(db, t, s, stats)
+    if P.t_burnin !== missing && t < P.t_burnin
+        return
+    end
+    
     if t % minimum(
         (P.summary_period, P.host_sampling_period, P.gene_strain_count_period,)
     ) == 0
