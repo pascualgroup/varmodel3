@@ -111,3 +111,61 @@ function get_key_by_iteration_order(d::Dict{K, V}, index::Int) where {K, V}
     end
     @assert false
 end
+
+"""
+    Interpolates y(x) from vector of y's.
+    
+    Assumes x-values corresponding to vector of y's are at
+    (0.0 + offset, 1.0 + offset, ...)
+    
+    Does not extrapolate beyond endpoints.
+"""
+function interpolate_linear(x, ys; offset = 0.5)
+    x_offset = x - offset
+    x_offset_floor = floor(x_offset)
+    x_offset_diff = x_offset - x_offset_floor
+    index = Int(x_offset_floor) + 1
+    
+    if x_offset_diff == 0.0
+        @assert 1 <= index <= length(ys)
+        return ys[index]
+    end
+    
+    @assert 1 <= index < length(ys)
+    
+    ys[index] * (1.0 - x_offset_diff) + ys[index + 1] * x_offset_diff
+end
+
+"""
+    Interpolates y(x) from parallel vectors of x's and y's.
+    
+    Does not extrapolate beyond endpoints.
+"""
+function interpolate_linear(x, xs, ys; offset = 0.5)
+    @assert length(xs) == length(ys)
+    
+    # Linear search. Switch to binary if this becomes a bottleneck.
+    index = 0
+    for i in 1:(length(xs) - 1)
+        if xs[i] <= x < xs[i + 1]
+            index = i
+            break
+        end
+    end
+    
+    if index == 0 && x == xs[length(xs)]
+        index = length(xs)
+    end
+    
+    x_diff = x - xs[index]
+    
+    if x_diff == 0.0
+        @assert 1 <= index <= length(xs)
+        return ys[index]
+    end
+    
+    @assert 1 <= index < length(ys)
+    
+    w = x_diff / (xs[index + 1] - xs[index])
+    ys[index] * (1.0 - w) + ys[index + 1] * w
+end
