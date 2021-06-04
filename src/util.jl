@@ -169,3 +169,53 @@ function interpolate_linear(x, xs, ys; offset = 0.5)
     w = x_diff / (xs[index + 1] - xs[index])
     ys[index] * (1.0 - w) + ys[index + 1] * w
 end
+
+"""
+    Append to a key vector and a value vector where keys are sorted.
+    If the number of entries is `large_size` or bigger and a power of two,
+    remove all the entries where `key < threshold`.
+    
+    This function will maintain the vectors in a state where any
+    `key >= threshold` will be kept, but some `key < threshold` may be thrown
+    away.
+    
+    This is used to ensure that we always have parasitemia history values up to
+    n days ago.
+"""
+function push_kv_keep_ge!(keys, values, k, v, threshold; large_size = 8)
+    @assert length(keys) == length(values)
+    n = length(keys)
+    
+    # for n >= 1, (n & (n - 1) == 0) checks if n is a power of two
+    if n >= large_size && (n & (n - 1) == 0)
+        start = findfirst_ge(keys, threshold)
+        if start != 0
+            stop = length(keys)
+            n_new = stop - start + 1
+            
+            if n_new > 0
+                keys[1:n_new] = keys[start:stop]
+                values[1:n_new] = values[start:stop]
+            end
+            
+            resize!(keys, n_new)
+            resize!(values, n_new)
+        end
+    end
+    
+    push!(keys, k)
+    push!(values, v)
+end
+
+"""
+    Find the first index in v greater than or equal to x.
+"""
+function findfirst_ge(v, x)
+    # Linear search. Switch to binary if this becomes a bottleneck
+    for (i, vi) in enumerate(v)
+        if vi >= x
+            return i
+        end
+    end
+    return 0
+end
