@@ -149,7 +149,8 @@ function initialize_database()
         CREATE TABLE sampled_infection_genes(
             infection_id INTEGER,
             expression_index INTEGER,
-            $(allele_columns)
+            $(allele_columns),
+            UNIQUE(infection_id, expression_index) ON CONFLICT IGNORE
         );
     """)
 
