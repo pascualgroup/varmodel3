@@ -90,12 +90,12 @@ function initialize_database()
         error("$(P.output_db_filename) already exists; delete first")
     end
     db = DB(P.output_db_filename)
-    
+
     # Note: all of this could be done with the Julia Tables package, which
     # might make it less cumbersome, but also introduces conceptual overhead.
-    
+
     execute(db, "CREATE TABLE meta (key, value);")
-    
+
     execute(db, """
         CREATE TABLE summary (
             time INTEGER,
@@ -113,7 +113,7 @@ function initialize_database()
             exec_time INTEGER
         );
     """)
-    
+
     execute(db, """
         CREATE TABLE gene_strain_counts (
             time INTEGER,
@@ -121,7 +121,7 @@ function initialize_database()
             n_circulating_strains INTEGER
         );
     """)
-    
+
     execute(db, """
         CREATE TABLE sampled_hosts (
             time INTEGER,
@@ -132,7 +132,7 @@ function initialize_database()
             n_infections_active INTEGER
         )
     """)
-    
+
     execute(db, """
         CREATE TABLE sampled_infections (
             time INTEGER,
@@ -143,7 +143,7 @@ function initialize_database()
             expression_index INTEGER
         );
     """)
-    
+
     allele_columns = join(["allele_id_$(i) INTEGER" for i in 1:P.n_loci], ", ")
     execute(db, """
         CREATE TABLE sampled_infection_genes(
@@ -152,7 +152,7 @@ function initialize_database()
             $(allele_columns)
         );
     """)
-    
+
     VarModelDB(
         db,
         make_insert_statement(db, "meta", 2),
@@ -191,28 +191,28 @@ function write_output!(db, t, s, stats)
     if P.t_burnin !== missing && t < P.t_burnin
         return
     end
-    
+
     if t % minimum(
         (P.summary_period, P.host_sampling_period, P.gene_strain_count_period,)
     ) == 0
         println("t = $(t)")
-        
+
 #         println("write_output!($(t))")
-        
+
         execute(db, "BEGIN TRANSACTION")
-        
+
         if t % P.summary_period == 0
             write_summary(db, t, s, stats)
         end
-        
+
         if t % P.host_sampling_period == 0
             write_host_samples(db, t, s)
         end
-        
+
         if t % P.gene_strain_count_period == 0
             write_gene_strain_counts(db, t, s)
         end
-        
+
         execute(db, "COMMIT")
     end
 end

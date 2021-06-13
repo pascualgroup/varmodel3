@@ -30,7 +30,7 @@ end
 
 function sample_true_indices_by_column(mask)
     @assert all(sum(mask; dims = 1) .> 0)
-    
+
     n, m = size(mask)
     row_indices = fill(0, m)
     col_indices = collect(1:m)
@@ -40,7 +40,7 @@ function sample_true_indices_by_column(mask)
         row_indices[col_indices] .= new_row_indices .* valid_row_indices
         col_indices = col_indices[.!valid_row_indices]
     end
-    
+
     row_indices
 end
 
@@ -95,7 +95,7 @@ end
 
 function delete_and_swap_with_end!(a, i)
     @assert i <= length(a)
-    
+
     x = pop!(a)
     if i <= length(a)
         a[i] = x
