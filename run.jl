@@ -25,9 +25,13 @@ const P = let
     else
         error("Usage: <path-to>/run.jl [parameters.json]")
     end
-    
+
     json_str = read(params_filename, String)
-    JSON3.read(json_str, Params)
+
+    # Was using `JSON3.read(json_str, Params)` but there seems to be a library
+    # bug lurking there; this seems to work around the bug.
+    json_obj = JSON3.read(json_str)
+    Params(;json_obj...)
 end
 
 include("src/model.jl")
