@@ -42,8 +42,6 @@ function init_params()
     daily_biting_rate_multiplier = readdlm("../mosquito_population.txt", Float64)[:,1]
 
     Params(
-        use_discrete_time_approximation = false,
-        
         upper_bound_recomputation_period = 30,
 
         output_db_filename = "output.sqlite",
@@ -57,10 +55,10 @@ function init_params()
         verification_period = 360,
 
         rng_seed = missing,
-        
+
         t_year = t_year,
         t_end = (111) * t_year,
-        
+
         t_burnin = 61 * t_year,
 
         n_hosts = 10000,

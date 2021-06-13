@@ -72,13 +72,13 @@ function main()
         error("`runs` already exists; please move or delete.")
     end
     mkdir("runs")
-    
+
     # Root job directory
     if ispath("jobs")
         error("`jobs` already exists; please move or delete.")
     end
     mkdir("jobs")
-    
+
     # Database of experiment information
     if ispath("sweep_db.sqlite")
         error("`sweep_db.sqlite` already exists; please move or delete")
@@ -89,7 +89,7 @@ function main()
     execute(db, "CREATE TABLE runs (run_id INTEGER, combo_id INTEGER, replicate INTEGER, rng_seed INTEGER, run_dir TEXT, params TEXT)")
     execute(db, "CREATE TABLE jobs (job_id INTEGER, job_dir TEXT)")
     execute(db, "CREATE TABLE job_runs (job_id INTEGER, run_id INTEGER)")
-    
+
     generate_runs(db)
     generate_jobs(db)
 end
@@ -97,12 +97,12 @@ end
 function generate_runs(db)
     # System random device used to generate seeds
     seed_rng = RandomDevice()
-    
+
     # Base parameter set, copied/modified for each combination/replicate
     base_params = init_base_params()
     validate(base_params)
     execute(db, "INSERT INTO meta VALUES (?, ?)", ("base_params", pretty_json(base_params)))
-    
+
     # Loop through parameter combinations and replicates, generating a run directory
     # `runs/c<combo_id>/r<replicate>` for each one.
     combo_id = 1
@@ -110,9 +110,9 @@ function generate_runs(db)
     for mutation_rate in (0.5e-8, 1.0e-8, 1.5e-8, 2.0e-8)
         for transmissibility in (0.25, 0.5, 0.75)
             println("Processing c$(combo_id): mutation_rate = $(mutation_rate), transmissibility = $(transmissibility)")
-            
+
             execute(db, "INSERT INTO param_combos VALUES (?, ?, ?)", (combo_id, mutation_rate, transmissibility))
-            
+
             for replicate in 1:N_REPLICATES
                 rng_seed = rand(seed_rng, 1:typemax(Int64))
                 params = Params(
@@ -121,17 +121,17 @@ function generate_runs(db)
                     mutation_rate = mutation_rate,
                     transmissibility = transmissibility
                 )
-                
+
                 run_dir = joinpath("runs", "c$(combo_id)", "r$(replicate)")
                 @assert !ispath(run_dir)
                 mkpath(run_dir)
-                
+
                 # Generate parameters file
                 params_json = pretty_json(params)
                 open(joinpath(run_dir, "parameters.json"), "w") do f
                     println(f, params_json)
                 end
-                
+
                 # Generate shell script to perform a single run
                 run_script = joinpath(run_dir, "run.sh")
                 open(run_script, "w") do f
@@ -143,10 +143,10 @@ function generate_runs(db)
                     """)
                 end
                 run(`chmod +x $(run_script)`) # Make run script executable
-                
+
                 # Save all run info (including redundant stuff for reference) into DB
                 execute(db, "INSERT INTO runs VALUES (?, ?, ?, ?, ?, ?)", (run_id, combo_id, replicate, rng_seed, run_dir, params_json))
-                
+
                 run_id += 1
             end
             combo_id += 1
@@ -156,29 +156,29 @@ end
 
 function generate_jobs(db)
     println("Assigning runs to jobs...")
-    
+
     # Assign runs to jobs (round-robin)
     job_id = 1
     for (run_id, run_dir) in execute(db, "SELECT run_id, run_dir FROM runs ORDER BY replicate, combo_id")
         execute(db, "INSERT INTO job_runs VALUES (?,?)", (job_id, run_id))
-        
+
         # Mod-increment job ID
         job_id = (job_id % N_JOBS_MAX) + 1
     end
-    
+
     # Create job directories containing job scripts and script to submit all jobs
     submit_file = open("submit_jobs.sh", "w")
     println(submit_file, """
     #!/bin/sh
-    
-    cd `dirname \$0`    
+
+    cd `dirname \$0`
     """)
     for (job_id,) in execute(db, "SELECT DISTINCT job_id FROM job_runs ORDER BY job_id")
         job_dir = joinpath("jobs", "$(job_id)")
         mkpath(job_dir)
-        
+
         # Get all run directories for this job
-        run_dirs = [run_dir for (run_dir,) in execute(db, 
+        run_dirs = [run_dir for (run_dir,) in execute(db,
             """
             SELECT run_dir FROM job_runs, runs
             WHERE job_runs.job_id = ?
@@ -187,7 +187,7 @@ function generate_jobs(db)
             (job_id,)
         )]
         n_cores = min(length(run_dirs), N_CORES_PER_JOB_MAX)
-        
+
         # Write out list of runs
         open(joinpath(job_dir, "runs.txt"), "w") do f
             for run_dir in run_dirs
@@ -195,36 +195,36 @@ function generate_jobs(db)
                 println(f, run_script)
             end
         end
-        
+
         # Create job sbatch file
         job_sbatch = joinpath(job_dir, "job.sbatch")
         open(job_sbatch, "w") do f
             print(f, """
             #!/bin/sh
-            
+
             #SBATCH --account=pi-pascualmm
             #SBATCH --partition=broadwl
-            
+
             #SBATCH --job-name=var-$(job_id)
-            
+
             #SBATCH --tasks=1
             #SBATCH --cpus-per-task=$(n_cores)
             #SBATCH --mem-per-cpu=2000m
             #SBATCH --time=4:00:00
-            
+
             #SBATCH --chdir=$(joinpath(SCRIPT_PATH, job_dir))
             #SBATCH --output=output.txt
-            
+
             module purge
-            
+
             # Uncomment this to use the Midway-provided Julia:
             # module load julia
-            
+
             julia $(ROOT_RUNMANY_SCRIPT) $(n_cores) runs.txt
             """)
         end
         run(`chmod +x $(job_sbatch)`) # Make run script executable (for local testing)
-        
+
         execute(db, "INSERT INTO jobs VALUES (?,?)", (job_id, job_dir,))
         println(submit_file, "sbatch $(job_sbatch)")
     end
@@ -242,9 +242,8 @@ end
 function init_base_params()
     t_year = 360
     daily_biting_rate_multiplier = readdlm("../mosquito_population.txt", Float64)[:,1]
-    
+
     Params(
-        use_discrete_time_approximation = false,
         upper_bound_recomputation_period = 30,
 
         output_db_filename = "output.sqlite",
@@ -258,12 +257,12 @@ function init_base_params()
         verification_period = 360,
 
         rng_seed = missing,
-        
+
         t_year = t_year,
         t_end = (111) * t_year,
-        
+
         t_burnin = 61 * t_year,
-        
+
         n_hosts = 10000,
         n_initial_infections = 20,
 

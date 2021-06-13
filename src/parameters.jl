@@ -21,16 +21,6 @@ keyword constructor for the class.
     rng_seed::Union{Int, Missing} = missing
 
     """
-    Whether or not to simulate using a discrete-time approximation.
-    """
-    use_discrete_time_approximation::Union{Bool, Missing} = missing
-
-    """
-    Timestep of discrete-time approximation.
-    """
-    dt::Union{Int, Missing} = missing
-
-    """
     How often to recompute upper bounds for rejection sampling.
 
     Currently, this is related only to immunity loss events.
@@ -276,16 +266,8 @@ StructTypes.StructType(::Type{Params}) = StructTypes.Struct()
 
 """
 function validate(p::Params)
-    @assert p.use_discrete_time_approximation !== missing
-    if p.use_discrete_time_approximation
-        @assert p.dt !== missing
-        @assert p.dt == 1 # Code currently assumes this
-        @assert p.dt > 0
-        @assert p.t_year % p.dt == 0
-    else
-        @assert p.upper_bound_recomputation_period !== missing
-        @assert p.upper_bound_recomputation_period > 0
-    end
+    @assert p.upper_bound_recomputation_period !== missing
+    @assert p.upper_bound_recomputation_period > 0
 
     @assert p.output_db_filename !== missing
     @assert p.output_db_filename != ""
