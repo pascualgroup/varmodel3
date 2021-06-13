@@ -3,6 +3,12 @@ using Parameters
 using Base.Filesystem
 using StructTypes
 
+
+@enum ImmunityModel begin
+    IMMUNITY_BY_GENE = 1
+    IMMUNITY_BY_ALLELE = 2
+end
+
 """
 Parameters for a simulation.
 
@@ -81,6 +87,19 @@ keyword constructor for the class.
     If set to `missing` (`null` in JSON), no verification will be performed.
     """
     verification_period::Union{Int, Missing} = missing
+
+    """
+    Immunity model.
+
+    Under model `IMMUNITY_BY_GENE`, hosts acquire immune memory to var genes
+    as a whole. To be immune to a gene, they need to have seen precisely that
+    gene (sequence of alleles) in the past.
+
+    Under model `IMMUNITY_BY_ALLELE`, hosts acquire immunity to individual
+    alleles at each locus. To be immune to a gene, they need to have seen every
+    allele at each locus in the past, but not necessarily in the same gene.
+    """
+    immunity_model::Union{ImmunityModel, Missing} = missing
 
     """
     Number of time units in a year.
@@ -285,6 +304,8 @@ function validate(p::Params)
     if p.verification_period !== missing
         @assert p.verification_period > 0
     end
+
+    @assert p.immunity_model !== missing
 
     @assert p.t_year !== missing
     @assert p.t_year > 0

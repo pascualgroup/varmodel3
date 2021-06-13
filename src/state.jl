@@ -8,6 +8,7 @@ integer types (which could be controlled by a switch in Params).
 Also contains `verify()`, which does some cursory checks on state consistency.
 """
 
+const Locus = UInt8
 const HostId = UInt32
 const InfectionId = UInt32
 const AlleleId = UInt16
@@ -16,6 +17,28 @@ const ExpressionIndex = UInt8
 const ImmunityLevel = UInt8
 const Gene = SVector{P.n_loci, AlleleId}  # Immutable fixed-size vector
 const MGene = MVector{P.n_loci, AlleleId} # Mutable fixed-size vector
+
+abstract type ImmuneHistory end
+
+struct ImmuneHistoryByGene <: ImmuneHistory
+    d::Dict{Gene, ImmunityLevel}
+
+    function ImmuneHistoryByGene()
+        new(Dict{Gene, ImmunityLevel}())
+    end
+end
+
+struct ImmuneHistoryByAllele <: ImmuneHistory
+    vd::Vector{Dict{AlleleId, ImmunityLevel}}
+
+    function ImmuneHistoryByAllele()
+        vd = Vector{Dict{AlleleId, ImmunityLevel}}()
+        for locus in 1:P.n_loci
+            push!(vd, Dict{AlleleId, ImmunityLevel}())
+        end
+        new(vd)
+    end
+end
 
 """
 Struct representing infections.
@@ -102,7 +125,7 @@ Infection arrays are dynamically sized but currently limited to
 
     When the level reaches 0, the gene is removed from the dictionary.
     """
-    immunity::Dict{Gene, ImmunityLevel}
+    immunity::ImmuneHistory
 end
 
 """

@@ -258,6 +258,8 @@ function init_base_params()
 
         rng_seed = missing,
 
+        immunity_model = IMMUNITY_BY_GENE,
+
         t_year = t_year,
         t_end = (111) * t_year,
 

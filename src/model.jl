@@ -121,11 +121,17 @@ function initialize_state()
 
     # Initialize n_hosts hosts, all born at t = 0, with lifetime drawn from a
     # distribution, and no initial infections or immunity.
+    ImmuneHistoryType = if P.immunity_model == IMMUNITY_BY_GENE
+        ImmuneHistoryByGene
+    else
+        ImmuneHistoryByAllele
+    end
     hosts = [
         Host(
             id = id,
             t_birth = 0.0, t_death = draw_host_lifetime(),
-            liver_infections = [], active_infections = [], immunity = Dict()
+            liver_infections = [], active_infections = [],
+            immunity = ImmuneHistoryType()
         )
         for id in 1:P.n_hosts
     ]
@@ -442,7 +448,7 @@ function do_switching!(t, s, stats)
         infection.expression_index += 1
 
         # If the host not immune, stop advancing
-        if !is_immune(host, infection.genes[:, infection.expression_index])
+        if !is_immune(host.immunity, infection.genes[:, infection.expression_index])
             return true
         end
     end
@@ -606,8 +612,7 @@ function do_immunity_loss!(t, s, stats)
         return false
     end
 
-    gene = get_key_by_iteration_order(host.immunity, immunity_index)
-    decrement_immunity!(host, gene)
+    decrement_immunity_at_sampled_index!(host.immunity, immunity_index)
 
 #     println("do_immunity_loss($(t))")
 #     println("host: $(host.id), gene: $(gene)")
@@ -635,31 +640,100 @@ function next_strain_id!(s)
     id
 end
 
-function increment_immunity!(s, host, gene)
-    # Get old immunity level from immunity dict
-    old_level = get(host.immunity, gene, ImmunityLevel(0))
 
-    # Increment immunity if the level is not at the maximum value (255 = 0xFF)
-    if old_level < typemax(ImmunityLevel)
-        host.immunity[gene] = old_level + 1
+### IMMUNITY FUNCTIONS ###
+
+function empty!(ih::ImmuneHistoryByGene)
+    empty!(ih.d)
+end
+
+function empty!(ih::ImmuneHistoryByAllele)
+    for d in ih.vd
+        empty!(d)
     end
+end
 
+function increment_immunity!(s, host, gene)
+    increment_immunity!(host.immunity, gene)
     s.n_immunities_per_host_max = max(s.n_immunities_per_host_max, length(host.immunity))
 end
 
-function decrement_immunity!(host, gene)
+function increment_immunity!(ih::ImmuneHistoryByGene, gene)
     # Get old immunity level from immunity dict
-    old_level = get(host.immunity, gene, ImmunityLevel(0))
+    old_level = get(ih.d, gene, ImmunityLevel(0))
 
-    # Decrement immunity, removing it entirely if we reach 0
-    if old_level == 1
-        delete!(host.immunity, gene)
-    else
-        host.immunity[gene] -= 1
+    # Increment immunity if the level is not at the maximum value (255 = 0xFF)
+    if old_level < typemax(ImmunityLevel)
+        ih.d[gene] = old_level + 1
     end
 end
 
-function is_immune(host, gene)
-    get(host.immunity, gene, 0) > 0
+function increment_immunity!(ih::ImmuneHistoryByAllele, gene)
+    # Increment immunity at each locus
+    for (locus, allele_id) in enumerate(gene)
+        old_level = get(ih.vd[locus], allele_id, ImmunityLevel(0))
+        if old_level < typemax(ImmunityLevel)
+            ih.vd[locus][allele_id] = old_level + 1
+        end
+    end
 end
 
+function length(ih::ImmuneHistoryByGene)
+    length(ih.d)
+end
+
+function length(ih::ImmuneHistoryByAllele)
+    sum(length(ih.vd[locus]) for locus in length(ih.vd))
+end
+
+function decrement_immunity_at_sampled_index!(ih::ImmuneHistoryByGene, index)
+    gene = get_key_by_iteration_order(ih.d, index)
+    decrement_immunity!(ih, gene)
+end
+
+function decrement_immunity!(ih::ImmuneHistoryByGene, gene)
+    # Get old immunity level from immunity dict
+    old_level = ih.d[gene]
+
+    # Decrement immunity, removing it entirely if we reach 0
+    if old_level == 1
+        delete!(ih.d, gene)
+    else
+        ih.d[gene] -= 1
+    end
+end
+
+function decrement_immunity_at_sampled_index!(ih::ImmuneHistoryByAllele, index)
+    cur_index = index
+    for locus in 1:P.n_loci
+        if cur_index <= length(ih.vd[locus])
+            allele_id = get_key_by_iteration_order(ih.vd[locus], index)
+            decrement_immunity!(ih, Locus(locus), allele_id)
+            break
+        else
+            cur_index -= length(ih.vd[locus])
+        end
+    end
+end
+
+function decrement_immunity!(ih::ImmuneHistoryByAllele, locus::Locus, allele_id::AlleleId)
+    old_level = ih.vd[locus][allele_id]
+    if old_level == 1
+        delete!(ih.vd[locus], allele_id)
+    else
+        ih.vd[locus][allele_id] -= 1
+    end
+end
+
+function is_immune(ih::ImmuneHistoryByGene, gene)
+    get(ih.d, gene, 0) > 0
+end
+
+function is_immune(ih::ImmuneHistoryByAllele, gene)
+    for (locus, allele_id) in enumerate(gene)
+        if get(ih.vd[locus], allele_id, 0) == 0
+            return false
+        end
+    end
+    true
+end
