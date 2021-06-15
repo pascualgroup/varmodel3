@@ -27,11 +27,7 @@ const P = let
     end
 
     json_str = read(params_filename, String)
-
-    # Was using `JSON3.read(json_str, Params)` but there seems to be a library
-    # bug lurking there; this seems to work around the bug.
-    json_obj = JSON3.read(json_str)
-    Params(;json_obj...)
+    JSON3.read(json_str, Params)
 end
 
 include("src/model.jl")
