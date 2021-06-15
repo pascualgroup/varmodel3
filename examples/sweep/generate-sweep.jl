@@ -215,8 +215,6 @@ function generate_jobs(db)
             #SBATCH --chdir=$(joinpath(SCRIPT_PATH, job_dir))
             #SBATCH --output=output.txt
 
-            module purge
-
             # Uncomment this to use the Midway-provided Julia:
             # module load julia
 
