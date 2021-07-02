@@ -379,19 +379,19 @@ function validate(p::Params)
     @assert !ismissing(p.p_ectopic_recombination_is_conversion)
     @assert 0.0 <= p.p_ectopic_recombination_is_conversion <= 1.0
 
-    @assert !ismissing(P.ectopic_recombination_generates_new_alleles)
-    if P.ectopic_recombination_generates_new_alleles
-        @assert !ismissing(P.p_ectopic_recombination_generates_new_allele)
-        @assert 0.0 <= P.p_ectopic_recombination_generates_new_allele <= 1.0
+    @assert !ismissing(p.ectopic_recombination_generates_new_alleles)
+    if p.ectopic_recombination_generates_new_alleles
+        @assert !ismissing(p.p_ectopic_recombination_generates_new_allele)
+        @assert 0.0 <= p.p_ectopic_recombination_generates_new_allele <= 1.0
     else
         @assert ismissing(p.p_ectopic_recombination_generates_new_allele)
     end
 
-    @assert !ismissing(P.rho_recombination_tolerance)
-    @assert 0.7 <= P.rho_recombination_tolerance <= 0.9
+    @assert !ismissing(p.rho_recombination_tolerance)
+    @assert 0.7 <= p.rho_recombination_tolerance <= 0.9
 
-    @assert !ismissing(P.mean_n_mutations_per_epitope)
-    @assert P.mean_n_mutations_per_epitope > 0.0
+    @assert !ismissing(p.mean_n_mutations_per_epitope)
+    @assert p.mean_n_mutations_per_epitope > 0.0
 
     @assert p.immunity_loss_rate !== missing
     @assert p.immunity_loss_rate >= 0.0
