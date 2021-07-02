@@ -3,7 +3,6 @@ using Parameters
 using Base.Filesystem
 using StructTypes
 
-
 @enum ImmunityModel begin
     IMMUNITY_BY_GENE = 1
     IMMUNITY_BY_ALLELE = 2
@@ -206,6 +205,33 @@ keyword constructor for the class.
     p_ectopic_recombination_is_conversion::Union{Float64, Missing} = missing
 
     """
+    Whether or not ectopic recombination generates new alleles.
+
+    If `true`, then the similarity calculation used to determine the probability
+    that genes are functional will use real-valued breakpoints, and a new allele
+    will be generated at the breakpoint with probability
+    `p_ectopic_recombination_generates_new_allele`.
+    """
+    ectopic_recombination_generates_new_alleles::Union{Bool, Missing} = missing
+
+    """
+    If `ectopic_recombination_generates_new_alleles` is `true, then this is the
+    probability that a new allele will be generated at the breakpoint.
+    """
+    p_ectopic_recombination_generates_new_allele::Union{Float64, Missing} = missing
+
+    """
+    Recombination tolerance, rho, Drummond et al.
+    """
+    rho_recombination_tolerance::Union{Float64, Missing} = missing
+
+
+    """
+    Mean number of mutations per epitope for similarity calculation.
+    """
+    mean_n_mutations_per_epitope::Union{Float64, Missing} = missing
+
+    """
     Maximum immunity level.
 
     See description in the `immunity` field of struct `State`.
@@ -352,6 +378,20 @@ function validate(p::Params)
 
     @assert !ismissing(p.p_ectopic_recombination_is_conversion)
     @assert 0.0 <= p.p_ectopic_recombination_is_conversion <= 1.0
+
+    @assert !ismissing(P.ectopic_recombination_generates_new_alleles)
+    if P.ectopic_recombination_generates_new_alleles
+        @assert !ismissing(P.p_ectopic_recombination_generates_new_allele)
+        @assert 0.0 <= P.p_ectopic_recombination_generates_new_allele <= 1.0
+    else
+        @assert ismissing(p.p_ectopic_recombination_generates_new_allele)
+    end
+
+    @assert !ismissing(P.rho_recombination_tolerance)
+    @assert 0.7 <= P.rho_recombination_tolerance <= 0.9
+
+    @assert !ismissing(P.mean_n_mutations_per_epitope)
+    @assert P.mean_n_mutations_per_epitope > 0.0
 
     @assert p.immunity_loss_rate !== missing
     @assert p.immunity_loss_rate >= 0.0

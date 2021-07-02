@@ -527,15 +527,25 @@ function do_ectopic_recombination!(t, s, stats)
         return false
     end
 
-    # Choose a breakpoint
-    breakpoint = rand(1:P.n_loci)
-    if breakpoint == 1
-        return false
+    breakpoint, p_functional = if P.ectopic_recombination_generates_new_alleles
+        # Choose a breakpoint
+        breakpoint = P.n_loci * rand()
+        p_functional = p_recombination_is_functional_real(gene1, gene2, breakpoint)
+
+        (Int(ceil(breakpoint)), p_functional)
+    else
+        # Choose a breakpoint
+        breakpoint = rand(1:P.n_loci)
+        if breakpoint == 1
+            return false
+        end
+
+        p_functional = p_recombination_is_functional_integer(gene1, gene2, breakpoint)
+
+        (breakpoint, p_functional)
     end
 
     is_conversion = rand() < P.p_ectopic_recombination_is_conversion
-
-    p_functional = p_recombination_is_functional(gene1, gene2, breakpoint)
 
     recombined = false
 
@@ -560,15 +570,46 @@ function do_ectopic_recombination!(t, s, stats)
 end
 
 """
+    Probability that a recombination results in a functional gene.
+
+    Version for real-valued breakpoint, used when
+    `ectopic_recombination_generates_new_alleles == true`.
+"""
+function p_recombination_is_functional_real(gene1, gene2, breakpoint::Float64)
+    n_diff = 0.0 # was "p_div"
+    n_diff_before = 0.0 # was "child_div"
+    rho = P.rho_recombination_tolerance
+    mean_n_mutations = P.mean_n_mutations_per_epitope
+    for i in 1:P.n_loci
+        if gene1[i] != gene2[i]
+            n_diff += 1
+            if i - 1 < breakpoint
+                if breakpoint - i > 0
+                    n_diff_before += 1
+                else
+                    n_diff_before += breakpoint - (i - 1)
+                end
+            end
+        end
+    end
+    rho_power = n_diff_before * mean_n_mutations *
+        (n_diff - n_diff_before) * mean_n_mutations /
+        (n_diff * mean_n_mutations - 1.0)
+
+    rho^rho_power
+end
+
+"""
     Model for probability that a recombination results in a functional gene.
 
-    TODO: detailed description
+    Version for integer-valued breakpoint, used when
+    `ectopic_recombination_generates_new_alleles == false`.
 """
-function p_recombination_is_functional(gene1, gene2, breakpoint)
+function p_recombination_is_functional_integer(gene1, gene2, breakpoint::Int)
     n_diff = 0 # was "p_div"
     n_diff_before = 0 # was "child_div"
-    rho = 0.8
-    avg_mutation = 5.0
+    rho = P.rho_recombination_tolerance
+    mean_n_mutations = P.mean_n_mutations_per_epitope
     for i in 1:P.n_loci
         if gene1[i] != gene2[i]
             n_diff += 1
@@ -577,9 +618,9 @@ function p_recombination_is_functional(gene1, gene2, breakpoint)
             end
         end
     end
-    rho_power = n_diff_before * avg_mutation *
-        (n_diff - n_diff_before) * avg_mutation /
-        (n_diff * avg_mutation - 1.0)
+    rho_power = n_diff_before * mean_n_mutations *
+        (n_diff - n_diff_before) * mean_n_mutations /
+        (n_diff * mean_n_mutations - 1.0)
 
     rho^rho_power
 end
