@@ -62,6 +62,7 @@ const P = let
         coinfection_reduces_transmission = true,
 
         ectopic_recombination_rate = 1.8e-7,
+        p_ectopic_recombination_is_conversion = 0.0,
 
         immunity_level_max = 100,
         immunity_loss_rate = 0.001,

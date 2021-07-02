@@ -201,6 +201,11 @@ keyword constructor for the class.
     ectopic_recombination_rate::Union{Float64, Missing} = missing
 
     """
+    Probability that an ectopic recombination is a conversion.
+    """
+    p_ectopic_recombination_is_conversion::Union{Float64, Missing} = missing
+
+    """
     Maximum immunity level.
 
     See description in the `immunity` field of struct `State`.
@@ -344,6 +349,9 @@ function validate(p::Params)
 
     @assert p.ectopic_recombination_rate !== missing
     @assert p.ectopic_recombination_rate >= 0.0
+
+    @assert !ismissing(p.p_ectopic_recombination_is_conversion)
+    @assert 0.0 <= p.p_ectopic_recombination_is_conversion <= 1.0
 
     @assert p.immunity_loss_rate !== missing
     @assert p.immunity_loss_rate >= 0.0

@@ -533,21 +533,20 @@ function do_ectopic_recombination!(t, s, stats)
         return false
     end
 
-    p_viable = p_recombination_is_viable(gene1, gene2, breakpoint)
+    is_conversion = rand() < P.p_ectopic_recombination_is_conversion
 
-#     println("do_ectopic_recombination!($(t))")
-#     println("host = $(host.id), inf = $(infection.id), breakpoint = $(breakpoint), p_viable = $(p_viable)")
+    p_functional = p_recombination_is_functional(gene1, gene2, breakpoint)
 
     recombined = false
 
-    # Recombine to modify first gene, if viable
-    if rand() < p_viable
+    # Recombine to modify first gene, if functional
+    if !is_conversion && rand() < p_functional
         infection.genes[:, gene_index_1] = recombine_genes(gene1, gene2, breakpoint)
         recombined = true
     end
 
-    # Recombine to modify second gene, if viable
-    if rand() < p_viable
+    # Recombine to modify second gene, if functional
+    if rand() < p_functional
         infection.genes[:, gene_index_2] = recombine_genes(gene2, gene1, breakpoint)
         recombined = true
     end
@@ -561,11 +560,11 @@ function do_ectopic_recombination!(t, s, stats)
 end
 
 """
-    Model for probability that a recombination is viable.
+    Model for probability that a recombination results in a functional gene.
 
     TODO: detailed description
 """
-function p_recombination_is_viable(gene1, gene2, breakpoint)
+function p_recombination_is_functional(gene1, gene2, breakpoint)
     n_diff = 0 # was "p_div"
     n_diff_before = 0 # was "child_div"
     rho = 0.8
