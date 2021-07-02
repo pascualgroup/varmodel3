@@ -29,7 +29,7 @@ function run()
 
     # Seed the random number generator using the provided seed,
     # or, if absent, by generating one from the OS's source of entropy.
-    rng_seed = if P.rng_seed === missing
+    rng_seed = if isnothing(P.rng_seed)
         rand(RandomDevice(), 1:typemax(Int64))
     else
         P.rng_seed
@@ -121,10 +121,10 @@ function initialize_state()
 
     # Initialize n_hosts hosts, all born at t = 0, with lifetime drawn from a
     # distribution, and no initial infections or immunity.
-    ImmuneHistoryType = if P.immunity_model == IMMUNITY_BY_GENE
-        ImmuneHistoryByGene
-    else
+    ImmuneHistoryType = if P.use_immunity_by_allele
         ImmuneHistoryByAllele
+    else
+        ImmuneHistoryByGene
     end
     hosts = [
         Host(
@@ -269,7 +269,7 @@ function do_biting!(t, s, stats)
     stats.n_infected_bites += 1
 
     # The destination host must have space available in the liver stage.
-    dst_available_count = if P.n_infections_liver_max === missing
+    dst_available_count = if isnothing(P.n_infections_liver_max)
         src_active_count
     else
         P.n_infections_liver_max - length(dst_host.liver_infections)
@@ -347,7 +347,7 @@ function advance_host!(t, s, host)
                 delete_and_swap_with_end!(host.liver_infections, i)
                 # If there's room, move it into the active infections array.
                 # Otherwise, just put it into the recycle bin.
-                if P.n_infections_active_max === missing || length(host.active_infections) < P.n_infections_active_max
+                if isnothing(P.n_infections_active_max) || length(host.active_infections) < P.n_infections_active_max
                     infection.expression_index = 1
                     push!(host.active_infections, infection)
 
@@ -389,7 +389,7 @@ function do_immigration!(t, s, stats)
     advance_host!(t, s, host)
 
     # If host doesn't have an available infection slot, reject this sample.
-    if P.n_infections_liver_max !== missing
+    if isnothing(P.n_infections_liver_max)
         if length(host.liver_infections) == P.n_infections_liver_max
             return false
         end

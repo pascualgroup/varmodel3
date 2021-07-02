@@ -254,9 +254,9 @@ function init_base_params()
 
         verification_period = 360,
 
-        rng_seed = missing,
+        rng_seed = nothing,
 
-        immunity_model = IMMUNITY_BY_GENE,
+        use_immunity_by_allele = false,
 
         t_year = t_year,
         t_end = (111) * t_year,

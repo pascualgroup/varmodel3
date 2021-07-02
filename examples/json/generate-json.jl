@@ -23,6 +23,7 @@ and then do:
 ```
 """
 
+import JSON
 import JSON3
 using DelimitedFiles
 
@@ -31,10 +32,17 @@ include("../../preamble.jl")
 function main()
     params = init_params()
     validate(params)
+    params_json = pretty_json(params)
     open("parameters.json", "w") do f
-        JSON3.pretty(f, JSON3.write(params))
-        println(f)
+        println(f, params_json)
     end
+end
+
+function pretty_json(params)
+    raw = JSON3.write(params)
+    io = IOBuffer()
+    JSON.print(io, JSON.parse(raw), 2)
+    String(take!(io))
 end
 
 function init_params()
@@ -54,9 +62,9 @@ function init_params()
 
         verification_period = 360,
 
-        rng_seed = missing,
+        rng_seed = nothing,
 
-        immunity_model = IMMUNITY_BY_GENE,
+        use_immunity_by_allele = false,
 
         t_year = t_year,
         t_end = (111) * t_year,
