@@ -549,15 +549,26 @@ function do_ectopic_recombination!(t, s, stats)
 
     recombined = false
 
+    create_new_allele = P.ectopic_recombination_generates_new_alleles &&
+        rand() < P.p_ectopic_recombination_generates_new_allele
+
     # Recombine to modify first gene, if functional
     if !is_conversion && rand() < p_functional
-        infection.genes[:, gene_index_1] = recombine_genes(gene1, gene2, breakpoint)
+        infection.genes[:, gene_index_1] = if create_new_allele
+            recombine_genes_new_allele(s, gene1, gene2, breakpoint)
+        else
+            recombine_genes(gene1, gene2, breakpoint)
+        end
         recombined = true
     end
 
     # Recombine to modify second gene, if functional
     if rand() < p_functional
-        infection.genes[:, gene_index_2] = recombine_genes(gene2, gene1, breakpoint)
+        infection.genes[:, gene_index_2] = if create_new_allele
+            recombine_genes_new_allele(s, gene1, gene2, breakpoint)
+        else
+            recombine_genes(gene2, gene1, breakpoint)
+        end
         recombined = true
     end
 
@@ -629,6 +640,24 @@ function recombine_genes(gene1, gene2, breakpoint)
     gene = MGene(undef)
     gene[1:(breakpoint - 1)] = gene1[1:(breakpoint - 1)]
     gene[breakpoint:end] = gene2[breakpoint:end]
+    gene
+end
+
+function recombine_genes_new_allele(s, gene1, gene2, breakpoint)
+    gene = MGene(undef)
+    gene[1:(breakpoint - 1)] = gene1[1:(breakpoint - 1)]
+    if gene1[breakpoint] != gene2[breakpoint]
+        # If we ever generate too many alleles for 16-bit ints, we'll need to use bigger ones.
+        @assert s.n_alleles[breakpoint] < typemax(AlleleId)
+
+        s.n_alleles[breakpoint] += 1
+        gene[breakpoint] = s.n_alleles[breakpoint]
+    else
+        gene[breakpoint] = gene2[breakpoint]
+    end
+    if P.n_loci > breakpoint
+        gene[(breakpoint + 1):end] = gene2[(breakpoint + 1):end]
+    end
     gene
 end
 

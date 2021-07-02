@@ -63,8 +63,12 @@ const P = let
 
         ectopic_recombination_rate = 1.8e-7,
         p_ectopic_recombination_is_conversion = 0.0,
-        ectopic_recombination_generates_new_alleles = true,
-        p_ectopic_recombination_generates_new_allele = 0.5,
+
+        ectopic_recombination_generates_new_alleles = false,
+
+#         ectopic_recombination_generates_new_alleles = true,
+#         p_ectopic_recombination_generates_new_allele = 0.5,
+
         rho_recombination_tolerance = 0.8,
         mean_n_mutations_per_epitope = 5.0,
 
