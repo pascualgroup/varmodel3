@@ -139,7 +139,7 @@ function generate_runs(db)
                     #!/bin/sh
 
                     cd `dirname \$0`
-                    julia --check-bounds=no -O3 $(ROOT_RUN_SCRIPT) parameters.json > output.txt
+                    julia --check-bounds=no -O3 $(ROOT_RUN_SCRIPT) parameters.json &> output.txt
                     """)
                 end
                 run(`chmod +x $(run_script)`) # Make run script executable
