@@ -11,7 +11,13 @@ Also contains `verify()`, which does some cursory checks on state consistency.
 const Locus = UInt8
 const HostId = UInt32
 const InfectionId = UInt32
-const AlleleId = UInt16
+
+const AlleleId = if P.ectopic_recombination_generates_new_alleles
+    UInt32
+else
+    UInt16
+end
+
 const StrainId = UInt32
 const ExpressionIndex = UInt8
 const ImmunityLevel = UInt8
