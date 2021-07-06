@@ -256,7 +256,7 @@ function init_base_params()
 
         verification_period = 360,
 
-        rng_seed = missing,
+        rng_seed = nothing,
 
         t_year = t_year,
         t_end = (111) * t_year,

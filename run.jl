@@ -11,8 +11,6 @@ argument. (If not provided, "parameters.json" is assumed.)
 ```
 """
 
-using JSON3
-
 include("preamble.jl")
 
 # Load parameters into a constant global, so that they can be used when compiling
@@ -28,10 +26,9 @@ const P = let
 
     json_str = read(params_filename, String)
 
-    # Was using `JSON3.read(json_str, Params)` but there seems to be a library
-    # bug lurking there; this seems to work around the bug.
-    json_obj = JSON3.read(json_str)
-    Params(;json_obj...)
+    d_str = JSON.parse(json_str)
+    d_symb = Dict((Symbol(k), v) for (k, v) in d_str)
+    Params(; d_symb...)
 end
 
 include("src/model.jl")
