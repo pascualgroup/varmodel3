@@ -15,8 +15,6 @@ To use this script, do the following:
 4. Run the script: `julia run.jl`, or directly as a shell script, `./run.jl`
 """
 
-using DelimitedFiles
-
 # Load packages and definition of Params struct
 include("../../preamble.jl")
 

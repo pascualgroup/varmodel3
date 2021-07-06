@@ -1,7 +1,5 @@
-using JSON3
 using Parameters
 using Base.Filesystem
-using StructTypes
 
 """
 Parameters for a simulation.
@@ -255,12 +253,6 @@ keyword constructor for the class.
     """
     n_infections_active_max::Union{Int, Missing} = missing
 end
-
-"""
-    Instructs the JSON3 package to treat the Params type as simple data for the
-    purposes of JSON serialization.
-"""
-StructTypes.StructType(::Type{Params}) = StructTypes.Struct()
 
 """
 

@@ -23,18 +23,22 @@ and then do:
 ```
 """
 
-import JSON3
-using DelimitedFiles
-
 include("../../preamble.jl")
 
 function main()
     params = init_params()
     validate(params)
+    params_json = pretty_json(params)
     open("parameters.json", "w") do f
-        JSON3.pretty(f, JSON3.write(params))
-        println(f)
+        println(f, params_json)
     end
+end
+
+function pretty_json(params)
+    d = Dict(fn => getfield(params, fn) for fn in fieldnames(typeof(params)))
+    io = IOBuffer()
+    JSON.print(io, d, 2)
+    String(take!(io))
 end
 
 function init_params()

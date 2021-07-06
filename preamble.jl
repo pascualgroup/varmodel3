@@ -14,9 +14,7 @@ using StatsBase
 using Distributions
 
 using Parameters
-using StructTypes
 using JSON
-using JSON3
 using DelimitedFiles
 using SQLite
 
