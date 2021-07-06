@@ -231,9 +231,9 @@ function generate_jobs(db)
 end
 
 function pretty_json(params)
-    raw = JSON3.write(params)
+    d = Dict(fn => getfield(params, fn) for fn in fieldnames(typeof(params)))
     io = IOBuffer()
-    JSON.print(io, JSON.parse(raw), 2)
+    JSON.print(io, d, 2)
     String(take!(io))
 end
 
