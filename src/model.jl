@@ -341,7 +341,7 @@ function advance_host!(t, s, host)
         while i <= length(host.liver_infections)
             infection = host.liver_infections[i]
             if infection.t_infection + P.t_liver_stage < t
-#                 println("t = $(t): activating host $(host.id), inf $(infection.id)")
+                # println("t = $(t): activating host $(host.id), inf $(infection.id)")
 
                 # If the infection is past the liver stage, remove it from the liver.
                 delete_and_swap_with_end!(host.liver_infections, i)

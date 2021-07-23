@@ -1,6 +1,5 @@
 using Parameters
 using Base.Filesystem
-using StructTypes
 
 """
 Parameters for a simulation.
@@ -219,7 +218,6 @@ keyword constructor for the class.
     """
     rho_recombination_tolerance::Union{Float64, Nothing} = nothing
 
-
     """
     Mean number of mutations per epitope for similarity calculation.
     """
@@ -299,12 +297,6 @@ keyword constructor for the class.
     """
     n_infections_active_max::Union{Int, Nothing} = nothing
 end
-
-"""
-    Instructs the JSON3 package to treat the Params type as simple data for the
-    purposes of JSON serialization.
-"""
-StructTypes.StructType(::Type{Params}) = StructTypes.Struct()
 
 """
 

@@ -38,7 +38,6 @@ const P = let
         verification_period = 360,
 
         rng_seed = nothing,
-
         use_immunity_by_allele = false,
 
         t_year = t_year,
