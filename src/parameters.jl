@@ -81,6 +81,19 @@ keyword constructor for the class.
     verification_period::Union{Int, Nothing} = nothing
 
     """
+    Immunity model.
+
+    If `use_immunity_by_allele == false`, hosts acquire immune memory to var genes
+    as a whole. To be immune to a gene, they need to have seen precisely that
+    gene (sequence of alleles) in the past.
+
+    If `use_immunity_by_allele == true`, hosts acquire immunity to individual
+    alleles at each locus. To be immune to a gene, they need to have seen every
+    allele at each locus in the past, but not necessarily in the same gene.
+    """
+    use_immunity_by_allele::Union{Bool, Nothing} = nothing
+
+    """
     Number of time units in a year.
 
     Currently used only to constrain size of `biting_rate_multiplier`.
@@ -178,6 +191,37 @@ keyword constructor for the class.
     ```
     """
     ectopic_recombination_rate::Union{Float64, Nothing} = nothing
+
+    """
+    Probability that an ectopic recombination is a conversion.
+    """
+    p_ectopic_recombination_is_conversion::Union{Float64, Nothing} = nothing
+
+    """
+    Whether or not ectopic recombination generates new alleles.
+
+    If `true`, then the similarity calculation used to determine the probability
+    that genes are functional will use real-valued breakpoints, and a new allele
+    will be generated at the breakpoint with probability
+    `p_ectopic_recombination_generates_new_allele`.
+    """
+    ectopic_recombination_generates_new_alleles::Union{Bool, Nothing} = nothing
+
+    """
+    If `ectopic_recombination_generates_new_alleles` is `true, then this is the
+    probability that a new allele will be generated at the breakpoint.
+    """
+    p_ectopic_recombination_generates_new_allele::Union{Float64, Nothing} = nothing
+
+    """
+    Recombination tolerance, rho, Drummond et al.
+    """
+    rho_recombination_tolerance::Union{Float64, Nothing} = nothing
+
+    """
+    Mean number of mutations per epitope for similarity calculation.
+    """
+    mean_n_mutations_per_epitope::Union{Float64, Nothing} = nothing
 
     """
     Maximum immunity level.
@@ -278,6 +322,8 @@ function validate(p::Params)
         @assert p.verification_period > 0
     end
 
+    @assert p.use_immunity_by_allele !== nothing
+
     @assert p.t_year !== nothing
     @assert p.t_year > 0
 
@@ -315,6 +361,23 @@ function validate(p::Params)
 
     @assert p.ectopic_recombination_rate !== nothing
     @assert p.ectopic_recombination_rate >= 0.0
+
+    @assert !isnothing(p.p_ectopic_recombination_is_conversion)
+    @assert 0.0 <= p.p_ectopic_recombination_is_conversion <= 1.0
+
+    @assert !isnothing(p.ectopic_recombination_generates_new_alleles)
+    if p.ectopic_recombination_generates_new_alleles
+        @assert !isnothing(p.p_ectopic_recombination_generates_new_allele)
+        @assert 0.0 <= p.p_ectopic_recombination_generates_new_allele <= 1.0
+    else
+        @assert isnothing(p.p_ectopic_recombination_generates_new_allele)
+    end
+
+    @assert !isnothing(p.rho_recombination_tolerance)
+    @assert 0.7 <= p.rho_recombination_tolerance <= 0.9
+
+    @assert !isnothing(p.mean_n_mutations_per_epitope)
+    @assert p.mean_n_mutations_per_epitope > 0.0
 
     @assert p.immunity_loss_rate !== nothing
     @assert p.immunity_loss_rate >= 0.0

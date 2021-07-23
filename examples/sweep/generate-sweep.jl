@@ -215,8 +215,6 @@ function generate_jobs(db)
             #SBATCH --chdir=$(joinpath(SCRIPT_PATH, job_dir))
             #SBATCH --output=output.txt
 
-            module purge
-
             # Uncomment this to use the Midway-provided Julia:
             # module load julia
 
@@ -257,7 +255,8 @@ function init_base_params()
         verification_period = 360,
 
         rng_seed = nothing,
-
+        use_immunity_by_allele = false,
+        
         t_year = t_year,
         t_end = (111) * t_year,
 
@@ -277,6 +276,15 @@ function init_base_params()
         coinfection_reduces_transmission = true,
 
         ectopic_recombination_rate = 1.8e-7,
+        p_ectopic_recombination_is_conversion = 0.0,
+
+        ectopic_recombination_generates_new_alleles = false,
+
+#         ectopic_recombination_generates_new_alleles = true,
+#         p_ectopic_recombination_generates_new_allele = 0.5,
+
+        rho_recombination_tolerance = 0.8,
+        mean_n_mutations_per_epitope = 5.0,
 
         immunity_level_max = 100,
         immunity_loss_rate = 0.001,

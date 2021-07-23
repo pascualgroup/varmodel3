@@ -29,7 +29,7 @@ function run()
 
     # Seed the random number generator using the provided seed,
     # or, if absent, by generating one from the OS's source of entropy.
-    rng_seed = if P.rng_seed === nothing
+    rng_seed = if isnothing(P.rng_seed)
         rand(RandomDevice(), 1:typemax(Int64))
     else
         P.rng_seed
@@ -121,11 +121,17 @@ function initialize_state()
 
     # Initialize n_hosts hosts, all born at t = 0, with lifetime drawn from a
     # distribution, and no initial infections or immunity.
+    ImmuneHistoryType = if P.use_immunity_by_allele
+        ImmuneHistoryByAllele
+    else
+        ImmuneHistoryByGene
+    end
     hosts = [
         Host(
             id = id,
             t_birth = 0.0, t_death = draw_host_lifetime(),
-            liver_infections = [], active_infections = [], immunity = Dict()
+            liver_infections = [], active_infections = [],
+            immunity = ImmuneHistoryType()
         )
         for id in 1:P.n_hosts
     ]
@@ -263,7 +269,7 @@ function do_biting!(t, s, stats)
     stats.n_infected_bites += 1
 
     # The destination host must have space available in the liver stage.
-    dst_available_count = if P.n_infections_liver_max === nothing
+    dst_available_count = if isnothing(P.n_infections_liver_max)
         src_active_count
     else
         P.n_infections_liver_max - length(dst_host.liver_infections)
@@ -335,13 +341,13 @@ function advance_host!(t, s, host)
         while i <= length(host.liver_infections)
             infection = host.liver_infections[i]
             if infection.t_infection + P.t_liver_stage < t
-#                 println("t = $(t): activating host $(host.id), inf $(infection.id)")
+                # println("t = $(t): activating host $(host.id), inf $(infection.id)")
 
                 # If the infection is past the liver stage, remove it from the liver.
                 delete_and_swap_with_end!(host.liver_infections, i)
                 # If there's room, move it into the active infections array.
                 # Otherwise, just put it into the recycle bin.
-                if P.n_infections_active_max === nothing || length(host.active_infections) < P.n_infections_active_max
+                if isnothing(P.n_infections_active_max) || length(host.active_infections) < P.n_infections_active_max
                     infection.expression_index = 1
                     push!(host.active_infections, infection)
 
@@ -383,7 +389,7 @@ function do_immigration!(t, s, stats)
     advance_host!(t, s, host)
 
     # If host doesn't have an available infection slot, reject this sample.
-    if P.n_infections_liver_max !== nothing
+    if isnothing(P.n_infections_liver_max)
         if length(host.liver_infections) == P.n_infections_liver_max
             return false
         end
@@ -442,7 +448,7 @@ function do_switching!(t, s, stats)
         infection.expression_index += 1
 
         # If the host not immune, stop advancing
-        if !is_immune(host, infection.genes[:, infection.expression_index])
+        if !is_immune(host.immunity, infection.genes[:, infection.expression_index])
             return true
         end
     end
@@ -521,28 +527,48 @@ function do_ectopic_recombination!(t, s, stats)
         return false
     end
 
-    # Choose a breakpoint
-    breakpoint = rand(1:P.n_loci)
-    if breakpoint == 1
-        return false
+    breakpoint, p_functional = if P.ectopic_recombination_generates_new_alleles
+        # Choose a breakpoint
+        breakpoint = P.n_loci * rand()
+        p_functional = p_recombination_is_functional_real(gene1, gene2, breakpoint)
+
+        (Int(ceil(breakpoint)), p_functional)
+    else
+        # Choose a breakpoint
+        breakpoint = rand(1:P.n_loci)
+        if breakpoint == 1
+            return false
+        end
+
+        p_functional = p_recombination_is_functional_integer(gene1, gene2, breakpoint)
+
+        (breakpoint, p_functional)
     end
 
-    p_viable = p_recombination_is_viable(gene1, gene2, breakpoint)
-
-#     println("do_ectopic_recombination!($(t))")
-#     println("host = $(host.id), inf = $(infection.id), breakpoint = $(breakpoint), p_viable = $(p_viable)")
+    is_conversion = rand() < P.p_ectopic_recombination_is_conversion
 
     recombined = false
 
-    # Recombine to modify first gene, if viable
-    if rand() < p_viable
-        infection.genes[:, gene_index_1] = recombine_genes(gene1, gene2, breakpoint)
+    create_new_allele = P.ectopic_recombination_generates_new_alleles &&
+        rand() < P.p_ectopic_recombination_generates_new_allele
+
+    # Recombine to modify first gene, if functional
+    if !is_conversion && rand() < p_functional
+        infection.genes[:, gene_index_1] = if create_new_allele
+            recombine_genes_new_allele(s, gene1, gene2, breakpoint)
+        else
+            recombine_genes(gene1, gene2, breakpoint)
+        end
         recombined = true
     end
 
-    # Recombine to modify second gene, if viable
-    if rand() < p_viable
-        infection.genes[:, gene_index_2] = recombine_genes(gene2, gene1, breakpoint)
+    # Recombine to modify second gene, if functional
+    if rand() < p_functional
+        infection.genes[:, gene_index_2] = if create_new_allele
+            recombine_genes_new_allele(s, gene1, gene2, breakpoint)
+        else
+            recombine_genes(gene2, gene1, breakpoint)
+        end
         recombined = true
     end
 
@@ -555,15 +581,46 @@ function do_ectopic_recombination!(t, s, stats)
 end
 
 """
-    Model for probability that a recombination is viable.
+    Probability that a recombination results in a functional gene.
 
-    TODO: detailed description
+    Version for real-valued breakpoint, used when
+    `ectopic_recombination_generates_new_alleles == true`.
 """
-function p_recombination_is_viable(gene1, gene2, breakpoint)
+function p_recombination_is_functional_real(gene1, gene2, breakpoint::Float64)
+    n_diff = 0.0 # was "p_div"
+    n_diff_before = 0.0 # was "child_div"
+    rho = P.rho_recombination_tolerance
+    mean_n_mutations = P.mean_n_mutations_per_epitope
+    for i in 1:P.n_loci
+        if gene1[i] != gene2[i]
+            n_diff += 1
+            if i - 1 < breakpoint
+                if breakpoint - i > 0
+                    n_diff_before += 1
+                else
+                    n_diff_before += breakpoint - (i - 1)
+                end
+            end
+        end
+    end
+    rho_power = n_diff_before * mean_n_mutations *
+        (n_diff - n_diff_before) * mean_n_mutations /
+        (n_diff * mean_n_mutations - 1.0)
+
+    rho^rho_power
+end
+
+"""
+    Model for probability that a recombination results in a functional gene.
+
+    Version for integer-valued breakpoint, used when
+    `ectopic_recombination_generates_new_alleles == false`.
+"""
+function p_recombination_is_functional_integer(gene1, gene2, breakpoint::Int)
     n_diff = 0 # was "p_div"
     n_diff_before = 0 # was "child_div"
-    rho = 0.8
-    avg_mutation = 5.0
+    rho = P.rho_recombination_tolerance
+    mean_n_mutations = P.mean_n_mutations_per_epitope
     for i in 1:P.n_loci
         if gene1[i] != gene2[i]
             n_diff += 1
@@ -572,9 +629,9 @@ function p_recombination_is_viable(gene1, gene2, breakpoint)
             end
         end
     end
-    rho_power = n_diff_before * avg_mutation *
-        (n_diff - n_diff_before) * avg_mutation /
-        (n_diff * avg_mutation - 1.0)
+    rho_power = n_diff_before * mean_n_mutations *
+        (n_diff - n_diff_before) * mean_n_mutations /
+        (n_diff * mean_n_mutations - 1.0)
 
     rho^rho_power
 end
@@ -583,6 +640,24 @@ function recombine_genes(gene1, gene2, breakpoint)
     gene = MGene(undef)
     gene[1:(breakpoint - 1)] = gene1[1:(breakpoint - 1)]
     gene[breakpoint:end] = gene2[breakpoint:end]
+    gene
+end
+
+function recombine_genes_new_allele(s, gene1, gene2, breakpoint)
+    gene = MGene(undef)
+    gene[1:(breakpoint - 1)] = gene1[1:(breakpoint - 1)]
+    if gene1[breakpoint] != gene2[breakpoint]
+        # If we ever generate too many alleles for 16-bit ints, we'll need to use bigger ones.
+        @assert s.n_alleles[breakpoint] < typemax(AlleleId)
+
+        s.n_alleles[breakpoint] += 1
+        gene[breakpoint] = s.n_alleles[breakpoint]
+    else
+        gene[breakpoint] = gene2[breakpoint]
+    end
+    if P.n_loci > breakpoint
+        gene[(breakpoint + 1):end] = gene2[(breakpoint + 1):end]
+    end
     gene
 end
 
@@ -606,8 +681,7 @@ function do_immunity_loss!(t, s, stats)
         return false
     end
 
-    gene = get_key_by_iteration_order(host.immunity, immunity_index)
-    decrement_immunity!(host, gene)
+    decrement_immunity_at_sampled_index!(host.immunity, immunity_index)
 
 #     println("do_immunity_loss($(t))")
 #     println("host: $(host.id), gene: $(gene)")
@@ -635,31 +709,100 @@ function next_strain_id!(s)
     id
 end
 
-function increment_immunity!(s, host, gene)
-    # Get old immunity level from immunity dict
-    old_level = get(host.immunity, gene, ImmunityLevel(0))
 
-    # Increment immunity if the level is not at the maximum value (255 = 0xFF)
-    if old_level < typemax(ImmunityLevel)
-        host.immunity[gene] = old_level + 1
+### IMMUNITY FUNCTIONS ###
+
+function empty!(ih::ImmuneHistoryByGene)
+    empty!(ih.d)
+end
+
+function empty!(ih::ImmuneHistoryByAllele)
+    for d in ih.vd
+        empty!(d)
     end
+end
 
+function increment_immunity!(s, host, gene)
+    increment_immunity!(host.immunity, gene)
     s.n_immunities_per_host_max = max(s.n_immunities_per_host_max, length(host.immunity))
 end
 
-function decrement_immunity!(host, gene)
+function increment_immunity!(ih::ImmuneHistoryByGene, gene)
     # Get old immunity level from immunity dict
-    old_level = get(host.immunity, gene, ImmunityLevel(0))
+    old_level = get(ih.d, gene, ImmunityLevel(0))
 
-    # Decrement immunity, removing it entirely if we reach 0
-    if old_level == 1
-        delete!(host.immunity, gene)
-    else
-        host.immunity[gene] -= 1
+    # Increment immunity if the level is not at the maximum value (255 = 0xFF)
+    if old_level < typemax(ImmunityLevel)
+        ih.d[gene] = old_level + 1
     end
 end
 
-function is_immune(host, gene)
-    get(host.immunity, gene, 0) > 0
+function increment_immunity!(ih::ImmuneHistoryByAllele, gene)
+    # Increment immunity at each locus
+    for (locus, allele_id) in enumerate(gene)
+        old_level = get(ih.vd[locus], allele_id, ImmunityLevel(0))
+        if old_level < typemax(ImmunityLevel)
+            ih.vd[locus][allele_id] = old_level + 1
+        end
+    end
 end
 
+function length(ih::ImmuneHistoryByGene)
+    length(ih.d)
+end
+
+function length(ih::ImmuneHistoryByAllele)
+    sum(length(ih.vd[locus]) for locus in length(ih.vd))
+end
+
+function decrement_immunity_at_sampled_index!(ih::ImmuneHistoryByGene, index)
+    gene = get_key_by_iteration_order(ih.d, index)
+    decrement_immunity!(ih, gene)
+end
+
+function decrement_immunity!(ih::ImmuneHistoryByGene, gene)
+    # Get old immunity level from immunity dict
+    old_level = ih.d[gene]
+
+    # Decrement immunity, removing it entirely if we reach 0
+    if old_level == 1
+        delete!(ih.d, gene)
+    else
+        ih.d[gene] -= 1
+    end
+end
+
+function decrement_immunity_at_sampled_index!(ih::ImmuneHistoryByAllele, index)
+    cur_index = index
+    for locus in 1:P.n_loci
+        if cur_index <= length(ih.vd[locus])
+            allele_id = get_key_by_iteration_order(ih.vd[locus], index)
+            decrement_immunity!(ih, Locus(locus), allele_id)
+            break
+        else
+            cur_index -= length(ih.vd[locus])
+        end
+    end
+end
+
+function decrement_immunity!(ih::ImmuneHistoryByAllele, locus::Locus, allele_id::AlleleId)
+    old_level = ih.vd[locus][allele_id]
+    if old_level == 1
+        delete!(ih.vd[locus], allele_id)
+    else
+        ih.vd[locus][allele_id] -= 1
+    end
+end
+
+function is_immune(ih::ImmuneHistoryByGene, gene)
+    get(ih.d, gene, 0) > 0
+end
+
+function is_immune(ih::ImmuneHistoryByAllele, gene)
+    for (locus, allele_id) in enumerate(gene)
+        if get(ih.vd[locus], allele_id, 0) == 0
+            return false
+        end
+    end
+    true
+end
