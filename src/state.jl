@@ -93,6 +93,9 @@ matrix of allele IDs), and the currently expressed index.
     Set to `0` (and ignored) for liver-stage infections.
     """
     expression_index::ExpressionIndex
+
+    "Duration of the infection."
+    duration::Float64
 end
 
 """

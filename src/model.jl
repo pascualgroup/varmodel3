@@ -81,7 +81,7 @@ function run()
         # Draw the event, update time, and execute event
         event = direct_sample_linear_scan(rates, total_rate)
         t += dt
-        event_happened = do_event!(t, s, stats, event)
+        event_happened = do_event!(t, s, stats, event, db)
 
         # Many events are no-ops due to rejection sampling.
         # If an event happened, update all rates.
@@ -142,6 +142,7 @@ function initialize_state()
         infection = create_empty_infection()
         infection.id = infection_id
         infection.t_infection = 0.0
+        infection.duration = NaN
         infection.strain_id = infection_id
         infection.genes[:,:] = reshape(
             gene_pool[:, rand(1:P.n_genes_initial, P.n_genes_per_strain)],
@@ -183,6 +184,7 @@ function create_empty_infection()
     Infection(
         id = 0,
         t_infection = NaN,
+        duration = NaN,
         strain_id = StrainId(0),
         genes = fill(AlleleId(0), (P.n_loci, P.n_genes_per_strain)),
         expression_index = ExpressionIndex(0)
@@ -223,13 +225,13 @@ function get_rate(t, s, event)
     end
 end
 
-function do_event!(t, s, stats, event)
+function do_event!(t, s, stats, event, db)
     if event == BITING
         do_biting!(t, s, stats)
     elseif event == IMMIGRATION
         do_immigration!(t, s, stats)
     elseif event == SWITCHING
-        do_switching!(t, s, stats)
+        do_switching!(t, s, stats, db)
     elseif event == MUTATION
         do_mutation!(t, s, stats)
     elseif event == ECTOPIC_RECOMBINATION
@@ -399,6 +401,7 @@ function do_immigration!(t, s, stats)
     infection = recycle_or_create_infection(s)
     infection.id = next_infection_id!(s)
     infection.t_infection = t
+    infection.duration = NaN
     infection.strain_id = next_strain_id!(s)
     infection.expression_index = 0
     for i in 1:P.n_genes_per_strain
@@ -418,7 +421,7 @@ function get_rate_switching(t, s)
     P.switching_rate * P.n_hosts * s.n_active_infections_per_host_max
 end
 
-function do_switching!(t, s, stats)
+function do_switching!(t, s, stats, db)
     index = rand(CartesianIndices((P.n_hosts, s.n_active_infections_per_host_max)))
     host = s.hosts[index[1]]
     inf_index = index[2]
@@ -438,8 +441,11 @@ function do_switching!(t, s, stats)
         # Increment immunity level to currently expressed gene
         increment_immunity!(s, host, infection.genes[:, infection.expression_index])
 
-        # If we're at the end, clear the infection and return
+        # If we're at the end, calculate the infection duration, write duration,
+        # clear the infection and return
         if infection.expression_index == P.n_genes_per_strain
+            get_duration!(host.active_infections, inf_index, t)
+            write_duration(db, t, host, inf_index)
             delete_and_swap_with_end!(host.active_infections, inf_index)
             return true
         end
