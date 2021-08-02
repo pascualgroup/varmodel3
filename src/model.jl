@@ -160,7 +160,8 @@ function initialize_state()
         hosts = hosts,
         old_infections = [],
         n_immunities_per_host_max = 0,
-        n_active_infections_per_host_max = 0
+        n_active_infections_per_host_max = 0,
+        n_cleared_infections = 0
     )
 end
 
@@ -441,11 +442,14 @@ function do_switching!(t, s, stats, db)
         # Increment immunity level to currently expressed gene
         increment_immunity!(s, host, infection.genes[:, infection.expression_index])
 
-        # If we're at the end, calculate the infection duration, write duration,
-        # clear the infection and return
+        # If we're at the end, clear the infection and return.
         if infection.expression_index == P.n_genes_per_strain
-            get_duration!(host.active_infections, inf_index, t)
-            write_duration(db, t, host, inf_index)
+            if s.n_cleared_infections % P.sample_duration == 0
+                # Calculate and write the infection duration.
+                get_duration!(host.active_infections, inf_index, t)
+                write_duration(db, t, host, inf_index)
+            end
+            s.n_cleared_infections += 1
             delete_and_swap_with_end!(host.active_infections, inf_index)
             return true
         end

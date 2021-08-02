@@ -296,6 +296,13 @@ keyword constructor for the class.
         dropped if there are already `n_infections_active_max` infections.
     """
     n_infections_active_max::Union{Int, Nothing} = nothing
+
+    """
+        Sample an infection duration every `sample_duration` infection(s).
+        Currently used to reduce the running time.
+    """
+    sample_duration::Union{Int, Nothing} = nothing
+
 end
 
 """
@@ -317,6 +324,9 @@ function validate(p::Params)
 
     @assert p.gene_strain_count_period !== nothing
     @assert p.gene_strain_count_period > 0
+
+    @assert p.sample_duration !== nothing
+    @assert p.sample_duration >= 0
 
     if p.verification_period !== nothing
         @assert p.verification_period > 0
