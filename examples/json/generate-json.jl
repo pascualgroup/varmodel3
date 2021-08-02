@@ -57,6 +57,8 @@ function init_params()
         host_sample_size = 100,
 
         verification_period = 360,
+        
+        sample_duration = 1000,
 
         rng_seed = nothing,
 
