@@ -253,12 +253,15 @@ function init_base_params()
         host_sample_size = 100,
 
         verification_period = 360,
-        
+
         sample_duration = 1000,
 
         rng_seed = nothing,
         use_immunity_by_allele = false,
-        
+
+#         use_immunity_by_allele = true,
+#         whole_gene_immune = false,
+
         t_year = t_year,
         t_end = (111) * t_year,
 
