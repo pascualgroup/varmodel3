@@ -308,6 +308,7 @@ function do_biting!(t, s, stats)
             dst_inf.id = next_infection_id!(s)
             dst_inf.t_infection = t
             dst_inf.expression_index = 0
+            dst_inf.duration = NaN
 
             # Construct strain for new infection
             if src_inf_1.strain_id == src_inf_2.strain_id
