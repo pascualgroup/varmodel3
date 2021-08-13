@@ -76,6 +76,16 @@ function sample_columns_from_two_matrices_to!(dst, src1, src2)
 end
 
 """
+Calculates the duration of an infection.
+"""
+function get_duration!(a, i, t)
+    @assert i <= length(a)
+    if i <= length(a)
+        a[i].duration = t - a[i].t_infection
+    end
+end
+
+"""
 Deletes index `i` in the array and replaces it with the last entry in the array.
 
 This enables maintaining a set of objects in an array (in arbitrary order)

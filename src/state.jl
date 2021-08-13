@@ -93,6 +93,9 @@ matrix of allele IDs), and the currently expressed index.
     Set to `0` (and ignored) for liver-stage infections.
     """
     expression_index::ExpressionIndex
+
+    "Duration of the infection."
+    duration::Float64
 end
 
 """
@@ -223,6 +226,9 @@ management auxiliaries.
         Used to prevent allocation of new infections.
     """
     old_infections::Array{Infection}
+
+    "Number of cleared infections."
+    n_cleared_infections::Int
 end
 
 """

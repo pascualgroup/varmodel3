@@ -33,6 +33,7 @@ struct VarModelDB
     gene_strain_counts::Stmt
     sampled_hosts::Stmt
     sampled_infections::Stmt
+    sampled_durations::Stmt
     sampled_infection_genes::Stmt
 end
 
@@ -144,6 +145,16 @@ function initialize_database()
         );
     """)
 
+    execute(db, """
+        CREATE TABLE sampled_durations (
+            time INTEGER,
+            host_id INTEGER,
+            infection_id INTEGER,
+            infection_time REAL,
+            infection_duration REAL
+        );
+    """)
+
     allele_columns = join(["allele_id_$(i) INTEGER" for i in 1:P.n_loci], ", ")
     execute(db, """
         CREATE TABLE sampled_infection_genes(
@@ -161,6 +172,7 @@ function initialize_database()
         make_insert_statement(db, "gene_strain_counts", 3),
         make_insert_statement(db, "sampled_hosts", 6),
         make_insert_statement(db, "sampled_infections", 6),
+        make_insert_statement(db, "sampled_durations", 5),
         make_insert_statement(db, "sampled_infection_genes", 2 + P.n_loci)
     )
 end
@@ -300,7 +312,6 @@ each expression index, with the final columns containing the allele IDs for each
 locus.
 """
 function write_infection(db, t, host, infection)
-#     println("write_infection($(t), $(host.id), $(infection.id))")
     execute(
         db.sampled_infections,
         (
@@ -311,6 +322,19 @@ function write_infection(db, t, host, infection)
     for i in 1:P.n_genes_per_strain
         execute(db.sampled_infection_genes, vcat([infection.id, i], infection.genes[:,i]))
     end
+end
+
+"""
+Write the infection durations to the `sampled_durations` table.
+"""
+function write_duration(db, t, host, i)
+    infection = host.active_infections[i]
+    execute(
+        db.sampled_durations,
+        (
+            t, Int64(host.id), Int64(infection.id), infection.t_infection, infection.duration
+        )
+    )
 end
 
 """
