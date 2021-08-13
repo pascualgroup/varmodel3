@@ -20,6 +20,7 @@ end
 
 const StrainId = UInt32
 const ExpressionIndex = UInt8
+const ExpressionIndexLocus = UInt8
 const ImmunityLevel = UInt8
 const Gene = SVector{P.n_loci, AlleleId}  # Immutable fixed-size vector
 const MGene = MVector{P.n_loci, AlleleId} # Mutable fixed-size vector
@@ -34,15 +35,23 @@ struct ImmuneHistoryByGene <: ImmuneHistory
     end
 end
 
-struct ImmuneHistoryByAllele <: ImmuneHistory
+struct ImmuneHistoryByAlleleWhole <: ImmuneHistory
     vd::Vector{Dict{AlleleId, ImmunityLevel}}
 
-    function ImmuneHistoryByAllele()
+    function ImmuneHistoryByAlleleWhole()
         vd = Vector{Dict{AlleleId, ImmunityLevel}}()
         for locus in 1:P.n_loci
             push!(vd, Dict{AlleleId, ImmunityLevel}())
         end
         new(vd)
+    end
+end
+
+struct ImmuneHistoryByAllele <: ImmuneHistory
+    d::Dict{AlleleId, ImmunityLevel}
+
+    function ImmuneHistoryByAllele()
+        new(Dict{AlleleId, ImmunityLevel}())
     end
 end
 
@@ -93,6 +102,9 @@ matrix of allele IDs), and the currently expressed index.
     Set to `0` (and ignored) for liver-stage infections.
     """
     expression_index::ExpressionIndex
+
+    "Index in `genes` matrix of currently expressed locus."
+    expression_index_locus::ExpressionIndexLocus
 
     "Duration of the infection."
     duration::Float64

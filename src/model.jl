@@ -122,7 +122,11 @@ function initialize_state()
     # Initialize n_hosts hosts, all born at t = 0, with lifetime drawn from a
     # distribution, and no initial infections or immunity.
     ImmuneHistoryType = if P.use_immunity_by_allele
-        ImmuneHistoryByAllele
+        if P.whole_gene_immune
+            ImmuneHistoryByAlleleWhole
+        else
+            ImmuneHistoryByAllele
+        end
     else
         ImmuneHistoryByGene
     end
@@ -188,7 +192,8 @@ function create_empty_infection()
         duration = NaN,
         strain_id = StrainId(0),
         genes = fill(AlleleId(0), (P.n_loci, P.n_genes_per_strain)),
-        expression_index = ExpressionIndex(0)
+        expression_index = ExpressionIndex(0),
+        expression_index_locus = ExpressionIndexLocus(0)
     )
 end
 
@@ -251,7 +256,6 @@ function get_rate_biting(t, s)
 end
 
 function do_biting!(t, s, stats)
-#     println("do_biting!($(t), s)")
 
     stats.n_bites += 1
 
@@ -308,6 +312,7 @@ function do_biting!(t, s, stats)
             dst_inf.id = next_infection_id!(s)
             dst_inf.t_infection = t
             dst_inf.expression_index = 0
+            dst_inf.expression_index_locus = 0
             dst_inf.duration = NaN
 
             # Construct strain for new infection
@@ -353,6 +358,7 @@ function advance_host!(t, s, host)
                 # Otherwise, just put it into the recycle bin.
                 if isnothing(P.n_infections_active_max) || length(host.active_infections) < P.n_infections_active_max
                     infection.expression_index = 1
+                    infection.expression_index_locus = 1
                     push!(host.active_infections, infection)
 
                     if length(host.active_infections) > s.n_active_infections_per_host_max
@@ -386,7 +392,6 @@ function get_rate_immigration(t, s)
 end
 
 function do_immigration!(t, s, stats)
-#     println("do_immigration!($(t))")
 
     # Sample a random host and advance it (rebirth or infection activation)
     host = rand(s.hosts)
@@ -406,6 +411,7 @@ function do_immigration!(t, s, stats)
     infection.duration = NaN
     infection.strain_id = next_strain_id!(s)
     infection.expression_index = 0
+    infection.expression_index_locus = 0
     for i in 1:P.n_genes_per_strain
         infection.genes[:,i] = s.gene_pool[:, rand(1:size(s.gene_pool)[2])]
     end
@@ -420,7 +426,11 @@ end
 ### SWITCHING EVENT ###
 
 function get_rate_switching(t, s)
-    P.switching_rate * P.n_hosts * s.n_active_infections_per_host_max
+    if P.use_immunity_by_allele && !P.whole_gene_immune
+        (P.switching_rate / P.n_loci) * P.n_hosts * s.n_active_infections_per_host_max
+    else
+        P.switching_rate * P.n_hosts * s.n_active_infections_per_host_max
+    end
 end
 
 function do_switching!(t, s, stats, db)
@@ -438,10 +448,15 @@ function do_switching!(t, s, stats, db)
     end
     infection = host.active_infections[inf_index]
 
-    # Advance expression until a non-immune gene is reached
+    # Advance expression until a non-immune gene or allele is reached.
     while true
-        # Increment immunity level to currently expressed gene
-        increment_immunity!(s, host, infection.genes[:, infection.expression_index])
+
+        # Increment immunity level to currently expressed gene or allele.
+        if P.use_immunity_by_allele && !P.whole_gene_immune
+            increment_immunity!(s, host, infection.genes[infection.expression_index_locus, infection.expression_index])
+        else
+            increment_immunity!(s, host, infection.genes[:, infection.expression_index])
+        end
 
         # If we're at the end, clear the infection and return.
         if infection.expression_index == P.n_genes_per_strain
@@ -455,12 +470,27 @@ function do_switching!(t, s, stats, db)
             return true
         end
 
-        # Otherwise, advance expression
-        infection.expression_index += 1
+        # Otherwise, advance gene and/or locus expression(s).
+        if P.use_immunity_by_allele  && !P.whole_gene_immune
+            if infection.expression_index_locus == P.n_loci
+                infection.expression_index += 1
+                infection.expression_index_locus = 1
+            else
+                infection.expression_index_locus += 1
+            end
+        else
+            infection.expression_index += 1
+        end
 
-        # If the host not immune, stop advancing
-        if !is_immune(host.immunity, infection.genes[:, infection.expression_index])
-            return true
+        # If the host not immune, stop advancing.
+        if P.use_immunity_by_allele  && !P.whole_gene_immune
+            if !is_immune(host.immunity, infection.genes[infection.expression_index_locus, infection.expression_index])
+                return true
+            end
+        else
+            if !is_immune(host.immunity, infection.genes[:, infection.expression_index])
+                return true
+            end
         end
     end
 end
@@ -488,9 +518,6 @@ function do_mutation!(t, s, stats)
     end
 
     infection = host.active_infections[inf_index]
-
-#     println("do_mutation!($(t))")
-#     println("host = $(host.id), inf = $(infection.id), locus = $(locus)")
 
     # If we ever generate too many alleles for 16-bit ints, we'll need to use bigger ones.
     @assert s.n_alleles[locus] < typemax(AlleleId)
@@ -694,9 +721,6 @@ function do_immunity_loss!(t, s, stats)
 
     decrement_immunity_at_sampled_index!(host.immunity, immunity_index)
 
-#     println("do_immunity_loss($(t))")
-#     println("host: $(host.id), gene: $(gene)")
-
     false
 end
 
@@ -727,10 +751,14 @@ function empty!(ih::ImmuneHistoryByGene)
     empty!(ih.d)
 end
 
-function empty!(ih::ImmuneHistoryByAllele)
+function empty!(ih::ImmuneHistoryByAlleleWhole)
     for d in ih.vd
         empty!(d)
     end
+end
+
+function empty!(ih::ImmuneHistoryByAllele)
+    empty!(ih.d)
 end
 
 function increment_immunity!(s, host, gene)
@@ -748,7 +776,7 @@ function increment_immunity!(ih::ImmuneHistoryByGene, gene)
     end
 end
 
-function increment_immunity!(ih::ImmuneHistoryByAllele, gene)
+function increment_immunity!(ih::ImmuneHistoryByAlleleWhole, gene)
     # Increment immunity at each locus
     for (locus, allele_id) in enumerate(gene)
         old_level = get(ih.vd[locus], allele_id, ImmunityLevel(0))
@@ -758,12 +786,26 @@ function increment_immunity!(ih::ImmuneHistoryByAllele, gene)
     end
 end
 
+function increment_immunity!(ih::ImmuneHistoryByAllele, gene)
+    # Get old immunity level from immunity dict
+    old_level = get(ih.d, gene, ImmunityLevel(0))
+
+    # Increment immunity if the level is not at the maximum value (255 = 0xFF)
+    if old_level < typemax(ImmunityLevel)
+        ih.d[gene] = old_level + 1
+    end
+end
+
 function length(ih::ImmuneHistoryByGene)
     length(ih.d)
 end
 
-function length(ih::ImmuneHistoryByAllele)
+function length(ih::ImmuneHistoryByAlleleWhole)
     sum(length(ih.vd[locus]) for locus in length(ih.vd))
+end
+
+function length(ih::ImmuneHistoryByAllele)
+    length(ih.d)
 end
 
 function decrement_immunity_at_sampled_index!(ih::ImmuneHistoryByGene, index)
@@ -783,7 +825,7 @@ function decrement_immunity!(ih::ImmuneHistoryByGene, gene)
     end
 end
 
-function decrement_immunity_at_sampled_index!(ih::ImmuneHistoryByAllele, index)
+function decrement_immunity_at_sampled_index!(ih::ImmuneHistoryByAlleleWhole, index)
     cur_index = index
     for locus in 1:P.n_loci
         if cur_index <= length(ih.vd[locus])
@@ -796,8 +838,11 @@ function decrement_immunity_at_sampled_index!(ih::ImmuneHistoryByAllele, index)
     end
 end
 
-function decrement_immunity!(ih::ImmuneHistoryByAllele, locus::Locus, allele_id::AlleleId)
+function decrement_immunity!(ih::ImmuneHistoryByAlleleWhole, locus::Locus, allele_id::AlleleId)
+    # Get old immunity level from immunity dict.
     old_level = ih.vd[locus][allele_id]
+
+    # Decrement immunity, removing it entirely if we reach 0.
     if old_level == 1
         delete!(ih.vd[locus], allele_id)
     else
@@ -805,15 +850,36 @@ function decrement_immunity!(ih::ImmuneHistoryByAllele, locus::Locus, allele_id:
     end
 end
 
+function decrement_immunity_at_sampled_index!(ih::ImmuneHistoryByAllele, index)
+    gene = get_key_by_iteration_order(ih.d, index)
+    decrement_immunity!(ih, gene)
+end
+
+function decrement_immunity!(ih::ImmuneHistoryByAllele, gene)
+    # Get old immunity level from immunity dict
+    old_level = ih.d[gene]
+
+    # Decrement immunity, removing it entirely if we reach 0
+    if old_level == 1
+        delete!(ih.d, gene)
+    else
+        ih.d[gene] -= 1
+    end
+end
+
 function is_immune(ih::ImmuneHistoryByGene, gene)
     get(ih.d, gene, 0) > 0
 end
 
-function is_immune(ih::ImmuneHistoryByAllele, gene)
+function is_immune(ih::ImmuneHistoryByAlleleWhole, gene)
     for (locus, allele_id) in enumerate(gene)
         if get(ih.vd[locus], allele_id, 0) == 0
             return false
         end
     end
     true
+end
+
+function is_immune(ih::ImmuneHistoryByAllele, gene)
+    get(ih.d, gene, 0) > 0
 end

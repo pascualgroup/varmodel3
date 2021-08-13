@@ -303,6 +303,14 @@ keyword constructor for the class.
     """
     sample_duration::Union{Int, Nothing} = nothing
 
+    """
+        Whether a host gains immunity towards a gene if the host has seen all
+        the alleles. If `true`, then a host gains immunity towards a gene only
+        if the host has seen all the alleles. If `false`, then a host gains a
+        gradual increase in immunity as the host sees more alleles in a gene.
+    """
+    whole_gene_immune::Union{Bool, Nothing} = nothing
+
 end
 
 """
@@ -416,5 +424,9 @@ function validate(p::Params)
 
     if p.n_infections_active_max !== nothing
         @assert p.n_infections_active_max >= 0
+    end
+
+    if p.use_immunity_by_allele
+        @assert p.whole_gene_immune !== nothing
     end
 end
