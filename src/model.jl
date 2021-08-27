@@ -427,7 +427,7 @@ end
 
 function get_rate_switching(t, s)
     if P.use_immunity_by_allele && !P.whole_gene_immune
-        (P.switching_rate / P.n_loci) * P.n_hosts * s.n_active_infections_per_host_max
+        (P.switching_rate * P.n_loci) * P.n_hosts * s.n_active_infections_per_host_max
     else
         P.switching_rate * P.n_hosts * s.n_active_infections_per_host_max
     end
