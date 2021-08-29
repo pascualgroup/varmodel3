@@ -35,10 +35,10 @@ struct ImmuneHistoryByGene <: ImmuneHistory
     end
 end
 
-struct ImmuneHistoryByAlleleWhole <: ImmuneHistory
+struct ImmuneHistoryByAllele <: ImmuneHistory
     vd::Vector{Dict{AlleleId, ImmunityLevel}}
 
-    function ImmuneHistoryByAlleleWhole()
+    function ImmuneHistoryByAllele()
         vd = Vector{Dict{AlleleId, ImmunityLevel}}()
         for locus in 1:P.n_loci
             push!(vd, Dict{AlleleId, ImmunityLevel}())
@@ -47,12 +47,21 @@ struct ImmuneHistoryByAlleleWhole <: ImmuneHistory
     end
 end
 
-struct ImmuneHistoryByAllele <: ImmuneHistory
-    d::Dict{AlleleId, ImmunityLevel}
+"""
+Struct storing the information of a sampled duration, with its host's
+ past infection and immunity counts
+ This gets stored in a vector durations when an infection finishes expression
+ and get sampled at the probability of  1/`sample_duration`
+"""
 
-    function ImmuneHistoryByAllele()
-        new(Dict{AlleleId, ImmunityLevel}())
-    end
+@with_kw mutable struct infectionDuration
+    id::InfectionId
+    host_id::HostId
+    n_cleared_infections::UInt32
+    n_immuned_alleles::UInt32
+    t_infection::Float64
+    t_expression::Float64
+    duration::Float64
 end
 
 """
@@ -68,6 +77,9 @@ matrix of allele IDs), and the currently expressed index.
 
     "Time at which infection occurred (entered the liver stage)."
     t_infection::Float64
+
+    "Time at which expression starts (enters the asexual cycle)."
+    t_expression::Float64
 
     """
     Strain identifier, unique across the simulation.
@@ -135,6 +147,9 @@ Infection arrays are dynamically sized but currently limited to
 
     "Actively expressed infections."
     active_infections::Array{Infection}
+
+    "Counts of finished infections for the host."
+    n_cleared_infections::UInt32
 
     """
     Immune history.
@@ -233,6 +248,14 @@ management auxiliaries.
     n_active_infections_per_host_max::Int
 
     """
+    Upper bound on number of liver infections per host.
+
+    See explanation of rejection sampling under `n_immunities_per_host_max`.
+    """
+    n_liver_infections_per_host_max::Int
+
+
+    """
         Array of old infections.
 
         Used to prevent allocation of new infections.
@@ -241,6 +264,8 @@ management auxiliaries.
 
     "Number of cleared infections."
     n_cleared_infections::Int
+
+    durations::Array{infectionDuration}
 end
 
 """

@@ -65,7 +65,7 @@ function init_params()
         use_immunity_by_allele = false,
 
 #         use_immunity_by_allele = true,
-#         whole_gene_immune = false,
+         whole_gene_immune = false,
 
         t_year = t_year,
         t_end = (111) * t_year,

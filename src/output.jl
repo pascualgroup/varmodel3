@@ -147,10 +147,11 @@ function initialize_database()
 
     execute(db, """
         CREATE TABLE sampled_durations (
-            time INTEGER,
             host_id INTEGER,
-            infection_id INTEGER,
+            n_cleared_infections INTEGER,
+            n_immuned_alleles INTEGER,
             infection_time REAL,
+            expression_time REAL,
             infection_duration REAL
         );
     """)
@@ -172,7 +173,7 @@ function initialize_database()
         make_insert_statement(db, "gene_strain_counts", 3),
         make_insert_statement(db, "sampled_hosts", 6),
         make_insert_statement(db, "sampled_infections", 6),
-        make_insert_statement(db, "sampled_durations", 5),
+        make_insert_statement(db, "sampled_durations", 6),
         make_insert_statement(db, "sampled_infection_genes", 2 + P.n_loci)
     )
 end
@@ -210,6 +211,7 @@ function write_output!(db, t, s, stats)
 
         if t % P.summary_period == 0
             write_summary(db, t, s, stats)
+            write_duration!(db, t, s)
         end
 
         if t % P.host_sampling_period == 0
@@ -327,14 +329,18 @@ end
 """
 Write the infection durations to the `sampled_durations` table.
 """
-function write_duration(db, t, host, i)
-    infection = host.active_infections[i]
-    execute(
-        db.sampled_durations,
-        (
-            t, Int64(host.id), Int64(infection.id), infection.t_infection, infection.duration
-        )
-    )
+function write_duration!(db, t, s)
+    for dur in s.durations
+        execute(
+            db.sampled_durations,
+            (
+                Int64(dur.host_id), Int64(dur.n_cleared_infections),
+                Int64(dur.n_immuned_alleles),
+                dur.t_infection, dur.t_expression, dur.duration
+            )
+        )   
+    end
+    empty!(s.durations)
 end
 
 """
@@ -350,7 +356,7 @@ function write_gene_strain_counts(db, t, s)
     strains::BitSet = BitSet()
 
     for host in s.hosts
-        count_genes_and_strains!(genes, strains, host.liver_infections)
+        #count_genes_and_strains!(genes, strains, host.liver_infections)
         count_genes_and_strains!(genes, strains, host.active_infections)
     end
 
