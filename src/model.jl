@@ -311,10 +311,10 @@ function do_biting!(t, s, stats)
         P.transmissibility
     end
 
-    # First choose the active strains from the host that will be transmitted to mosquito
-    # This is determined by the transmissibility
+    # First, choose the active strain(s) from the host that will be transmitted to the mosquito.
+    # This is determined by the probability of transmission.
     choose_transmit = rand(Float64, src_active_count)
-    transmitted_strains = src_host.active_infections[choose_transmit.<p_transmit]
+    transmitted_strains = src_host.active_infections[choose_transmit .< p_transmit]
     #println("t = $(t): originalSize $(src_active_count), newSize $(length(transmitted_strains))")
 
     # The number of transmissions is bounded by the number of source infections
@@ -353,9 +353,10 @@ function do_biting!(t, s, stats)
             sample_columns_from_two_matrices_to!(dst_inf.genes, src_inf_1.genes, src_inf_2.genes)
         end
 
-        # Add this infection to the destination host
+        # Add this infection to the destination host.
         push!(dst_host.liver_infections, dst_inf)
-        # update population wide host liver max
+                                    
+        # Update the population wide maximum number of liver infections per host.
         s.n_liver_infections_per_host_max = max(s.n_liver_infections_per_host_max, length(dst_host.liver_infections))
 
     end
