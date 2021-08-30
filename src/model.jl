@@ -115,16 +115,17 @@ function initialize_state()
 
     # Initialize gene pool as an (n_loci, n_genes_initial) matrix filled with
     # allele IDs drawn uniformly randomly in 1:n_alleles_per_locus_initial.
-    # and to avoid duplications, 10 times of random numbers are draw and then reduced to a set
+    # To avoid duplicates (i.e. genes sharing the same allele ID at each locus),
+    # 10 times more genes are drawn which are then reduced to a set of `n_genes_initial` unique genes.
     gene_pool = reshape(
-        rand(1:P.n_alleles_per_locus_initial, P.n_loci * P.n_genes_initial*10),
-        (P.n_loci, P.n_genes_initial*10)
+        rand(1:P.n_alleles_per_locus_initial, P.n_loci * P.n_genes_initial * 10),
+        (P.n_loci, P.n_genes_initial * 10)
     )
     gene_pool_set = Set()
     i = 1
-    while length(gene_pool_set)<P.n_genes_initial
+    while length(gene_pool_set) < P.n_genes_initial
         push!(gene_pool_set, gene_pool[:,i])
-        i+=1
+        i += 1
     end
     gene_pool = Array{Int}(undef, P.n_loci, 0)
     for gene in gene_pool_set
