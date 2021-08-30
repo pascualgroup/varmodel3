@@ -48,19 +48,33 @@ struct ImmuneHistoryByAllele <: ImmuneHistory
 end
 
 """
-Struct storing the information of a sampled duration, with its host's
- past infection and immunity counts
- This gets stored in a vector durations when an infection finishes expression
- and get sampled at the probability of  1/`sample_duration`
+Struct storing the information of a sampled infection duration,
+with its host's cleared infection and immunity counts.
+
+This gets sampled at the probability of 1/`sample_duration`
+when an infection finishes expression.
 """
 
 @with_kw mutable struct infectionDuration
+    "Infection identifier, unique across all hosts."
     id::InfectionId
+    
+    "Host identifier, unique across the simulation."
     host_id::HostId
+    
+    "Counts of finished infections for the host."
     n_cleared_infections::UInt32
+    
+    "Counts of immunity."
     n_immuned_alleles::UInt32
+    
+    "Time at which infection occurred (entered the liver stage)."
     t_infection::Float64
+    
+    "Time at which expression started (entered the asexual cycle)."
     t_expression::Float64
+    
+    "Duration of the infection."
     duration::Float64
 end
 
@@ -78,7 +92,7 @@ matrix of allele IDs), and the currently expressed index.
     "Time at which infection occurred (entered the liver stage)."
     t_infection::Float64
 
-    "Time at which expression starts (enters the asexual cycle)."
+    "Time at which expression started (entered the asexual cycle)."
     t_expression::Float64
 
     """
