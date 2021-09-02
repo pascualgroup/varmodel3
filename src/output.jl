@@ -35,6 +35,7 @@ struct VarModelDB
     sampled_infections::Stmt
     sampled_durations::Stmt
     sampled_infection_genes::Stmt
+    sampled_immunity::Stmt
 end
 
 """
@@ -118,8 +119,10 @@ function initialize_database()
     execute(db, """
         CREATE TABLE gene_strain_counts (
             time INTEGER,
-            n_circulating_genes INTEGER,
-            n_circulating_strains INTEGER
+            n_circulating_genes_liver INTEGER,
+            n_circulating_strains_liver INTEGER,
+            n_circulating_genes_blood INTEGER,
+            n_circulating_strains_blood INTEGER
         );
     """)
 
@@ -165,16 +168,27 @@ function initialize_database()
             UNIQUE(infection_id, expression_index) ON CONFLICT IGNORE
         );
     """)
-
+    
+    execute(db, """
+        CREATE TABLE sampled_immunity (
+            time INTEGER,
+            host_id INTEGER,
+            locus INTEGER,
+            allele INTEGER,
+            immunity_level INTEGER
+        );
+    """)
+    
     VarModelDB(
         db,
         make_insert_statement(db, "meta", 2),
         make_insert_statement(db, "summary", 13),
-        make_insert_statement(db, "gene_strain_counts", 3),
+        make_insert_statement(db, "gene_strain_counts", 5),
         make_insert_statement(db, "sampled_hosts", 6),
         make_insert_statement(db, "sampled_infections", 6),
         make_insert_statement(db, "sampled_durations", 6),
-        make_insert_statement(db, "sampled_infection_genes", 2 + P.n_loci)
+        make_insert_statement(db, "sampled_infection_genes", 2 + P.n_loci),
+        make_insert_statement(db, "sampled_immunity", 5)
     )
 end
 
@@ -281,12 +295,14 @@ function write_host_samples(db, t, s)
 
     # For each host, write out birth/death time and each infection.
     for host in hosts
+        write_immunity(db, t, host)
+        
         execute(
-            db.sampled_hosts,
-            (
-                t, Int64(host.id), host.t_birth, host.t_death,
-                length(host.liver_infections), length(host.active_infections)
-            )
+        db.sampled_hosts,
+        (
+            t, Int64(host.id), host.t_birth, host.t_death,
+            length(host.liver_infections), length(host.active_infections)
+        )
         )
 
         for infection in host.liver_infections
@@ -296,6 +312,7 @@ function write_host_samples(db, t, s)
         for infection in host.active_infections
             write_infection(db, t, host, infection)
         end
+        
     end
 end
 
@@ -352,16 +369,19 @@ strains.
 """
 function write_gene_strain_counts(db, t, s)
 #     println("write_gene_strain_counts($(t))")
-    genes::Set{Gene} = Set()
-    strains::BitSet = BitSet()
-
+    genesLiver::Set{Gene} = Set()
+    strainsLiver::BitSet = BitSet()
+    genesBlood::Set{Gene} = Set()
+    strainsBlood::BitSet = BitSet()
+    
     for host in s.hosts
-        #count_genes_and_strains!(genes, strains, host.liver_infections)
-        count_genes_and_strains!(genes, strains, host.active_infections)
+        count_genes_and_strains!(genesLiver, strainsLiver, host.liver_infections)
+        count_genes_and_strains!(genesBlood, strainsBlood, host.active_infections)
     end
 
-    execute(db.gene_strain_counts, (t, length(genes), length(strains)))
+    execute(db.gene_strain_counts, (t, length(genesLiver), length(strainsLiver), length(genesBlood), length(strainsBlood)))
 end
+
 
 """
 Count genes and strains for a particular list of infections in a particular host.
@@ -376,5 +396,17 @@ function count_genes_and_strains!(genes, strains, infections)
             push!(genes, infection.genes[:,i])
         end
         push!(strains, infection.strain_id)
+    end
+end
+
+"""
+Write immunity
+"""
+function write_immunity(db, t, host)
+    for locus in 1:P.n_loci
+        d = host.immunity.vd[locus]
+        for (key, value) in d
+            execute(db.sampled_immunity, (t, Int64(host.id), Int64(locus), Int64(key), Int64(value)))
+        end
     end
 end

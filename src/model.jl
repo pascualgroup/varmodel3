@@ -99,6 +99,14 @@ function run()
     went_extinct = total_rate == 0.0
     println("went extinct? $(went_extinct)")
     execute(db.meta, ("went_extinct", Int64(went_extinct)))
+    
+    total_num_genes_generated_mut = s.next_gene_id_mut - 1
+    println("total number of new genes generated out of mutation? $(total_num_genes_generated_mut)")
+    execute(db.meta, ("total_num_genes_generated_mut", Int64(total_num_genes_generated_mut)))
+    
+    total_num_genes_generated_recomb = s.next_gene_id_recomb - 1
+    println("total number of new genes generated out of recombination? $(total_num_genes_generated_recomb)")
+    execute(db.meta, ("total_num_genes_generated_recomb", Int64(total_num_genes_generated_recomb)))
 end
 
 function recompute_rejection_upper_bounds!(s)
@@ -175,6 +183,8 @@ function initialize_state()
         next_host_id = P.n_hosts + 1,
         next_strain_id = P.n_initial_infections + 1,
         next_infection_id = P.n_initial_infections + 1,
+        next_gene_id_mut = 1,
+        next_gene_id_recomb = 1,
         hosts = hosts,
         old_infections = [],
         n_immunities_per_host_max = 0,
@@ -433,7 +443,7 @@ function do_immigration!(t, s, stats)
     advance_host!(t, s, host)
 
     # If host doesn't have an available infection slot, reject this sample.
-    if isnothing(P.n_infections_liver_max)
+    if !isnothing(P.n_infections_liver_max)
         if length(host.liver_infections) == P.n_infections_liver_max
             return false
         end
@@ -487,7 +497,7 @@ function do_switching!(t, s, stats)
         return false
     end
     infection = host.active_infections[inf_index]
-
+    
     """
     Increment immunity level to currently expressed gene.
     For the partial allele model, expression advance by alleles, but
@@ -550,38 +560,38 @@ function advance_immuned_genes!(t, s, host, i)
         if infection.expression_index_locus == P.n_loci
             increment_immunity!(s, host, infection.genes[:, infection.expression_index])
         end
- 
-     # If we're at the end, clear the infection and return.
-     if infection.expression_index == P.n_genes_per_strain && infection.expression_index_locus == P.n_loci
-         if s.n_cleared_infections % P.sample_duration == 0 
-             # Calculate and write the infection duration.
-             add_infectionDuration!(t, s, host, i)
-         end
-         s.n_cleared_infections += 1
-         host.n_cleared_infections += 1
-         delete_and_swap_with_end!(host.active_infections, i)
-         #here if deleting an infection, and the indexing changed, then tell the calling function 
-         #it doesn't advancing its index
-         return false
-     else
-         # Otherwise, advance gene and/or locus expression(s).
-         if P.use_immunity_by_allele  && !P.whole_gene_immune
-             if infection.expression_index_locus == P.n_loci
-                 infection.expression_index += 1
-                 infection.expression_index_locus = 1
-             else
-                 infection.expression_index_locus += 1
-             end
-         else
-             infection.expression_index += 1
-             infection.expression_index_locus = P.n_loci
-         end 
-     end
+    
+        # If we're at the end, clear the infection and return.
+        if infection.expression_index == P.n_genes_per_strain && infection.expression_index_locus == P.n_loci
+            if s.n_cleared_infections % P.sample_duration == 0 
+                # Calculate and write the infection duration.
+                add_infectionDuration!(t, s, host, i)
+            end
+            s.n_cleared_infections += 1
+            host.n_cleared_infections += 1
+            delete_and_swap_with_end!(host.active_infections, i)
+            #here if deleting an infection, and the indexing changed, then tell the calling function 
+            #it doesn't advancing its index
+            return false
+        else
+            # Otherwise, advance gene and/or locus expression(s).
+            if P.use_immunity_by_allele  && !P.whole_gene_immune
+                if infection.expression_index_locus == P.n_loci
+                    infection.expression_index += 1
+                    infection.expression_index_locus = 1
+                else
+                    infection.expression_index_locus += 1
+                end
+            else
+                infection.expression_index += 1
+                infection.expression_index_locus = P.n_loci
+            end 
+        end
         # If the host not immune, stop advancing.
         to_advance = is_immune(host.immunity, infection.genes[:, infection.expression_index],infection.expression_index_locus)
-     end
-     true
- end
+    end
+    true
+end
  
 
 ### MUTATION EVENT ###
@@ -614,7 +624,8 @@ function do_mutation!(t, s, stats)
     s.n_alleles[locus] += 1
     infection.genes[locus, expression_index] = s.n_alleles[locus]
     infection.strain_id = next_strain_id!(s)
-
+    s.next_gene_id_mut += 1
+    
     true
 end
 
@@ -627,12 +638,15 @@ function get_rate_ectopic_recombination(t, s)
         P.n_genes_per_strain * (P.n_genes_per_strain - 1) / 2.0
 end
 
+
+
 function do_ectopic_recombination!(t, s, stats)
-    index = rand(CartesianIndices((P.n_hosts, (s.n_active_infections_per_host_max+s.n_liver_infections_per_host_max))))
+    # Index based on the total number of infections.
+    index = rand(CartesianIndices((P.n_hosts, (s.n_active_infections_per_host_max + s.n_liver_infections_per_host_max))))
     host = s.hosts[index[1]]
     inf_index = index[2]
 
-    # Advance host (rebirth or infection activation)
+    # Advance host (rebirth or infection activation).
     advance_host!(t, s, host)
 
     # If there's no active infection at the drawn index, reject this sample.
@@ -683,9 +697,8 @@ function do_ectopic_recombination!(t, s, stats)
         infection.genes[:, gene_index_1] = if create_new_allele
             recombine_genes_new_allele(s, gene1, gene2, breakpoint)
         else
-            recombine_genes(gene1, gene2, breakpoint)
+            recombine_genes(gene1, gene2, breakpoint, s)
         end
-        recombined = true
     end
 
     # Recombine to modify second gene, if functional
@@ -693,11 +706,16 @@ function do_ectopic_recombination!(t, s, stats)
         infection.genes[:, gene_index_2] = if create_new_allele
             recombine_genes_new_allele(s, gene1, gene2, breakpoint)
         else
-            recombine_genes(gene2, gene1, breakpoint)
+            recombine_genes(gene2, gene1, breakpoint, s)
         end
+    end
+    
+    if gene1 == infection.genes[:, gene_index_1] && gene2 == infection.genes[:, gene_index_2]
+        recombined = false
+    else 
         recombined = true
     end
-
+    
     if recombined
         infection.strain_id = next_strain_id!(s)
         true
@@ -762,10 +780,13 @@ function p_recombination_is_functional_integer(gene1, gene2, breakpoint::Int)
     rho^rho_power
 end
 
-function recombine_genes(gene1, gene2, breakpoint)
+function recombine_genes(gene1, gene2, breakpoint, s)
     gene = MGene(undef)
     gene[1:(breakpoint - 1)] = gene1[1:(breakpoint - 1)]
     gene[breakpoint:end] = gene2[breakpoint:end]
+    if gene != gene1 && gene != gene2
+        s.next_gene_id_recomb += 1
+    end
     gene
 end
 
@@ -783,6 +804,9 @@ function recombine_genes_new_allele(s, gene1, gene2, breakpoint)
     end
     if P.n_loci > breakpoint
         gene[(breakpoint + 1):end] = gene2[(breakpoint + 1):end]
+    end
+    if gene != gene1 && gene != gene2
+        s.next_gene_id_recomb += 1
     end
     gene
 end

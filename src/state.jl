@@ -11,6 +11,7 @@ Also contains `verify()`, which does some cursory checks on state consistency.
 const Locus = UInt8
 const HostId = UInt32
 const InfectionId = UInt32
+const GeneId = UInt32
 
 const AlleleId = if P.ectopic_recombination_generates_new_alleles
     UInt32
@@ -21,7 +22,7 @@ end
 const StrainId = UInt32
 const ExpressionIndex = UInt8
 const ExpressionIndexLocus = UInt8
-const ImmunityLevel = UInt8
+const ImmunityLevel = UInt16 # UInt8
 const Gene = SVector{P.n_loci, AlleleId}  # Immutable fixed-size vector
 const MGene = MVector{P.n_loci, AlleleId} # Mutable fixed-size vector
 
@@ -214,6 +215,21 @@ management auxiliaries.
     Whenever a new infection occurs, it is given a new ID.
     """
     next_infection_id::InfectionId
+    
+    
+    """
+    ID for next gene out of mutation.
+
+    Whenever a new gene is created, it is given a new ID.
+    """
+    next_gene_id_mut::GeneId
+    
+    """
+    ID for next gene out of recombination.
+
+    Whenever a new gene is created, it is given a new ID.
+    """
+    next_gene_id_recomb::GeneId
 
     """
     Upper bound on number of immunities per host.
