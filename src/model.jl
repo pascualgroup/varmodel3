@@ -704,7 +704,7 @@ function do_ectopic_recombination!(t, s, stats)
     # Recombine to modify second gene, if functional
     if rand() < p_functional
         infection.genes[:, gene_index_2] = if create_new_allele
-            recombine_genes_new_allele(s, gene1, gene2, breakpoint)
+            recombine_genes_new_allele(s, gene2, gene1, breakpoint)
         else
             recombine_genes(gene2, gene1, breakpoint, s)
         end
