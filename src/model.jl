@@ -115,17 +115,16 @@ function initialize_state()
 
     # Initialize gene pool as an (n_loci, n_genes_initial) matrix filled with
     # allele IDs drawn uniformly randomly in 1:n_alleles_per_locus_initial.
-    # To avoid duplicates (i.e. genes sharing the same allele ID at each locus),
-    # 10 times more genes are drawn which are then reduced to a set of `n_genes_initial` unique genes.
+    # and to avoid duplications, 10 times of random numbers are draw and then reduced to a set
     gene_pool = reshape(
-        rand(1:P.n_alleles_per_locus_initial, P.n_loci * P.n_genes_initial * 10),
-        (P.n_loci, P.n_genes_initial * 10)
+        rand(1:P.n_alleles_per_locus_initial, P.n_loci * P.n_genes_initial*10),
+        (P.n_loci, P.n_genes_initial*10)
     )
     gene_pool_set = Set()
     i = 1
-    while length(gene_pool_set) < P.n_genes_initial
+    while length(gene_pool_set)<P.n_genes_initial
         push!(gene_pool_set, gene_pool[:,i])
-        i += 1
+        i+=1
     end
     gene_pool = Array{Int}(undef, P.n_loci, 0)
     for gene in gene_pool_set
@@ -311,10 +310,10 @@ function do_biting!(t, s, stats)
         P.transmissibility
     end
 
-    # First, choose the active strain(s) from the host that will be transmitted to the mosquito.
-    # This is determined by the probability of transmission.
+    # First choose the active strains from the host that will be transmitted to mosquito
+    # This is determined by the transmissibility
     choose_transmit = rand(Float64, src_active_count)
-    transmitted_strains = src_host.active_infections[choose_transmit .< p_transmit]
+    transmitted_strains = src_host.active_infections[choose_transmit.<p_transmit]
     #println("t = $(t): originalSize $(src_active_count), newSize $(length(transmitted_strains))")
 
     # The number of transmissions is bounded by the number of source infections
@@ -353,10 +352,9 @@ function do_biting!(t, s, stats)
             sample_columns_from_two_matrices_to!(dst_inf.genes, src_inf_1.genes, src_inf_2.genes)
         end
 
-        # Add this infection to the destination host.
+        # Add this infection to the destination host
         push!(dst_host.liver_infections, dst_inf)
-                                    
-        # Update the population wide maximum number of liver infections per host.
+        # update population wide host liver max
         s.n_liver_infections_per_host_max = max(s.n_liver_infections_per_host_max, length(dst_host.liver_infections))
 
     end
@@ -394,7 +392,7 @@ function advance_host!(t, s, host)
                     push!(host.active_infections, infection)
                     infection.t_expression = t
 
-                    advance_immuned_genes!(t, s, host, length(host.active_infections))
+                    advance_immuned_genes!(t,s,host,length(host.active_infections))
 
                     if length(host.active_infections) > s.n_active_infections_per_host_max
                         s.n_active_infections_per_host_max = length(host.active_infections)
@@ -454,10 +452,9 @@ function do_immigration!(t, s, stats)
         infection.genes[:,i] = s.gene_pool[:, rand(1:size(s.gene_pool)[2])]
     end
 
-    # Add infection to host.
+    # Add infection to host
     push!(host.liver_infections, infection)
-    
-    # Update the population wide maximum number of liver infections per host.
+
     s.n_liver_infections_per_host_max = max(s.n_liver_infections_per_host_max, length(host.liver_infections))
 
     true
@@ -468,16 +465,16 @@ end
 
 function get_rate_switching(t, s)
     if P.use_immunity_by_allele && !P.whole_gene_immune
-        # The switching rate is set by the number of loci.
-        (P.switching_rate * P.n_loci) * P.n_hosts * (s.n_active_infections_per_host_max + s.n_liver_infections_per_host_max)
+        #switching rate set by total number of alleles
+        (P.switching_rate * P.n_loci) * P.n_hosts * (s.n_active_infections_per_host_max+s.n_liver_infections_per_host_max)
     else
-        P.switching_rate * P.n_hosts * (s.n_active_infections_per_host_max + s.n_liver_infections_per_host_max)
+        P.switching_rate * P.n_hosts * (s.n_active_infections_per_host_max+s.n_liver_infections_per_host_max)
     end
 end
 
 function do_switching!(t, s, stats)
-    # Index based on the total number of infections.
-    index = rand(CartesianIndices((P.n_hosts, (s.n_active_infections_per_host_max + s.n_liver_infections_per_host_max))))
+    # change to total number of infections instead of active infections alone
+    index = rand(CartesianIndices((P.n_hosts, (s.n_active_infections_per_host_max+s.n_liver_infections_per_host_max))))
     host = s.hosts[index[1]]
  
     # Advance host (rebirth or infection activation)
@@ -493,8 +490,8 @@ function do_switching!(t, s, stats)
 
     """
     Increment immunity level to currently expressed gene.
-    For the partial allele model, expression advances by alleles,
-    but immunity only gains when the full gene finishes its expression.
+    For the partial allele model, expression advance by alleles, but
+    Immunity only gains after the full gene finishes expression
     """
     if infection.expression_index_locus == P.n_loci
         increment_immunity!(s, host, infection.genes[:, infection.expression_index])
@@ -530,8 +527,8 @@ function do_switching!(t, s, stats)
     """
     i = 1
     while i <= length(host.active_infections)
-        if advance_immuned_genes!(t, s, host, i)
-            # If there is no end of expression and reordering of infections, then increment the index.
+        if advance_immuned_genes!(t,s,host,i)
+            # if there is no end of expression and reordering of infections, then index plus 1
             i += 1
         end
     end
@@ -539,16 +536,62 @@ function do_switching!(t, s, stats)
     return true
 end
 
+# This function moves the expression index of an infection to its first non-immune allele/gene.
+function advance_immuned_genes!(t, s, host, i)
+
+    # Advance expression until a non-immune gene or allele is reached.
+    infection = host.active_infections[i]
+    # If the host not immune, stop advancing.
+    to_advance = is_immune(host.immunity, infection.genes[:, infection.expression_index],infection.expression_index_locus)
+ 
+ 
+    while to_advance
+        # Increment immunity level to currently expressed gene or allele.
+        if infection.expression_index_locus == P.n_loci
+            increment_immunity!(s, host, infection.genes[:, infection.expression_index])
+        end
+ 
+     # If we're at the end, clear the infection and return.
+     if infection.expression_index == P.n_genes_per_strain && infection.expression_index_locus == P.n_loci
+         if s.n_cleared_infections % P.sample_duration == 0 
+             # Calculate and write the infection duration.
+             add_infectionDuration!(t, s, host, i)
+         end
+         s.n_cleared_infections += 1
+         host.n_cleared_infections += 1
+         delete_and_swap_with_end!(host.active_infections, i)
+         #here if deleting an infection, and the indexing changed, then tell the calling function 
+         #it doesn't advancing its index
+         return false
+     else
+         # Otherwise, advance gene and/or locus expression(s).
+         if P.use_immunity_by_allele  && !P.whole_gene_immune
+             if infection.expression_index_locus == P.n_loci
+                 infection.expression_index += 1
+                 infection.expression_index_locus = 1
+             else
+                 infection.expression_index_locus += 1
+             end
+         else
+             infection.expression_index += 1
+             infection.expression_index_locus = P.n_loci
+         end 
+     end
+        # If the host not immune, stop advancing.
+        to_advance = is_immune(host.immunity, infection.genes[:, infection.expression_index],infection.expression_index_locus)
+     end
+     true
+ end
+ 
 
 ### MUTATION EVENT ###
-
+#update mutation and recombinatin rates towards all infections
 function get_rate_mutation(t, s)
-    P.mutation_rate * P.n_hosts * (s.n_active_infections_per_host_max + s.n_liver_infections_per_host_max) * P.n_genes_per_strain * P.n_loci
+    P.mutation_rate * P.n_hosts * (s.n_active_infections_per_host_max+s.n_liver_infections_per_host_max) * P.n_genes_per_strain * P.n_loci
 end
 
 function do_mutation!(t, s, stats)
-    # Index based on the total number of infections.
-    index = rand(CartesianIndices((P.n_hosts, (s.n_active_infections_per_host_max + s.n_liver_infections_per_host_max), P.n_genes_per_strain, P.n_loci)))
+    index = rand(CartesianIndices((P.n_hosts, (s.n_active_infections_per_host_max+s.n_liver_infections_per_host_max), P.n_genes_per_strain, P.n_loci)))
     host = s.hosts[index[1]]
     inf_index = index[2]
     expression_index = index[3]
@@ -580,17 +623,16 @@ end
 
 function get_rate_ectopic_recombination(t, s)
     P.ectopic_recombination_rate *
-        P.n_hosts * (s.n_active_infections_per_host_max + s.n_liver_infections_per_host_max) *
+        P.n_hosts * (s.n_active_infections_per_host_max+s.n_liver_infections_per_host_max) *
         P.n_genes_per_strain * (P.n_genes_per_strain - 1) / 2.0
 end
 
 function do_ectopic_recombination!(t, s, stats)
-    # Index based on the total number of infections.
-    index = rand(CartesianIndices((P.n_hosts, (s.n_active_infections_per_host_max + s.n_liver_infections_per_host_max))))
+    index = rand(CartesianIndices((P.n_hosts, (s.n_active_infections_per_host_max+s.n_liver_infections_per_host_max))))
     host = s.hosts[index[1]]
     inf_index = index[2]
 
-    # Advance host (rebirth or infection activation).
+    # Advance host (rebirth or infection activation)
     advance_host!(t, s, host)
 
     # If there's no active infection at the drawn index, reject this sample.
@@ -790,20 +832,6 @@ function next_strain_id!(s)
     id
 end
 
-# Push the current infection's duration calculations into the durations vector.
-function add_infectionDuration!(t, s, host, i)
-    get_duration!(host.active_infections, i, t)
-    newInfDur = infectionDuration(
-        id = host.active_infections[i].id,
-        host_id = host.id,
-        n_cleared_infections = host.n_cleared_infections,
-        n_immuned_alleles = immuneLength(host.immunity),
-        t_infection = host.active_infections[i].t_infection,
-        t_expression = host.active_infections[i].t_expression,
-        duration = host.active_infections[i].duration
-    )
-    push!(s.durations, newInfDur)
-end
 
 ### IMMUNITY FUNCTIONS ###
 
@@ -895,7 +923,6 @@ function decrement_immunity!(ih::ImmuneHistoryByAllele, locus::Locus, allele_id:
     end
 end
 
-
 function is_immune(ih::ImmuneHistoryByGene, gene, loc)
     get(ih.d, gene, 0) > 0
 end
@@ -915,49 +942,17 @@ function is_immune(ih::ImmuneHistoryByAllele, gene, loc)
     true
 end
 
-
-# This function moves the expression index of an infection to its first non-immune allele/gene.
-function advance_immuned_genes!(t, s, host, i)
-
-    # Advance expression until a non-immune gene or allele is reached.
-    infection = host.active_infections[i]
-    # If the host not immune, stop advancing.
-    to_advance = is_immune(host.immunity, infection.genes[:, infection.expression_index], infection.expression_index_locus)
-    
-    while to_advance
-        # Increment immunity level to currently expressed gene or allele.
-        if infection.expression_index_locus == P.n_loci
-            increment_immunity!(s, host, infection.genes[:, infection.expression_index])
-        end
- 
-     # If we're at the end, clear the infection and return.
-     if infection.expression_index == P.n_genes_per_strain && infection.expression_index_locus == P.n_loci
-         if s.n_cleared_infections % P.sample_duration == 0 
-             # Calculate and write the infection duration.
-             add_infectionDuration!(t, s, host, i)
-         end
-         s.n_cleared_infections += 1
-         host.n_cleared_infections += 1
-         delete_and_swap_with_end!(host.active_infections, i)
-         #here if deleting an infection, and the indexing changed, then tell the calling function 
-         #it doesn't advancing its index
-         return false
-     else
-         # Otherwise, advance gene and/or locus expression(s).
-         if P.use_immunity_by_allele && !P.whole_gene_immune
-             if infection.expression_index_locus == P.n_loci
-                 infection.expression_index += 1
-                 infection.expression_index_locus = 1
-             else
-                 infection.expression_index_locus += 1
-             end
-         else
-             infection.expression_index += 1
-             infection.expression_index_locus = P.n_loci
-         end 
-     end
-        # If the host not immune, stop advancing.
-        to_advance = is_immune(host.immunity, infection.genes[:, infection.expression_index], infection.expression_index_locus)
-     end
-     true
- end
+# push the current infection's duration calculations into durations vector
+function add_infectionDuration!(t, s, host, i)
+    get_duration!(host.active_infections, i, t)
+    newInfDur = infectionDuration(
+        id=host.active_infections[i].id,
+        host_id=host.id,
+        n_cleared_infections=host.n_cleared_infections,
+        n_immuned_alleles=immuneLength(host.immunity),
+        t_infection = host.active_infections[i].t_infection,
+        t_expression = host.active_infections[i].t_expression,
+        duration = host.active_infections[i].duration
+    )
+    push!(s.durations, newInfDur)
+end

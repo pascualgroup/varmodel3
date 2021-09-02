@@ -347,8 +347,8 @@ end
 Write gene and strain counts to the `gene_strain_counts` table.
 
 Counts are not maintained dynamically during the simulation; this function
-simply scans all host active infections and assembles sets of all genes and
-all strains.
+simply scans all host infections and assembles sets of all genes and all
+strains.
 """
 function write_gene_strain_counts(db, t, s)
 #     println("write_gene_strain_counts($(t))")
