@@ -11,6 +11,7 @@ Also contains `verify()`, which does some cursory checks on state consistency.
 const Locus = UInt8
 const HostId = UInt32
 const InfectionId = UInt32
+const GeneId = UInt32
 
 const AlleleId = if P.ectopic_recombination_generates_new_alleles
     UInt32
@@ -20,7 +21,8 @@ end
 
 const StrainId = UInt32
 const ExpressionIndex = UInt8
-const ImmunityLevel = UInt8
+const ExpressionIndexLocus = UInt8
+const ImmunityLevel = UInt16 # UInt8
 const Gene = SVector{P.n_loci, AlleleId}  # Immutable fixed-size vector
 const MGene = MVector{P.n_loci, AlleleId} # Mutable fixed-size vector
 
@@ -47,6 +49,23 @@ struct ImmuneHistoryByAllele <: ImmuneHistory
 end
 
 """
+Struct storing the information of a sampled duration, with its host's
+ past infection and immunity counts
+ This gets stored in a vector durations when an infection finishes expression
+ and get sampled at the probability of  1/`sample_duration`
+"""
+
+@with_kw mutable struct infectionDuration
+    id::InfectionId
+    host_id::HostId
+    n_cleared_infections::UInt32
+    n_immuned_alleles::UInt32
+    t_infection::Float64
+    t_expression::Float64
+    duration::Float64
+end
+
+"""
 Struct representing infections.
 
 Infection state currently includes the time at which the infection occurred,
@@ -59,6 +78,9 @@ matrix of allele IDs), and the currently expressed index.
 
     "Time at which infection occurred (entered the liver stage)."
     t_infection::Float64
+
+    "Time at which expression starts (enters the asexual cycle)."
+    t_expression::Float64
 
     """
     Strain identifier, unique across the simulation.
@@ -94,6 +116,9 @@ matrix of allele IDs), and the currently expressed index.
     """
     expression_index::ExpressionIndex
 
+    "Index in `genes` matrix of currently expressed locus."
+    expression_index_locus::ExpressionIndexLocus
+
     "Duration of the infection."
     duration::Float64
 end
@@ -123,6 +148,9 @@ Infection arrays are dynamically sized but currently limited to
 
     "Actively expressed infections."
     active_infections::Array{Infection}
+
+    "Counts of finished infections for the host."
+    n_cleared_infections::UInt32
 
     """
     Immune history.
@@ -188,6 +216,21 @@ management auxiliaries.
     """
     next_infection_id::InfectionId
 
+
+    """
+    ID for next gene out of mutation.
+
+    Whenever a new gene is created, it is given a new ID.
+    """
+    next_gene_id_mut::GeneId
+
+    """
+    ID for next gene out of recombination.
+
+    Whenever a new gene is created, it is given a new ID.
+    """
+    next_gene_id_recomb::GeneId
+
     """
     Upper bound on number of immunities per host.
 
@@ -221,6 +264,14 @@ management auxiliaries.
     n_active_infections_per_host_max::Int
 
     """
+    Upper bound on number of liver infections per host.
+
+    See explanation of rejection sampling under `n_immunities_per_host_max`.
+    """
+    n_liver_infections_per_host_max::Int
+
+
+    """
         Array of old infections.
 
         Used to prevent allocation of new infections.
@@ -229,6 +280,14 @@ management auxiliaries.
 
     "Number of cleared infections."
     n_cleared_infections::Int
+
+    durations::Array{infectionDuration}
+
+    """
+    Ratio between the number of infected bites and the number of total bites
+    during the sampling period.
+    """
+    infected_ratio::Float64
 end
 
 """

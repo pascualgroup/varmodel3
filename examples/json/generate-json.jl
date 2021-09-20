@@ -57,12 +57,15 @@ function init_params()
         host_sample_size = 100,
 
         verification_period = 360,
-        
+
         sample_duration = 1000,
 
         rng_seed = nothing,
 
         use_immunity_by_allele = false,
+
+#         use_immunity_by_allele = true,
+#         whole_gene_immune = false,
 
         t_year = t_year,
         t_end = (111) * t_year,
@@ -111,6 +114,8 @@ function init_params()
         n_infections_active_max = 10,
 
         biting_rate = 0.0005 * daily_biting_rate_multiplier,
+
+        migrants_match_local_prevalence = true,
     )
 end
 

@@ -228,7 +228,7 @@ keyword constructor for the class.
 
     See description in the `immunity` field of struct `State`.
     """
-    immunity_level_max::Union{Int8, Nothing} = nothing
+    immunity_level_max::Union{Int16, Nothing} = nothing
 
     """
     Rate at which immunity is lost, per host, per gene.
@@ -303,6 +303,22 @@ keyword constructor for the class.
     """
     sample_duration::Union{Int, Nothing} = nothing
 
+    """
+        Whether a host gains immunity towards a gene if the host has seen all
+        the alleles. If `true`, then a host gains immunity towards a gene only
+        if the host has seen all the alleles. If `false`, then a host gains a
+        gradual increase in immunity as the host sees more alleles in a gene.
+    """
+    whole_gene_immune::Union{Bool, Nothing} = nothing
+
+    """
+    Whether the immigration rate needs to time the local infection rate.
+    If `true`, then the immigration rate will be multiplied by the local
+    infection rate (i.e. number of transmitted bites / number of total bites).
+    If `false`, then the immigration rate is not impacted by the local infection
+    rate.
+    """
+    migrants_match_local_prevalence::Union{Bool, Nothing} = nothing
 end
 
 """
@@ -417,4 +433,10 @@ function validate(p::Params)
     if p.n_infections_active_max !== nothing
         @assert p.n_infections_active_max >= 0
     end
+
+    if p.use_immunity_by_allele
+        @assert p.whole_gene_immune !== nothing
+    end
+
+    @assert p.migrants_match_local_prevalence !== nothing
 end
