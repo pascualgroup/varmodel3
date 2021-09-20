@@ -114,6 +114,8 @@ function init_params()
         n_infections_active_max = 10,
 
         biting_rate = 0.0005 * daily_biting_rate_multiplier,
+
+        migrants_match_local_prevalence = true,
     )
 end
 
