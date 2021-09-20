@@ -311,6 +311,14 @@ keyword constructor for the class.
     """
     whole_gene_immune::Union{Bool, Nothing} = nothing
 
+    """
+    Whether the immigration rate needs to time the local infection rate.
+    If `true`, then the immigration rate will be multiplied by the local
+    infection rate (i.e. number of transmitted bites / number of total bites).
+    If `false`, then the immigration rate is not impacted by the local infection
+    rate.
+    """
+    migrants_match_local_prevalence::Union{Bool, Nothing} = nothing
 end
 
 """
@@ -429,4 +437,6 @@ function validate(p::Params)
     if p.use_immunity_by_allele
         @assert p.whole_gene_immune !== nothing
     end
+
+    @assert p.migrants_match_local_prevalence !== nothing
 end

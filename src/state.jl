@@ -215,15 +215,15 @@ management auxiliaries.
     Whenever a new infection occurs, it is given a new ID.
     """
     next_infection_id::InfectionId
-    
-    
+
+
     """
     ID for next gene out of mutation.
 
     Whenever a new gene is created, it is given a new ID.
     """
     next_gene_id_mut::GeneId
-    
+
     """
     ID for next gene out of recombination.
 
@@ -282,6 +282,12 @@ management auxiliaries.
     n_cleared_infections::Int
 
     durations::Array{infectionDuration}
+
+    """
+    Ratio between the number of infected bites and the number of total bites
+    during the sampling period.
+    """
+    infected_ratio::Float64
 end
 
 """

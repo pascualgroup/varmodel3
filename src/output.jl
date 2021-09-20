@@ -168,7 +168,7 @@ function initialize_database()
             UNIQUE(infection_id, expression_index) ON CONFLICT IGNORE
         );
     """)
-    
+
     execute(db, """
         CREATE TABLE sampled_immunity (
             time INTEGER,
@@ -178,7 +178,7 @@ function initialize_database()
             immunity_level INTEGER
         );
     """)
-    
+
     VarModelDB(
         db,
         make_insert_statement(db, "meta", 2),
@@ -224,6 +224,9 @@ function write_output!(db, t, s, stats)
         execute(db, "BEGIN TRANSACTION")
 
         if t % P.summary_period == 0
+            if P.migrants_match_local_prevalence
+                recompute_infected_ratio!(s, stats)
+            end
             write_summary(db, t, s, stats)
             write_duration!(db, t, s)
         end
@@ -296,7 +299,7 @@ function write_host_samples(db, t, s)
     # For each host, write out birth/death time and each infection.
     for host in hosts
         write_immunity(db, t, host)
-        
+
         execute(
         db.sampled_hosts,
         (
@@ -312,7 +315,7 @@ function write_host_samples(db, t, s)
         for infection in host.active_infections
             write_infection(db, t, host, infection)
         end
-        
+
     end
 end
 
@@ -355,7 +358,7 @@ function write_duration!(db, t, s)
                 Int64(dur.n_immuned_alleles),
                 dur.t_infection, dur.t_expression, dur.duration
             )
-        )   
+        )
     end
     empty!(s.durations)
 end
@@ -373,7 +376,7 @@ function write_gene_strain_counts(db, t, s)
     strainsLiver::BitSet = BitSet()
     genesBlood::Set{Gene} = Set()
     strainsBlood::BitSet = BitSet()
-    
+
     for host in s.hosts
         count_genes_and_strains!(genesLiver, strainsLiver, host.liver_infections)
         count_genes_and_strains!(genesBlood, strainsBlood, host.active_infections)

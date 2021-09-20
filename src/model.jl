@@ -99,11 +99,11 @@ function run()
     went_extinct = total_rate == 0.0
     println("went extinct? $(went_extinct)")
     execute(db.meta, ("went_extinct", Int64(went_extinct)))
-    
+
     total_num_genes_generated_mut = s.next_gene_id_mut - 1
     println("total number of new genes generated out of mutation? $(total_num_genes_generated_mut)")
     execute(db.meta, ("total_num_genes_generated_mut", Int64(total_num_genes_generated_mut)))
-    
+
     total_num_genes_generated_recomb = s.next_gene_id_recomb - 1
     println("total number of new genes generated out of recombination? $(total_num_genes_generated_recomb)")
     execute(db.meta, ("total_num_genes_generated_recomb", Int64(total_num_genes_generated_recomb)))
@@ -113,6 +113,10 @@ function recompute_rejection_upper_bounds!(s)
     s.n_immunities_per_host_max = maximum(immuneLength(host.immunity) for host in s.hosts)
     s.n_active_infections_per_host_max = maximum(length(host.active_infections) for host in s.hosts)
     s.n_liver_infections_per_host_max = maximum(length(host.liver_infections) for host in s.hosts)
+end
+
+function recompute_infected_ratio!(s, stats)
+    s.infected_ratio = stats.n_transmitting_bites / stats.n_bites
 end
 
 
@@ -191,7 +195,8 @@ function initialize_state()
         n_active_infections_per_host_max = 0,
         n_liver_infections_per_host_max = 0,
         n_cleared_infections = 0,
-        durations = []
+        durations = [],
+        infected_ratio = 1.0
     )
 end
 
@@ -331,7 +336,7 @@ function do_biting!(t, s, stats)
     n_transmissions_max = min(length(transmitted_strains), dst_available_count)
     transmitted = false
     for i in 1:n_transmissions_max
-        
+
         stats.n_transmissions += 1
         transmitted = true
 
@@ -433,7 +438,7 @@ end
 ### IMMIGRATION EVENT ###
 
 function get_rate_immigration(t, s)
-    P.immigration_rate_fraction * get_rate_biting(t, s)
+    P.immigration_rate_fraction * get_rate_biting(t, s) * s.infected_ratio
 end
 
 function do_immigration!(t, s, stats)
@@ -486,7 +491,7 @@ function do_switching!(t, s, stats)
     # change to total number of infections instead of active infections alone
     index = rand(CartesianIndices((P.n_hosts, (s.n_active_infections_per_host_max+s.n_liver_infections_per_host_max))))
     host = s.hosts[index[1]]
- 
+
     # Advance host (rebirth or infection activation)
     advance_host!(t, s, host)
     inf_index = index[2]
@@ -497,7 +502,7 @@ function do_switching!(t, s, stats)
         return false
     end
     infection = host.active_infections[inf_index]
-    
+
     """
     Increment immunity level to currently expressed gene.
     For the partial allele model, expression advance by alleles, but
@@ -528,9 +533,9 @@ function do_switching!(t, s, stats)
         else
             infection.expression_index += 1
             infection.expression_index_locus = P.n_loci
-        end 
+        end
     end
-    
+
     """
     after gaining immunity to the expressed gene, loop through the other infections
     in the host to see if any one needs advancing
@@ -542,7 +547,7 @@ function do_switching!(t, s, stats)
             i += 1
         end
     end
- 
+
     return true
 end
 
@@ -553,24 +558,24 @@ function advance_immuned_genes!(t, s, host, i)
     infection = host.active_infections[i]
     # If the host not immune, stop advancing.
     to_advance = is_immune(host.immunity, infection.genes[:, infection.expression_index],infection.expression_index_locus)
- 
- 
+
+
     while to_advance
         # Increment immunity level to currently expressed gene or allele.
         if infection.expression_index_locus == P.n_loci
             increment_immunity!(s, host, infection.genes[:, infection.expression_index])
         end
-    
+
         # If we're at the end, clear the infection and return.
         if infection.expression_index == P.n_genes_per_strain && infection.expression_index_locus == P.n_loci
-            if s.n_cleared_infections % P.sample_duration == 0 
+            if s.n_cleared_infections % P.sample_duration == 0
                 # Calculate and write the infection duration.
                 add_infectionDuration!(t, s, host, i)
             end
             s.n_cleared_infections += 1
             host.n_cleared_infections += 1
             delete_and_swap_with_end!(host.active_infections, i)
-            #here if deleting an infection, and the indexing changed, then tell the calling function 
+            #here if deleting an infection, and the indexing changed, then tell the calling function
             #it doesn't advancing its index
             return false
         else
@@ -585,14 +590,14 @@ function advance_immuned_genes!(t, s, host, i)
             else
                 infection.expression_index += 1
                 infection.expression_index_locus = P.n_loci
-            end 
+            end
         end
         # If the host not immune, stop advancing.
         to_advance = is_immune(host.immunity, infection.genes[:, infection.expression_index],infection.expression_index_locus)
     end
     true
 end
- 
+
 
 ### MUTATION EVENT ###
 #update mutation and recombinatin rates towards all infections
@@ -625,7 +630,7 @@ function do_mutation!(t, s, stats)
     infection.genes[locus, expression_index] = s.n_alleles[locus]
     infection.strain_id = next_strain_id!(s)
     s.next_gene_id_mut += 1
-    
+
     true
 end
 
@@ -709,13 +714,13 @@ function do_ectopic_recombination!(t, s, stats)
             recombine_genes(gene2, gene1, breakpoint, s)
         end
     end
-    
+
     if gene1 == infection.genes[:, gene_index_1] && gene2 == infection.genes[:, gene_index_2]
         recombined = false
-    else 
+    else
         recombined = true
     end
-    
+
     if recombined
         infection.strain_id = next_strain_id!(s)
         true
