@@ -59,6 +59,25 @@ To do a parameter sweep, copy the `examples/sweep` directory, and modify/run as 
 | `n_infections_liver_max` | Maximum number of simultaneous infections in the liver stage |
 | `n_initial_infections` | Number of initial infections |
 | `n_loci` | Number of epitope loci in each gene |
+| `n_snps_per_strain` | Number of biallelic neutral single nucleotide polymorphims (SNPs) in strain |
+| `p_ectopic_recombination_is_conversion` | Probability that an ectopic recombination is a conversion |
+| `rho_recombination_tolerance` | Recombination tolerance, rho, Drummond et al |
+| `rng_seed` | Seed for random number generator |
+| `sample_duration` | Sample an infection duration every `sample_duration` infection(s) |
+| `snp_linkage_disequilibrium` | Whether the SNPs (or some SNPs) are in linkage disequilibrium (LD) |
+| `snp_pairwise_ld` | Pairwise linkage disequilibrium (LD) matrix |
+| `summary_period` | How often to write summary output |
+| `switching_rate` | Switching rate for genes the host is not immune to |
+| `transmissibility` | Baseline transmissibility of infections |
+| `t_liver_stage` | Duration of the liver stage |
+| `t_burnin` | Burn-in time |
+| `t_end` | Simulation end time |
+| `t_year` | Number of time units in a year |
+| `upper_bound_recomputation_period` | How often to recompute upper bounds for rejection sampling |
+| `use_immunity_by_allele` | Immunity model |
+| `verification_period` | How often to verify consistency of simulation state |
+| `whole_gene_immune` | Whether a host gains immunity towards a gene if the host has seen all the alleles |
+
 ## Model Overview
 
 TODO
