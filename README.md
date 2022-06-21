@@ -4,11 +4,16 @@ Ed Baskerville<br>
 Frédéric Labbé
 
 Var gene evolution model(s), implemented in Julia.
+Based on previous C++ implementations ([varmodel](https://github.com/pascualgroup/varmodel) and [varmodel2](https://github.com/pascualgroup/varmodel2) by Ed Baskerville and Qixin He. Model details are described inline in comments in the code; see *Code Organization* below to get oriented.
 
-Based on previous C++ implementations (`varmodel` and `varmodel2`) by Ed Baskerville and Qixin He.
+## Contents
 
-Model details are described inline in comments in the code; see *Code Organization* below to get oriented.
+* [Quickstart](#Quickstart)
+* [Parameters](#Parameters)
+* [Model Overview](#Model-Overview)
+* [Code Organization](#Code-Organization)
 
+___
 ## Quickstart
 
 ### Setup
@@ -31,7 +36,9 @@ To perform a run with an existing parameters file in JSON format, copy the param
 
 To do a parameter sweep, copy the `examples/sweep` directory, and modify/run as described in the comment string in `generate-sweep.jl`.
 
-### Parameters
+___
+## Parameters
+
 | Name | Description |
 | :--: | ----------- | 
 | `biting_rate` | Transmission rate for each day of the year |
