@@ -101,14 +101,17 @@ ___
 
 The output database is in [SQLite3 format](https://www.sqlite.org/fileformat.html), which can be easily accessed from [R](https://www.r-project.org/) using the [RSQLite library](https://cran.r-project.org/web/packages/RSQLite/index.html), from [Python](https://www.python.org/) using the built-in [sqlite3 library](https://docs.python.org/3/library/sqlite3.html), or from [Matlab](https://www.mathworks.com/products/matlab.html) using the [mksqlite package](http://mksqlite.sourceforge.net/). We also recommend using the graphical [SQLite browser](https://sqlitebrowser.org/), especially while testing.
 
-### Current database tables include:
+#### Current database tables include:
 
 | Name | Description |
 | :--: | ----------- | 
-| `gene_strain_counts` | Number of circulating strains and *var* genes in all sampled hosts |
+| `gene_strain_counts` | Number of circulating strains and *var* genes in all sampled hosts at different sampling times |
 | `initial_snp_allele_frequencies` | Initial allele frequencies of each SNP locus |
-| `meta` | Information related to the run (e.g., elapsed time) |
-| `sampled_duration` | Information related to the infection durations in all sampled hosts (e.g., infection time) |
-| `sampled_host` | Information related to the sampled hosts (e.g., birth and death times) |
-| `sampled_immunity` | Immunity level of all sampled hosts |
-| `sampled_infection_genes` | Information related to the *var* genes involved in the infections of the sampled hosts (e.g., allele ID) |
+| `meta` | Information related to the run (*e.g.,* elapsed time) |
+| `sampled_duration` | Information related to the infection durations in all sampled hosts (*e.g.,* infection time) |
+| `sampled_host` | Information related to the sampled hosts at different sampling times (*e.g.,* birth and death times) |
+| `sampled_immunity` | Immunity level of all sampled hosts at different sampling times |
+| `sampled_infection_genes` | Information related to the *var* genes involved in the infections of the sampled hosts (*e.g.,* allele ID) |
+| `sampled_infection_snps` | Information related to the SNP loci involved in the infections of the sampled hosts (*e.g.,* allele ID) |
+| `sampled_infections` | Information related to the infections of the sampled hosts at different sampling times (*e.g.,* infection ID) |
+| `summary` | Summary at different sampling times (*e.g.,* number of infections, bites, and infected hosts) |
