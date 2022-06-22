@@ -12,6 +12,7 @@ Based on previous C++ implementations ([varmodel](https://github.com/pascualgrou
 * [Parameters](#Parameters)
 * [Model Overview](#Model-Overview)
 * [Code Organization](#Code-Organization)
+* [Output database](#Output-database)
 
 ___
 ## Quickstart
@@ -85,10 +86,17 @@ ___
 | `verification_period` | How often to verify consistency of simulation state |
 | `whole_gene_immune` | Whether a host gains immunity towards a gene if the host has seen all the alleles |
 
+___
 ## Model Overview
 
 TODO
 
+___
 ## Code Organization
 
 TODO
+
+___
+## Output database
+
+The output database is in SQLite 3 format, which can be easily accessed from R using the [RSQLite library](https://cran.r-project.org/web/packages/RSQLite/index.html) or from Python using the built-in [sqlite3 library](https://docs.python.org/3/library/sqlite3.html). In Matlab, the mksqlite package does the trick. We also recommend using the graphical [SQLite browser](https://sqlitebrowser.org/), especially while testing.
