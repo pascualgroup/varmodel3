@@ -99,7 +99,7 @@ TODO
 ___
 ## Output database
 
-The output database is in [SQLite3 format](https://www.sqlite.org/fileformat.html), which can be easily accessed from [R](https://www.r-project.org/) using the [RSQLite library](https://cran.r-project.org/web/packages/RSQLite/index.html), from [Python](https://www.python.org/) using the built-in [sqlite3 library](https://docs.python.org/3/library/sqlite3.html), or from [Matlab](https://www.mathworks.com/products/matlab.html) using the [mksqlite package](http://mksqlite.sourceforge.net/). We also recommend using the graphical [SQLite browser](https://sqlitebrowser.org/), especially while testing.
+The output database is in [SQLite3 format](https://www.sqlite.org/fileformat.html), which can be easily accessed from [R](https://www.r-project.org/) using the [RSQLite library](https://cran.r-project.org/web/packages/RSQLite/index.html), from [Python](https://www.python.org/) using the built-in [sqlite3 library](https://docs.python.org/3/library/sqlite3.html), or from [Matlab](https://www.mathworks.com/products/matlab.html) using the [mksqlite package](http://mksqlite.sourceforge.net/). We also recommend using [VisiData](https://www.visidata.org/) or the graphical [SQLite browser](https://sqlitebrowser.org/), especially while testing.
 
 #### Current database tables include:
 
