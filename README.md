@@ -3,12 +3,13 @@
 Ed Baskerville<br>
 Frédéric Labbé
 
-Var gene evolution model(s), implemented in Julia.
+*Var* gene evolution model(s), implemented in Julia.
 Based on previous C++ implementations ([varmodel](https://github.com/pascualgroup/varmodel) and [varmodel2](https://github.com/pascualgroup/varmodel2) by [Ed Baskerville](https://cobeylab.uchicago.edu/people/ed-baskerville/) and [Qixin He](https://www.qixinhe.net/?_ga=2.130167695.167565966.1656355847-504625709.1649177406). This code implements a model of malaria *var* gene evolution within an individual-based disease transmission model. Malaria strains are represented as unordered sets of *var* genes, which are in turn composed of abstract loci. A number of alleles can appear at each locus, and the allelic composition of a gene across loci governs immune dynamics in the host. Individual hosts are infected by strains, and infections can be transmitted between hosts. Each infection expresses a single *var* gene at a time, and the sequence of expressions is explicitly represented in the simulation. The simulation also includes immigration of new strains into the population, recombination during transmission and during an infection, and mutation. The simulation is modeled as a sequence of discrete events (state changes) that happen in continuous time. Model details are described inline in comments in the code; see *Code Organization* below to get oriented.
 
 ## Contents
 
 * [Quickstart](#Quickstart)
+* [History and overview of changes](#History-and-overview-of-changes)
 * [Parameters](#Parameters)
 * [Model Overview](#Model-Overview)
 * [Code Organization](#Code-Organization)
@@ -36,6 +37,17 @@ To perform a run with an existing parameters file in JSON format, copy the param
 ### Parameter sweeps
 
 To do a parameter sweep, copy the `examples/sweep` directory, and modify/run as described in the comment string in `generate-sweep.jl`.
+
+___
+## History and overview of changes
+
+This code is a new implementation in [Julia](https://julialang.org/) of the malaria *var* gene evolution model which is based on previous C++ implementations (*i.e.,* [varmodel](https://github.com/pascualgroup/varmodel) and [varmodel2](https://github.com/pascualgroup/varmodel2)). The main changes from the previous implementation are as follows:
+
+* While the previous implementations of the stochastic agent-based model (ABM) were adapted from the next-reaction method which optimizes the Gillespie first-reaction method, this implementation uses a simpler [Gillespie algorithm](https://www.sciencedirect.com/science/article/pii/0021999176900413).
+* Our model extension allows us to keep track of the neutral part of each migrant parasite genome assembled by sampling one of the two possible alleles at each of a defined number of neutral bi-allelic SNPs.
+* While the extended model can generate homogeneous initial SNP allele frequencies by sampling the migrant alleles with an identical probability from the regional pool (*i.e.,* 0.5), it can also generate distinct initial SNP allele frequencies by sampling the migrant alleles from the regional pool with distinct probabilities that sum up to one (*e.g.,* 0.2 and 0.8) and are randomly picked from a defined range (*e.g.,* [0.1-0.9]).
+* Moreover, to generate the neutral part of a recombinant parasite and mimic meiotic recombination, which happens within the mosquito during the sexual reproduction stage of the parasite, a random allele is sampled for each bi-allelic SNP.
+* Finally, to allow for linkage disequilibrium (LD) across the neutral part of the genome, neutral bi-allelic SNPs can be non-randomly associated and co-segregate as defined in a matrix of LD coefficients indicating the probability that pairs of linked SNPs will co-segregate during the meiotic recombination.
 
 ___
 ## Parameters
