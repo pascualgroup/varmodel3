@@ -20,19 +20,20 @@ ___
 
 ### Setup
 
-Before doing anything, run
-
+Before doing anything, run the following command line to install the packages required by this code:
 ```julia
 ./install-packages.jl
 ```
 
-to install packages required by this code.
-
 ### Single runs
 
-To do a single ad-hoc run of the model directly in Julia, copy the script `examples/julia/run.jl` into a new experiment directory, and modify and run as described in the comment string.
+* A single ad-hoc run of the model, directly in Julia and without an external parameters file, is convenient for testing. Instead of using the standard `run.jl`, which loads parameters from JSON, you generate parameters inside Julia and run the model code directly with them. To do a single ad-hoc run of the model, do the following:
+  1. Copy the script `examples/julia/run.jl` into a new directory,
+  2. Modify the relative paths to `preamble.jl` and `model.jl`,
+  3. Modify the parameter values,
+  4. Run the script: `julia run.jl`, or directly as a shell script, `./run.jl`.
 
-To perform a run with an existing parameters file in JSON format, copy the parameters file into a new experiment directory, and use the script `varmodel3/run.jl` as described in the comment string. To see how to generate parameters from JSON, see `examples/json/generate-json.jl`.
+* To perform a run with an existing parameters file in JSON format, copy the parameters file into a new experiment directory, and use the script `varmodel3/run.jl` as described in the comment string. To see how to generate parameters from JSON, see `examples/json/generate-json.jl`.
 
 ### Parameter sweeps
 
