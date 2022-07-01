@@ -33,11 +33,12 @@ Before doing anything, run the following command line to install the packages re
   3. Modify the parameter values,
   4. Run the script: `julia run.jl`, or directly as a shell script, `./run.jl`.
 
-* To perform a run with an existing parameters file in JSON format, copy the parameters file into a new experiment directory, and use the script `varmodel3/run.jl` as described in the comment string. To see how to generate parameters from JSON, see `examples/json/generate-json.jl`.
+* To perform a run with an existing parameters file in JSON format, copy the parameters file into a new experiment directory, and use the script `varmodel3/run.jl` as described in the comment string. To see how to generate parameters from JSON, see `examples/json/generate-json.jl`. The purpose of this file is to illustrate how to generate JSON from Julia for running experiments. This is useful for parameter sweeps, where you will want to create an output directory for each run, with a parameters file in each directory.
 
 ### Parameter sweeps
 
-To do a parameter sweep, copy the `examples/sweep` directory, and modify/run as described in the comment string in `generate-sweep.jl`.
+To do a parameter sweep, copy the `examples/sweep` directory, and modify/run as described in the comment string in `generate-sweep.jl`. This script loops through parameter combinations, and replicates with different random seeds, and generates files necessary to perform runs on a local machine or on a SLURM cluster. It also divides runs into jobs suitable for execution on a single cluster node or local machine. The runs are specified as lines in the job's `runs.txt` file, and the job is specified in a `job.sbatch` file, which can be run directly as a shell script or submitted to a SLURM cluster. Each job uses the script `varmodel3/runmany.jl` to run a single-node, multi-core queue of runs, with one run running on each core at any time. This script also generates a script `submit_jobs.sh`, which submits every job to SLURM at once. Runs are divided into at most `N_JOBS_MAX` jobs that make use of at most `N_CORES_PER_JOB_MAX` for the cluster node's local queue. This allows you to work within limits set by your cluster administrator. If you have no limits, you should set `N_JOBS_MAX` to a very large number, and set `N_CORES_PER_JOB_MAX = 1`, so that the cluster can dynamically
+balance runs across cluster nodes as the experiment runs. To modify configuration settings for SLURM jobs, edit the template string in the `generate_jobs()` function.
 
 ___
 ## History and overview of changes
