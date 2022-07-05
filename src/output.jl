@@ -36,6 +36,8 @@ struct VarModelDB
     sampled_durations::Stmt
     sampled_infection_genes::Stmt
     sampled_immunity::Stmt
+    sampled_infection_snps::Stmt
+    initial_snp_allele_frequencies::Stmt
 end
 
 """
@@ -179,6 +181,22 @@ function initialize_database()
         );
     """)
 
+    execute(db, """
+        CREATE TABLE sampled_infection_snps(
+            infection_id INTEGER,
+            snp_index INTEGER,
+            allele_snp_id INTEGER,
+            UNIQUE(infection_id, snp_index) ON CONFLICT IGNORE
+        );
+    """)
+
+    execute(db, """
+        CREATE TABLE initial_snp_allele_frequencies(
+            snp_index INTEGER,
+            allele_frequencies FLOAT
+        );
+    """)
+
     VarModelDB(
         db,
         make_insert_statement(db, "meta", 2),
@@ -188,7 +206,9 @@ function initialize_database()
         make_insert_statement(db, "sampled_infections", 6),
         make_insert_statement(db, "sampled_durations", 6),
         make_insert_statement(db, "sampled_infection_genes", 2 + P.n_loci),
-        make_insert_statement(db, "sampled_immunity", 5)
+        make_insert_statement(db, "sampled_immunity", 5),
+        make_insert_statement(db, "sampled_infection_snps", 3),
+        make_insert_statement(db, "initial_snp_allele_frequencies", 2)
     )
 end
 
@@ -219,8 +239,6 @@ function write_output!(db, t, s, stats)
     ) == 0
         println("t = $(t)")
 
-#         println("write_output!($(t))")
-
         execute(db, "BEGIN TRANSACTION")
 
         if t % P.summary_period == 0
@@ -247,7 +265,6 @@ end
 Write output to `summary` table
 """
 function write_summary(db, t, s, stats)
-#     println("write_summary($(t))")
 
     # Compute number of infections (liver, active, and both) with a simple tally/sum.
     n_infections_liver = sum(length(host.liver_infections) for host in s.hosts)
@@ -291,7 +308,6 @@ end
 Write output for periodically sampled hosts.
 """
 function write_host_samples(db, t, s)
-#     println("write_host_samples($(t))")
 
     # Sample `host_sample_size` hosts randomly (without replacement).
     hosts = sample(s.hosts, P.host_sample_size, replace = false)
@@ -344,6 +360,11 @@ function write_infection(db, t, host, infection)
     for i in 1:P.n_genes_per_strain
         execute(db.sampled_infection_genes, vcat([infection.id, i], infection.genes[:,i]))
     end
+    if P.n_snps_per_strain > 0
+        for i in 1:P.n_snps_per_strain
+            execute(db.sampled_infection_snps, vcat([infection.id, i], infection.snps[i]))
+        end
+    end
 end
 
 """
@@ -371,7 +392,6 @@ simply scans all host infections and assembles sets of all genes and all
 strains.
 """
 function write_gene_strain_counts(db, t, s)
-#     println("write_gene_strain_counts($(t))")
     genesLiver::Set{Gene} = Set()
     strainsLiver::BitSet = BitSet()
     genesBlood::Set{Gene} = Set()
@@ -393,7 +413,6 @@ This function simply adds genes and strains from each infection to corresponding
 sets.
 """
 function count_genes_and_strains!(genes, strains, infections)
-#     println("count_circulating_genes_and_strains()")
     for infection in infections
         for i in 1:P.n_genes_per_strain
             push!(genes, infection.genes[:,i])
@@ -403,7 +422,7 @@ function count_genes_and_strains!(genes, strains, infections)
 end
 
 """
-Write immunity
+Write immunity.
 """
 function write_immunity(db, t, host)
     for locus in 1:P.n_loci
@@ -411,5 +430,14 @@ function write_immunity(db, t, host)
         for (key, value) in d
             execute(db.sampled_immunity, (t, Int64(host.id), Int64(locus), Int64(key), Int64(value)))
         end
+    end
+end
+
+"""
+Write the initial snp allele frequencies.
+"""
+function write_initial_snp_allele_frequencies(db, s)
+    for snp in 1:P.n_snps_per_strain
+        execute(db.initial_snp_allele_frequencies, (Int64(snp), Float64(round(s.initial_snp_allele_frequencies[snp], digits = 3))))
     end
 end

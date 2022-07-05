@@ -12,6 +12,7 @@ const Locus = UInt8
 const HostId = UInt32
 const InfectionId = UInt32
 const GeneId = UInt32
+const SnpId = UInt8
 
 const AlleleId = if P.ectopic_recombination_generates_new_alleles
     UInt32
@@ -121,6 +122,12 @@ matrix of allele IDs), and the currently expressed index.
 
     "Duration of the infection."
     duration::Float64
+
+    """
+    Biallelic neutral SNPs, specified as 1 or 2 (e.g. A or G).
+    These SNPs do not contribute to the infection duration or host immune memory.
+    """
+    snps::Array{SnpId, 1}
 end
 
 """
@@ -216,7 +223,6 @@ management auxiliaries.
     """
     next_infection_id::InfectionId
 
-
     """
     ID for next gene out of mutation.
 
@@ -270,17 +276,17 @@ management auxiliaries.
     """
     n_liver_infections_per_host_max::Int
 
-
     """
-        Array of old infections.
+    Array of old infections.
 
-        Used to prevent allocation of new infections.
+    Used to prevent allocation of new infections.
     """
     old_infections::Array{Infection}
 
     "Number of cleared infections."
     n_cleared_infections::Int
 
+    ""
     durations::Array{infectionDuration}
 
     """
@@ -288,7 +294,14 @@ management auxiliaries.
     during the sampling period.
     """
     infected_ratio::Float64
+
+    """
+    Array of initial SNP allele frequencies.
+    Used to pick an allele at each SNP during the initialization and immigration.
+    """
+    initial_snp_allele_frequencies::Array{Float64, 1}
 end
+
 
 """
 Verify that various pieces of state are consistent with each other.

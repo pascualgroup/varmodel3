@@ -10,7 +10,7 @@ the model share a parameters format, run script, and other bits of code.
 """
 
 # Verify that "parameters.jl" got loaded already, and that the global parameters
-# constant P is defined
+# constant P is defined.
 @assert @isdefined Params
 @assert @isdefined P
 @assert typeof(P) === Params
@@ -37,28 +37,28 @@ function run()
     Random.seed!(rng_seed)
     execute(db.meta, ("rng_seed", rng_seed))
 
-    # Start recording elapsed time
+    # Start recording elapsed time.
     start_datetime = now()
 
-    # Used to decide when to do output and verification
+    # Used to decide when to do output and verification.
     t_next_integer = 1
 
-    # Initialize state
+    # Initialize state.
     t = 0.0
     s = initialize_state()
     verify(t, s)
 
-    # Run initial output
+    # Run initial output.
     stats = SummaryStats()
     write_output!(db, 0, s, stats)
 
-    # Initialize event rates
+    # Initialize event rates.
     rates = [get_rate(t, s, event) for event in EVENTS]
     total_rate = sum(rates)
 
-    # Loop events until end of simulation
+    # Loop events until end of simulation.
     while total_rate > 0.0 && t < P.t_end
-        # Draw next time with rate equal to the sum of all event rates
+        # Draw next time with rate equal to the sum of all event rates.
         dt = rand(Exponential(1.0 / total_rate))
         @assert dt > 0.0 && !isinf(dt)
 
@@ -78,7 +78,7 @@ function run()
             t_next_integer += 1
         end
 
-        # Draw the event, update time, and execute event
+        # Draw the event, update time, and execute event.
         event = direct_sample_linear_scan(rates, total_rate)
         t += dt
         event_happened = do_event!(t, s, stats, event, db)
@@ -107,6 +107,9 @@ function run()
     total_num_genes_generated_recomb = s.next_gene_id_recomb - 1
     println("total number of new genes generated out of recombination? $(total_num_genes_generated_recomb)")
     execute(db.meta, ("total_num_genes_generated_recomb", Int64(total_num_genes_generated_recomb)))
+    if P.n_snps_per_strain > 0
+        write_initial_snp_allele_frequencies(db, s)
+    end
 end
 
 function recompute_rejection_upper_bounds!(s)
@@ -122,12 +125,13 @@ end
 
 ### INITIALIZATION ###
 
+#function initialize_state(a)
 function initialize_state()
     println("initialize_state()")
 
     # Initialize gene pool as an (n_loci, n_genes_initial) matrix filled with
     # allele IDs drawn uniformly randomly in 1:n_alleles_per_locus_initial.
-    # and to avoid duplications, 10 times of random numbers are draw and then reduced to a set
+    # and to avoid duplications, 10 times of random numbers are draw and then reduced to a set.
     gene_pool = reshape(
         rand(1:P.n_alleles_per_locus_initial, P.n_loci * P.n_genes_initial*10),
         (P.n_loci, P.n_genes_initial*10)
@@ -165,6 +169,52 @@ function initialize_state()
         host.t_death = host.t_death + host.t_birth
     end
 
+    # Define the initial allele frequencies at each SNP.
+    snp_all_freq = fill(0.5, P.n_snps_per_strain)
+    if P.n_snps_per_strain > 0
+        if P.distinct_initial_snp_allele_frequencies
+            if !P.snp_linkage_disequilibrium
+                # As unlinked SNPs are independent, their initial allele frequencies
+                # are independently defined.
+                for snp in 1:P.n_snps_per_strain
+                    snp_all_freq[snp] = rand(P.initial_snp_allele_frequency[1]:0.01:P.initial_snp_allele_frequency[2])
+                    snp_all_freq[snp] = rand([snp_all_freq[snp], 1 - snp_all_freq[snp]])
+                end
+            else
+                unlinked_snps = collect(1:P.n_snps_per_strain)
+                i = 1
+                while i in unlinked_snps
+
+                    # Define the linked SNPs:
+                    linked_snps = find_linked_snps(i)
+
+                    # As linked SNPs are related, their initial allele frequencies
+                    # are co-defined.
+                    if size(linked_snps)[1] > 1
+                        unlinked_snps = setdiff(unlinked_snps, linked_snps)
+                        snp_all_freq[linked_snps[1]] = rand(P.initial_snp_allele_frequency[1]:0.01:P.initial_snp_allele_frequency[2])
+                        snp_all_freq[linked_snps[1]] = rand([snp_all_freq[linked_snps[1]], 1 - snp_all_freq[linked_snps[1]]])
+                        for linked_snp in linked_snps[2:size(linked_snps)[1]]
+                            snp_all_freq[linked_snp] = snp_all_freq[linked_snps[1]]
+                            snp_all_freq[linked_snp] = rand([snp_all_freq[linked_snp], 1 - snp_all_freq[linked_snp]])
+                        end
+                    end
+                    i += 1
+                    while !(i in unlinked_snps) && i <= P.n_snps_per_strain
+                        i += 1
+                    end
+                end
+
+                # As unlinked SNPs are independent, their initial allele frequencies
+                # are independently defined.
+                for unlinked_snp in unlinked_snps
+                    snp_all_freq[unlinked_snp] = rand(P.initial_snp_allele_frequency[1]:0.01:P.initial_snp_allele_frequency[2])
+                    snp_all_freq[unlinked_snp] = rand([snp_all_freq[unlinked_snp], 1 - snp_all_freq[unlinked_snp]])
+                end
+            end
+        end
+    end
+
     # Infect n_initial_infections hosts at t = 0. Genes in the infection
     # are sampled uniformly randomly from the gene pool.
     for (infection_id, host_index) in enumerate(sample(1:P.n_hosts, P.n_initial_infections, replace = false))
@@ -178,6 +228,12 @@ function initialize_state()
             gene_pool[:, rand(1:P.n_genes_initial, P.n_genes_per_strain)],
             (P.n_loci, P.n_genes_per_strain)
         )
+        if P.n_snps_per_strain > 0
+            for snp in 1:P.n_snps_per_strain
+                infection.snps[snp] = sample([1, 2],
+                Weights([snp_all_freq[snp], 1 - snp_all_freq[snp]]))
+            end
+        end
         push!(hosts[host_index].liver_infections, infection)
     end
 
@@ -196,7 +252,8 @@ function initialize_state()
         n_liver_infections_per_host_max = 0,
         n_cleared_infections = 0,
         durations = [],
-        infected_ratio = 1.0
+        infected_ratio = 1.0,
+        initial_snp_allele_frequencies = snp_all_freq
     )
 end
 
@@ -224,6 +281,7 @@ function create_empty_infection()
         duration = NaN,
         strain_id = StrainId(0),
         genes = fill(AlleleId(0), (P.n_loci, P.n_genes_per_strain)),
+        snps = fill(SnpId(0), P.n_snps_per_strain),
         expression_index = ExpressionIndex(0),
         expression_index_locus = ExpressionIndexLocus(0)
     )
@@ -296,7 +354,7 @@ function do_biting!(t, s, stats)
     src_host = rand(s.hosts)
     dst_host = rand(s.hosts)
 
-    # Advance host (rebirth or infection activation)
+    # Advance host (rebirth or infection activation).
     advance_host!(t, s, src_host)
     advance_host!(t, s, dst_host)
 
@@ -318,15 +376,15 @@ function do_biting!(t, s, stats)
     end
     stats.n_infected_bites_with_space += 1
 
-    # Compute probability of each transmission
+    # Compute probability of each transmission.
     p_transmit = if P.coinfection_reduces_transmission
         P.transmissibility / src_active_count
     else
         P.transmissibility
     end
 
-    # First choose the active strains from the host that will be transmitted to mosquito
-    # This is determined by the transmissibility
+    # First choose the active strains from the host that will be transmitted to mosquito.
+    # This is determined by the transmissibility.
     choose_transmit = rand(Float64, src_active_count)
     transmitted_strains = src_host.active_infections[choose_transmit.<p_transmit]
     #println("t = $(t): originalSize $(src_active_count), newSize $(length(transmitted_strains))")
@@ -340,7 +398,7 @@ function do_biting!(t, s, stats)
         stats.n_transmissions += 1
         transmitted = true
 
-        # Randomly sample two source infections within transmitted_strains to recombine
+        # Randomly sample two source infections within transmitted_strains to recombine.
         src_inf_1 = rand(transmitted_strains)
         src_inf_2 = rand(transmitted_strains)
 
@@ -354,22 +412,69 @@ function do_biting!(t, s, stats)
         dst_inf.expression_index_locus = 0
         dst_inf.duration = NaN
 
-        # Construct strain for new infection
+        # Construct strain for new infection.
         if src_inf_1.strain_id == src_inf_2.strain_id
             # If both infections have the same strain, then the new infection
             # is given infection 1's genes with expression order shuffled.
             dst_inf.strain_id = src_inf_1.strain_id
             shuffle_columns_to!(dst_inf.genes, src_inf_1.genes)
+            # The new infection is given infection 1's SNP alleles.
+            if P.n_snps_per_strain > 0
+                dst_inf.snps = src_inf_1.snps
+            end
         else
             # Otherwise, the new infection is given a new strain constructed by
             # taking a random sample of the genes in the two source infections.
             dst_inf.strain_id = next_strain_id!(s)
             sample_columns_from_two_matrices_to!(dst_inf.genes, src_inf_1.genes, src_inf_2.genes)
+            # The new infection is given a new set of SNP alleles constructed by
+            # taking a random allele per SNP in the two source infections.
+            if P.n_snps_per_strain > 0
+                if !P.snp_linkage_disequilibrium
+                    for i in 1:P.n_snps_per_strain
+                        dst_inf.snps[i] = rand((src_inf_1.snps[i], src_inf_2.snps[i]))
+                    end
+                else
+                    unlinked_snps = collect(1:P.n_snps_per_strain)
+                    i = 1
+                    while i in unlinked_snps
+
+                        # Define the linked SNPs:
+                        linked_snps = find_linked_snps(i)
+
+                        # The new infection is given a new set of linked SNP alleles
+                        # constructed by taking one allele per linked SNP in only
+                        # one source infection.
+                        if size(linked_snps)[1] > 1
+                            unlinked_snps = setdiff(unlinked_snps, linked_snps)
+                            parent = rand(["src_inf_1", "src_inf_2"])
+                            for linked_snp in linked_snps
+                                if parent == "src_inf_1"
+                                    dst_inf.snps[linked_snp] = src_inf_1.snps[linked_snp]
+                                elseif parent == "src_inf_2"
+                                    dst_inf.snps[linked_snp] = src_inf_2.snps[linked_snp]
+                                end
+                            end
+                        end
+                        i += 1
+                        while !(i in unlinked_snps) && i <= P.n_snps_per_strain
+                            i += 1
+                        end
+                    end
+
+                    # The new infection is given a new set of unlinked SNP alleles
+                    # constructed by taking a random allele per unlinked SNP in
+                    # the two source infections.
+                    for unlinked_snp in unlinked_snps
+                        dst_inf.snps[unlinked_snp] = rand((src_inf_1.snps[unlinked_snp], src_inf_2.snps[unlinked_snp]))
+                    end
+                end
+            end
         end
 
-        # Add this infection to the destination host
+        # Add this infection to the destination host.
         push!(dst_host.liver_infections, dst_inf)
-        # update population wide host liver max
+        # Update population wide host liver max.
         s.n_liver_infections_per_host_max = max(s.n_liver_infections_per_host_max, length(dst_host.liver_infections))
 
     end
@@ -384,14 +489,13 @@ end
 
 function advance_host!(t, s, host)
     if t > host.t_death
-        # If the host is past its death time
+        # If the host is past its death time.
         do_rebirth!(t, s, host)
     else
         i = 1
         while i <= length(host.liver_infections)
             infection = host.liver_infections[i]
             if infection.t_infection + P.t_liver_stage < t
-                # println("t = $(t): activating host $(host.id), inf $(infection.id)")
 
                 # If the infection is past the liver stage, remove it from the liver.
                 delete_and_swap_with_end!(host.liver_infections, i)
@@ -443,7 +547,7 @@ end
 
 function do_immigration!(t, s, stats)
 
-    # Sample a random host and advance it (rebirth or infection activation)
+    # Sample a random host and advance it (rebirth or infection activation).
     host = rand(s.hosts)
     advance_host!(t, s, host)
 
@@ -454,7 +558,7 @@ function do_immigration!(t, s, stats)
         end
     end
 
-    # Construct infection by sampling from gene pool
+    # Construct infection by sampling from gene pool.
     infection = recycle_or_create_infection(s)
     infection.id = next_infection_id!(s)
     infection.t_infection = t
@@ -466,8 +570,12 @@ function do_immigration!(t, s, stats)
     for i in 1:P.n_genes_per_strain
         infection.genes[:,i] = s.gene_pool[:, rand(1:size(s.gene_pool)[2])]
     end
+    for snp in 1:P.n_snps_per_strain
+        infection.snps[snp] = sample([1, 2],
+        Weights([s.initial_snp_allele_frequencies[snp], 1 - s.initial_snp_allele_frequencies[snp]]))
+    end
 
-    # Add infection to host
+    # Add infection to host.
     push!(host.liver_infections, infection)
 
     s.n_liver_infections_per_host_max = max(s.n_liver_infections_per_host_max, length(host.liver_infections))
@@ -480,7 +588,7 @@ end
 
 function get_rate_switching(t, s)
     if P.use_immunity_by_allele && !P.whole_gene_immune
-        #switching rate set by total number of alleles
+        # Switching rate set by total number of alleles.
         (P.switching_rate * P.n_loci) * P.n_hosts * (s.n_active_infections_per_host_max+s.n_liver_infections_per_host_max)
     else
         P.switching_rate * P.n_hosts * (s.n_active_infections_per_host_max+s.n_liver_infections_per_host_max)
@@ -488,11 +596,11 @@ function get_rate_switching(t, s)
 end
 
 function do_switching!(t, s, stats)
-    # change to total number of infections instead of active infections alone
+    # Change to total number of infections instead of active infections alone.
     index = rand(CartesianIndices((P.n_hosts, (s.n_active_infections_per_host_max+s.n_liver_infections_per_host_max))))
     host = s.hosts[index[1]]
 
-    # Advance host (rebirth or infection activation)
+    # Advance host (rebirth or infection activation).
     advance_host!(t, s, host)
     inf_index = index[2]
 
@@ -543,7 +651,7 @@ function do_switching!(t, s, stats)
     i = 1
     while i <= length(host.active_infections)
         if advance_immuned_genes!(t,s,host,i)
-            # if there is no end of expression and reordering of infections, then index plus 1
+            # If there is no end of expression and reordering of infections, then index plus 1.
             i += 1
         end
     end
@@ -575,8 +683,8 @@ function advance_immuned_genes!(t, s, host, i)
             s.n_cleared_infections += 1
             host.n_cleared_infections += 1
             delete_and_swap_with_end!(host.active_infections, i)
-            #here if deleting an infection, and the indexing changed, then tell the calling function
-            #it doesn't advancing its index
+            # Here if deleting an infection, and the indexing changed, then tell the calling function
+            # it doesn't advancing its index.
             return false
         else
             # Otherwise, advance gene and/or locus expression(s).
@@ -600,7 +708,7 @@ end
 
 
 ### MUTATION EVENT ###
-#update mutation and recombinatin rates towards all infections
+# Update mutation and recombination rates towards all infections.
 function get_rate_mutation(t, s)
     P.mutation_rate * P.n_hosts * (s.n_active_infections_per_host_max+s.n_liver_infections_per_host_max) * P.n_genes_per_strain * P.n_loci
 end
@@ -612,7 +720,7 @@ function do_mutation!(t, s, stats)
     expression_index = index[3]
     locus = index[4]
 
-    # Advance host (rebirth or infection activation)
+    # Advance host (rebirth or infection activation).
     advance_host!(t, s, host)
 
     # If there's no active infection at the drawn index, reject this sample.
@@ -667,19 +775,19 @@ function do_ectopic_recombination!(t, s, stats)
     gene1 = infection.genes[:, gene_index_1]
     gene2 = infection.genes[:, gene_index_2]
 
-    # If the genes are the same, this is a no-op
+    # If the genes are the same, this is a no-op.
     if gene1 == gene2
         return false
     end
 
     breakpoint, p_functional = if P.ectopic_recombination_generates_new_alleles
-        # Choose a breakpoint
+        # Choose a breakpoint.
         breakpoint = P.n_loci * rand()
         p_functional = p_recombination_is_functional_real(gene1, gene2, breakpoint)
 
         (Int(ceil(breakpoint)), p_functional)
     else
-        # Choose a breakpoint
+        # Choose a breakpoint.
         breakpoint = rand(1:P.n_loci)
         if breakpoint == 1
             return false
@@ -697,7 +805,7 @@ function do_ectopic_recombination!(t, s, stats)
     create_new_allele = P.ectopic_recombination_generates_new_alleles &&
         rand() < P.p_ectopic_recombination_generates_new_allele
 
-    # Recombine to modify first gene, if functional
+    # Recombine to modify first gene, if functional.
     if !is_conversion && rand() < p_functional
         infection.genes[:, gene_index_1] = if create_new_allele
             recombine_genes_new_allele(s, gene1, gene2, breakpoint)
@@ -706,7 +814,7 @@ function do_ectopic_recombination!(t, s, stats)
         end
     end
 
-    # Recombine to modify second gene, if functional
+    # Recombine to modify second gene, if functional.
     if rand() < p_functional
         infection.genes[:, gene_index_2] = if create_new_allele
             recombine_genes_new_allele(s, gene2, gene1, breakpoint)
@@ -828,7 +936,7 @@ function do_immunity_loss!(t, s, stats)
     host = s.hosts[index[1]]
     immunity_index = index[2]
 
-    # Advance host (rebirth or infection activation)
+    # Advance host (rebirth or infection activation).
     advance_host!(t, s, host)
 
     # If the immunity index is beyond this host's immunity count, reject this sample.
@@ -861,6 +969,21 @@ function next_strain_id!(s)
     id
 end
 
+"""
+    Find the SNPs that are in linkage disequilibrium (LD) with SNP i (i.e. linked SNPs).
+    For each SNP, the function selects the linked SNP using the LD coefficients
+    from the pairwise LD matrix to weight the probability to drawing a given SNP.
+"""
+function find_linked_snps(i)
+    linked_snps = [i]
+    j = i + 1
+    while j <= P.n_snps_per_strain
+        append!(linked_snps, sample([j, i], Weights([P.snp_pairwise_ld[j, i], 1 - P.snp_pairwise_ld[j, i]])))
+        j += 1
+    end
+    unique!(linked_snps)
+end
+
 
 ### IMMUNITY FUNCTIONS ###
 
@@ -881,17 +1004,17 @@ function increment_immunity!(s, host, gene)
 end
 
 function increment_immunity!(ih::ImmuneHistoryByGene, gene)
-    # Get old immunity level from immunity dict
+    # Get old immunity level from immunity dict.
     old_level = get(ih.d, gene, ImmunityLevel(0))
 
-    # Increment immunity if the level is not at the maximum value (255 = 0xFF)
+    # Increment immunity if the level is not at the maximum value (255 = 0xFF).
     if old_level < typemax(ImmunityLevel)
         ih.d[gene] = old_level + 1
     end
 end
 
 function increment_immunity!(ih::ImmuneHistoryByAllele, gene)
-    # Increment immunity at each locus
+    # Increment immunity at each locus.
     for (locus, allele_id) in enumerate(gene)
         old_level = get(ih.vd[locus], allele_id, ImmunityLevel(0))
         if old_level < typemax(ImmunityLevel)
@@ -916,10 +1039,10 @@ function decrement_immunity_at_sampled_index!(ih::ImmuneHistoryByGene, index)
 end
 
 function decrement_immunity!(ih::ImmuneHistoryByGene, gene)
-    # Get old immunity level from immunity dict
+    # Get old immunity level from immunity dict.
     old_level = ih.d[gene]
 
-    # Decrement immunity, removing it entirely if we reach 0
+    # Decrement immunity, removing it entirely if we reach 0.
     if old_level == 1
         delete!(ih.d, gene)
     else
@@ -971,7 +1094,7 @@ function is_immune(ih::ImmuneHistoryByAllele, gene, loc)
     true
 end
 
-# push the current infection's duration calculations into durations vector
+# Push the current infection's duration calculations into durations vector.
 function add_infectionDuration!(t, s, host, i)
     get_duration!(host.active_infections, i, t)
     newInfDur = infectionDuration(
