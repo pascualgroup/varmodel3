@@ -94,6 +94,16 @@ const P = let
         biting_rate = 0.0005 * daily_biting_rate_multiplier,
 
         migrants_match_local_prevalence = true,
+        
+        n_snps_per_strain = 24,
+        
+        distinct_initial_snp_allele_frequencies = false,
+#         distinct_initial_snp_allele_frequencies = true,
+#         initial_snp_allele_frequency = [0.1, 0.9],
+
+        snp_linkage_disequilibrium = false,
+#         snp_linkage_disequilibrium = true,
+#         snp_pairwise_ld = snp_ld_matrix,
     )
 end
 
