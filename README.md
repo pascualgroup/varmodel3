@@ -9,10 +9,10 @@ Based on previous C++ implementations ([varmodel](https://github.com/pascualgrou
 ## Contents
 
 * [Quickstart](#Quickstart)
-* [History and overview of changes](#History-and-overview-of-changes)
+* [Model overview](#Model-overview)
+* [History of changes](#History-of-changes)
 * [Parameters](#Parameters)
-* [Model Overview](#Model-Overview)
-* [Code Organization](#Code-Organization)
+* [Code organization](#Code-organization)
 * [Output database](#Output-database)
 * [Citation](#Citation)
 
@@ -42,7 +42,12 @@ To do a parameter sweep, copy the `examples/sweep` directory, and modify/run as 
 balance runs across cluster nodes as the experiment runs. To modify configuration settings for SLURM jobs, edit the template string in the `generate_jobs()` function.
 
 ___
-## History and overview of changes
+## Model overview
+
+In this model, hosts carry infections of different strains of the malaria parasite *Plasmodium falciparum*. Each parasite genome consists of a specific combination (*i.e.,* repertoire) of `n_genes_per_strain` *var* genes. Strain identity is defined by this repertoire independent of order. Although unlikely, the same *var* gene may occur multiple times in a strain. Each *var* gene itself is represented as a linear combination of `n_loci` epitopes, *i.e.,* parts of the molecule that act as antigens and are targeted by the immune system. At the outset, each locus i has one of `n_alleles_per_locus_initial[i]` possible values, indexed from 0 to `n_alleles_per_locus_initial[i] - 1`. Mutation events create new alleles, so the number of distinct alleles at each locus can increase over time. At any time, hosts may be infected multiple times by the same or different strains. The *var* genes in a repertoire are expressed sequentially and the infection ends when the whole repertoire is depleted. The order of expression is randomized distinctly for each infection. The duration of the active period of a *var* gene, and thus of the infection, is determined by the number of unseen epitopes. When a *var* gene is deactivated, the host adds the deactivated *var* gene epitopes to its immunity memory. Specific immunity toward a given epitope experiences a loss rate from host immunity memory, and re-exposure is therefore required to maintain it. The local population is open to immigration from the regional pool.
+
+___
+## History of changes
 
 This code is a new implementation in [Julia](https://julialang.org/) of the malaria *var* gene evolution model which is based on previous C++ implementations (*i.e.,* [varmodel](https://github.com/pascualgroup/varmodel) and [varmodel2](https://github.com/pascualgroup/varmodel2)). The main changes from the previous implementation are as follows:
 
@@ -54,6 +59,8 @@ This code is a new implementation in [Julia](https://julialang.org/) of the mala
 
 ___
 ## Parameters
+
+The parameter names should match the variables defined in `src/parameters.jl`, and the values should match the appropriate [type](https://docs.julialang.org/en/v1/manual/types/).
 
 | Name | Description |
 | :--: | ----------- | 
@@ -102,12 +109,7 @@ ___
 | `whole_gene_immune` | Whether a host gains immunity towards a gene if the host has seen all the alleles |
 
 ___
-## Model Overview
-
-TODO
-
-___
-## Code Organization
+## Code organization
 
 TODO
 
