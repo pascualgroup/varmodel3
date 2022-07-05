@@ -240,6 +240,7 @@ end
 function init_base_params()
     t_year = 360
     daily_biting_rate_multiplier = readdlm("../mosquito_population.txt", Float64)[:,1]
+    #snp_ld_matrix = readdlm("../pairwise_ld_coefficient_24snps.txt", Float64)
 
     Params(
         upper_bound_recomputation_period = 30,
