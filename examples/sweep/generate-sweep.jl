@@ -59,27 +59,27 @@ ROOT_RUN_SCRIPT = joinpath(ROOT_PATH, "run.jl")
 ROOT_RUNMANY_SCRIPT = joinpath(ROOT_PATH, "runmany.jl")
 cd(SCRIPT_PATH)
 
-# Number of replicates for each parameter combination
+# Number of replicates for each parameter combination.
 const N_REPLICATES = 2
 
-# Number of SLURM jobs to generate
+# Number of SLURM jobs to generate.
 const N_JOBS_MAX = 100
 const N_CORES_PER_JOB_MAX = 14 # Half a node, easier to get scheduled than a whole one
 
 function main()
-    # Root run directory
+    # Root run directory.
     if ispath("runs")
         error("`runs` already exists; please move or delete.")
     end
     mkdir("runs")
 
-    # Root job directory
+    # Root job directory.
     if ispath("jobs")
         error("`jobs` already exists; please move or delete.")
     end
     mkdir("jobs")
 
-    # Database of experiment information
+    # Database of experiment information.
     if ispath("sweep_db.sqlite")
         error("`sweep_db.sqlite` already exists; please move or delete")
     end
@@ -95,10 +95,10 @@ function main()
 end
 
 function generate_runs(db)
-    # System random device used to generate seeds
+    # System random device used to generate seeds.
     seed_rng = RandomDevice()
 
-    # Base parameter set, copied/modified for each combination/replicate
+    # Base parameter set, copied/modified for each combination/replicate.
     base_params = init_base_params()
     validate(base_params)
     execute(db, "INSERT INTO meta VALUES (?, ?)", ("base_params", pretty_json(base_params)))
@@ -126,13 +126,13 @@ function generate_runs(db)
                 @assert !ispath(run_dir)
                 mkpath(run_dir)
 
-                # Generate parameters file
+                # Generate parameters file.
                 params_json = pretty_json(params)
                 open(joinpath(run_dir, "parameters.json"), "w") do f
                     println(f, params_json)
                 end
 
-                # Generate shell script to perform a single run
+                # Generate shell script to perform a single run.
                 run_script = joinpath(run_dir, "run.sh")
                 open(run_script, "w") do f
                     print(f, """
@@ -144,7 +144,7 @@ function generate_runs(db)
                 end
                 run(`chmod +x $(run_script)`) # Make run script executable
 
-                # Save all run info (including redundant stuff for reference) into DB
+                # Save all run info (including redundant stuff for reference) into DB.
                 execute(db, "INSERT INTO runs VALUES (?, ?, ?, ?, ?, ?)", (run_id, combo_id, replicate, rng_seed, run_dir, params_json))
 
                 run_id += 1
@@ -157,16 +157,16 @@ end
 function generate_jobs(db)
     println("Assigning runs to jobs...")
 
-    # Assign runs to jobs (round-robin)
+    # Assign runs to jobs (round-robin).
     job_id = 1
     for (run_id, run_dir) in execute(db, "SELECT run_id, run_dir FROM runs ORDER BY replicate, combo_id")
         execute(db, "INSERT INTO job_runs VALUES (?,?)", (job_id, run_id))
 
-        # Mod-increment job ID
+        # Mod-increment job ID.
         job_id = (job_id % N_JOBS_MAX) + 1
     end
 
-    # Create job directories containing job scripts and script to submit all jobs
+    # Create job directories containing job scripts and script to submit all jobs.
     submit_file = open("submit_jobs.sh", "w")
     println(submit_file, """
     #!/bin/sh
@@ -177,7 +177,7 @@ function generate_jobs(db)
         job_dir = joinpath("jobs", "$(job_id)")
         mkpath(job_dir)
 
-        # Get all run directories for this job
+        # Get all run directories for this job.
         run_dirs = [run_dir for (run_dir,) in execute(db,
             """
             SELECT run_dir FROM job_runs, runs
@@ -188,7 +188,7 @@ function generate_jobs(db)
         )]
         n_cores = min(length(run_dirs), N_CORES_PER_JOB_MAX)
 
-        # Write out list of runs
+        # Write out list of runs.
         open(joinpath(job_dir, "runs.txt"), "w") do f
             for run_dir in run_dirs
                 run_script = joinpath(SCRIPT_PATH, run_dir, "run.sh")
@@ -196,7 +196,7 @@ function generate_jobs(db)
             end
         end
 
-        # Create job sbatch file
+        # Create job sbatch file.
         job_sbatch = joinpath(job_dir, "job.sbatch")
         open(job_sbatch, "w") do f
             print(f, """
@@ -311,6 +311,16 @@ function init_base_params()
         biting_rate = 0.0005 * daily_biting_rate_multiplier,
 
         migrants_match_local_prevalence = true,
+
+        n_snps_per_strain = 24,
+
+        distinct_initial_snp_allele_frequencies = false,
+#         distinct_initial_snp_allele_frequencies = true,
+#         initial_snp_allele_frequency = [0.1, 0.9],
+
+        snp_linkage_disequilibrium = false,
+#         snp_linkage_disequilibrium = true,
+#         snp_pairwise_ld = snp_ld_matrix,
     )
 end
 
