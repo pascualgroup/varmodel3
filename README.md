@@ -14,6 +14,7 @@ Based on previous C++ implementations ([varmodel](https://github.com/pascualgrou
 * [Model Overview](#Model-Overview)
 * [Code Organization](#Code-Organization)
 * [Output database](#Output-database)
+* [Citation](#Citation)
 
 ___
 ## Quickstart
@@ -129,3 +130,9 @@ The output database is in [SQLite3 format](https://www.sqlite.org/fileformat.htm
 | `sampled_infection_snps` | Information related to the SNP loci involved in the infections of the sampled hosts (*e.g.,* allele ID) |
 | `sampled_infections` | Information related to the infections of the sampled hosts at different sampling times (*e.g.,* infection ID) |
 | `summary` | Summary at different sampling times (*e.g.,* number of infections, bites, and infected hosts) |
+
+___
+## Citation
+
+Please cite this when using the model:
+[Labbé F, He Q, Zhan Q, Tiedje KE, Argyropoulos DC, Tan MH, et al. Neutral vs. non-neutral genetic footprints of *Plasmodium falciparum* multiclonal infections. bioRxiv; 2022. p. 2022.06.27.497801. doi:10.1101/2022.06.27.497801](https://www.biorxiv.org/content/10.1101/2022.06.27.497801v1).
