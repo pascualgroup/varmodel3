@@ -812,6 +812,7 @@ function advance_immuned_genes!(t, s, host, i)
             end
             s.n_cleared_infections += 1
             host.n_cleared_infections += 1
+            host.generalized_immunity += 1
             delete_and_swap_with_end!(host.active_infections, i)
             ###
             inf_det_index = 1
