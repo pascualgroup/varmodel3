@@ -10,7 +10,7 @@ the model share a parameters format, run script, and other bits of code.
 """
 
 # Verify that "parameters.jl" got loaded already, and that the global parameters
-# constant P is defined.
+# constant P is defined
 @assert @isdefined Params
 @assert @isdefined P
 @assert typeof(P) === Params
@@ -20,9 +20,15 @@ include("util.jl")
 include("state.jl")
 include("output.jl")
 
-const N_EVENTS = 6
-const EVENTS = collect(1:N_EVENTS)
-const (BITING, IMMIGRATION, SWITCHING, MUTATION, ECTOPIC_RECOMBINATION, IMMUNITY_LOSS) = EVENTS
+if P.generalized_immunity
+    const N_EVENTS = 7
+    const EVENTS = collect(1:N_EVENTS)
+    const (BITING, IMMIGRATION, SWITCHING, MUTATION, ECTOPIC_RECOMBINATION, IMMUNITY_LOSS, GENERALIZED_IMMUNITY_LOSS) = EVENTS
+else
+    const N_EVENTS = 6
+    const EVENTS = collect(1:N_EVENTS)
+    const (BITING, IMMIGRATION, SWITCHING, MUTATION, ECTOPIC_RECOMBINATION, IMMUNITY_LOSS) = EVENTS
+end
 
 function run()
     db = initialize_database()
@@ -37,28 +43,28 @@ function run()
     Random.seed!(rng_seed)
     execute(db.meta, ("rng_seed", rng_seed))
 
-    # Start recording elapsed time.
+    # Start recording elapsed time
     start_datetime = now()
 
-    # Used to decide when to do output and verification.
+    # Used to decide when to do output and verification
     t_next_integer = 1
 
-    # Initialize state.
+    # Initialize state
     t = 0.0
     s = initialize_state()
     verify(t, s)
 
-    # Run initial output.
+    # Run initial output
     stats = SummaryStats()
     write_output!(db, 0, s, stats)
 
-    # Initialize event rates.
+    # Initialize event rates
     rates = [get_rate(t, s, event) for event in EVENTS]
     total_rate = sum(rates)
 
-    # Loop events until end of simulation.
+    # Loop events until end of simulation
     while total_rate > 0.0 && t < P.t_end
-        # Draw next time with rate equal to the sum of all event rates.
+        # Draw next time with rate equal to the sum of all event rates
         dt = rand(Exponential(1.0 / total_rate))
         @assert dt > 0.0 && !isinf(dt)
 
@@ -78,7 +84,7 @@ function run()
             t_next_integer += 1
         end
 
-        # Draw the event, update time, and execute event.
+        # Draw the event, update time, and execute event
         event = direct_sample_linear_scan(rates, total_rate)
         t += dt
         event_happened = do_event!(t, s, stats, event, db)
@@ -107,9 +113,11 @@ function run()
     total_num_genes_generated_recomb = s.next_gene_id_recomb - 1
     println("total number of new genes generated out of recombination? $(total_num_genes_generated_recomb)")
     execute(db.meta, ("total_num_genes_generated_recomb", Int64(total_num_genes_generated_recomb)))
+    ###
     if P.n_snps_per_strain > 0
         write_initial_snp_allele_frequencies(db, s)
     end
+    ###
 end
 
 function recompute_rejection_upper_bounds!(s)
@@ -131,7 +139,7 @@ function initialize_state()
 
     # Initialize gene pool as an (n_loci, n_genes_initial) matrix filled with
     # allele IDs drawn uniformly randomly in 1:n_alleles_per_locus_initial.
-    # and to avoid duplications, 10 times of random numbers are draw and then reduced to a set.
+    # and to avoid duplications, 10 times of random numbers are draw and then reduced to a set
     gene_pool = reshape(
         rand(1:P.n_alleles_per_locus_initial, P.n_loci * P.n_genes_initial*10),
         (P.n_loci, P.n_genes_initial*10)
@@ -158,8 +166,8 @@ function initialize_state()
         Host(
             id = id,
             t_birth = 0, t_death = draw_host_lifetime(),
-            liver_infections = [], active_infections = [],
-            immunity = ImmuneHistoryType(),
+            liver_infections = [], active_infections = [], active_infections_detectable = [],
+            immunity = ImmuneHistoryType(), generalized_immunity = 0,
             n_cleared_infections = 0
         )
         for id in 1:P.n_hosts
@@ -169,6 +177,7 @@ function initialize_state()
         host.t_death = host.t_death + host.t_birth
     end
 
+    ###
     # Define the initial allele frequencies at each SNP.
     snp_all_freq = fill(0.5, P.n_snps_per_strain)
     if P.n_snps_per_strain > 0
@@ -191,12 +200,16 @@ function initialize_state()
                     # As linked SNPs are related, their initial allele frequencies
                     # are co-defined.
                     if size(linked_snps)[1] > 1
+                        #println("i: $(i); Linked SNP: $(linked_snps)")
                         unlinked_snps = setdiff(unlinked_snps, linked_snps)
+                        #println("i: $(i); Unlinked SNP: $(unlinked_snps)")
                         snp_all_freq[linked_snps[1]] = rand(P.initial_snp_allele_frequency[1]:0.01:P.initial_snp_allele_frequency[2])
                         snp_all_freq[linked_snps[1]] = rand([snp_all_freq[linked_snps[1]], 1 - snp_all_freq[linked_snps[1]]])
+                        #println("Linked SNP: $(linked_snps[1]); Initial SNP allele frequencies: $(snp_all_freq[linked_snps[1]])")
                         for linked_snp in linked_snps[2:size(linked_snps)[1]]
                             snp_all_freq[linked_snp] = snp_all_freq[linked_snps[1]]
                             snp_all_freq[linked_snp] = rand([snp_all_freq[linked_snp], 1 - snp_all_freq[linked_snp]])
+                            #println("Linked SNP: $(linked_snp); Initial SNP allele frequencies: $(snp_all_freq[linked_snp])")
                         end
                     end
                     i += 1
@@ -210,10 +223,16 @@ function initialize_state()
                 for unlinked_snp in unlinked_snps
                     snp_all_freq[unlinked_snp] = rand(P.initial_snp_allele_frequency[1]:0.01:P.initial_snp_allele_frequency[2])
                     snp_all_freq[unlinked_snp] = rand([snp_all_freq[unlinked_snp], 1 - snp_all_freq[unlinked_snp]])
+                    #println("Unlinked SNP: $(unlinked_snp); Initial SNP allele frequencies: $(snp_all_freq[unlinked_snp])")
                 end
             end
         end
+    #else
+        #snp_all_freq = []
+        #snp_all_freq = Array{Float64, 1}
     end
+    #println("Initial SNP allele frequencies: $(snp_all_freq)")
+    ###
 
     # Infect n_initial_infections hosts at t = 0. Genes in the infection
     # are sampled uniformly randomly from the gene pool.
@@ -228,12 +247,20 @@ function initialize_state()
             gene_pool[:, rand(1:P.n_genes_initial, P.n_genes_per_strain)],
             (P.n_loci, P.n_genes_per_strain)
         )
+        ###
+        #println("Infection ID: $(infection.id); SNPs before: $(infection.snps)")
+        #if !P.distinct_initial_snp_allele_frequencies
+            #infection.snps[:] = rand(1:2, P.n_snps_per_strain)
+        #else
         if P.n_snps_per_strain > 0
             for snp in 1:P.n_snps_per_strain
                 infection.snps[snp] = sample([1, 2],
                 Weights([snp_all_freq[snp], 1 - snp_all_freq[snp]]))
             end
         end
+        #end
+        #println("Infection ID: $(infection.id); SNPs after: $(infection.snps)")
+        ###
         push!(hosts[host_index].liver_infections, infection)
     end
 
@@ -279,6 +306,7 @@ function create_empty_infection()
         t_infection = NaN,
         t_expression = NaN,
         duration = NaN,
+        p_detect = NaN,
         strain_id = StrainId(0),
         genes = fill(AlleleId(0), (P.n_loci, P.n_genes_per_strain)),
         snps = fill(SnpId(0), P.n_snps_per_strain),
@@ -318,6 +346,8 @@ function get_rate(t, s, event)
         get_rate_ectopic_recombination(t, s)
     elseif event == IMMUNITY_LOSS
         get_rate_immunity_loss(t, s)
+    elseif event == GENERALIZED_IMMUNITY_LOSS
+        get_rate_generalized_immunity_loss(t, s)
     end
 end
 
@@ -334,6 +364,8 @@ function do_event!(t, s, stats, event, db)
         do_ectopic_recombination!(t, s, stats)
     elseif event == IMMUNITY_LOSS
         do_immunity_loss!(t, s, stats)
+    elseif event == GENERALIZED_IMMUNITY_LOSS
+        do_generalized_immunity_loss!(t, s, stats)
     end
 end
 
@@ -354,7 +386,7 @@ function do_biting!(t, s, stats)
     src_host = rand(s.hosts)
     dst_host = rand(s.hosts)
 
-    # Advance host (rebirth or infection activation).
+    # Advance host (rebirth or infection activation)
     advance_host!(t, s, src_host)
     advance_host!(t, s, dst_host)
 
@@ -377,14 +409,40 @@ function do_biting!(t, s, stats)
     stats.n_infected_bites_with_space += 1
 
     # Compute probability of each transmission.
-    p_transmit = if P.coinfection_reduces_transmission
-        P.transmissibility / src_active_count
+    ###
+    # if P.generalized_immunity && src_host.n_cleared_infections > 0
+    if P.generalized_immunity && src_host.generalized_immunity > 0
+        # Probability based on the generalized immunity level and on a parameter which control how fast the GI impact the transmission.
+        p_transmit = if P.coinfection_reduces_transmission
+            # P.transmissibility / (src_active_count + src_host.n_cleared_infections)
+            # P.transmissibility * exp(-1 * src_host.n_cleared_infections * P.generalized_immunity_transmissibility) / src_active_count
+            P.transmissibility * exp(-1 * src_host.generalized_immunity * P.generalized_immunity_transmissibility) / src_active_count
+        else
+            # P.transmissibility / src_host.n_cleared_infections
+            # P.transmissibility * exp(-1 * src_host.n_cleared_infections * P.generalized_immunity_transmissibility)
+            P.transmissibility * exp(-1 * src_host.generalized_immunity * P.generalized_immunity_transmissibility)
+        end
+        #println("Source host: $(src_host.id)")
+        #println("Number of cleared infections: $(src_host.n_cleared_infections)")
+        #println("GI level: $(src_host.generalized_immunity)")
+        #println("Number of active infections: $(src_active_count)")
+        #println("Probability of transmission: $(p_transmit)")
     else
-        P.transmissibility
+        ###
+        p_transmit = if P.coinfection_reduces_transmission
+            P.transmissibility / src_active_count
+        else
+            P.transmissibility
+        end
+        #println("Source host: $(src_host.id)")
+        #println("Number of cleared infections: $(src_host.n_cleared_infections)")
+        #println("GI level: $(src_host.generalized_immunity)")
+        #println("Number of active infections: $(src_active_count)")
+        #println("Probability of transmission: $(p_transmit)")
     end
 
-    # First choose the active strains from the host that will be transmitted to mosquito.
-    # This is determined by the transmissibility.
+    # First choose the active strains from the host that will be transmitted to mosquito
+    # This is determined by the transmissibility
     choose_transmit = rand(Float64, src_active_count)
     transmitted_strains = src_host.active_infections[choose_transmit.<p_transmit]
     #println("t = $(t): originalSize $(src_active_count), newSize $(length(transmitted_strains))")
@@ -398,7 +456,7 @@ function do_biting!(t, s, stats)
         stats.n_transmissions += 1
         transmitted = true
 
-        # Randomly sample two source infections within transmitted_strains to recombine.
+        # Randomly sample two source infections within transmitted_strains to recombine
         src_inf_1 = rand(transmitted_strains)
         src_inf_2 = rand(transmitted_strains)
 
@@ -412,27 +470,32 @@ function do_biting!(t, s, stats)
         dst_inf.expression_index_locus = 0
         dst_inf.duration = NaN
 
-        # Construct strain for new infection.
+        # Construct strain for new infection
         if src_inf_1.strain_id == src_inf_2.strain_id
             # If both infections have the same strain, then the new infection
             # is given infection 1's genes with expression order shuffled.
             dst_inf.strain_id = src_inf_1.strain_id
             shuffle_columns_to!(dst_inf.genes, src_inf_1.genes)
+            ###
             # The new infection is given infection 1's SNP alleles.
             if P.n_snps_per_strain > 0
                 dst_inf.snps = src_inf_1.snps
             end
+            ###
         else
             # Otherwise, the new infection is given a new strain constructed by
             # taking a random sample of the genes in the two source infections.
             dst_inf.strain_id = next_strain_id!(s)
             sample_columns_from_two_matrices_to!(dst_inf.genes, src_inf_1.genes, src_inf_2.genes)
+            ###
             # The new infection is given a new set of SNP alleles constructed by
             # taking a random allele per SNP in the two source infections.
             if P.n_snps_per_strain > 0
                 if !P.snp_linkage_disequilibrium
                     for i in 1:P.n_snps_per_strain
+                        #println("SNP: $(i); S1: $(src_inf_1.snps[i]); S2: $(src_inf_2.snps[i])")
                         dst_inf.snps[i] = rand((src_inf_1.snps[i], src_inf_2.snps[i]))
+                        #println("SNP: $(i); D: $(dst_inf.snps[i])")
                     end
                 else
                     unlinked_snps = collect(1:P.n_snps_per_strain)
@@ -446,13 +509,18 @@ function do_biting!(t, s, stats)
                         # constructed by taking one allele per linked SNP in only
                         # one source infection.
                         if size(linked_snps)[1] > 1
+                            #println("SNP: $(i); Linked SNP: $(linked_snps)")
                             unlinked_snps = setdiff(unlinked_snps, linked_snps)
+                            #println("SNP: $(i); Unlinked SNP: $(unlinked_snps)")
                             parent = rand(["src_inf_1", "src_inf_2"])
                             for linked_snp in linked_snps
+                                #println("i: $(i); SNP: $(linked_snp); S1: $(src_inf_1.snps[linked_snp]); S2: $(src_inf_2.snps[linked_snp])")
                                 if parent == "src_inf_1"
                                     dst_inf.snps[linked_snp] = src_inf_1.snps[linked_snp]
+                                    #println("i: $(i); SNP: $(linked_snp); Parent: $(parent); D: $(dst_inf.snps[linked_snp])")
                                 elseif parent == "src_inf_2"
                                     dst_inf.snps[linked_snp] = src_inf_2.snps[linked_snp]
+                                    #println("i: $(i); SNP: $(linked_snp); Parent: $(parent); D: $(dst_inf.snps[linked_snp])")
                                 end
                             end
                         end
@@ -466,15 +534,36 @@ function do_biting!(t, s, stats)
                     # constructed by taking a random allele per unlinked SNP in
                     # the two source infections.
                     for unlinked_snp in unlinked_snps
+                        #println("SNP: $(unlinked_snp); S1: $(src_inf_1.snps[unlinked_snp]); S2: $(src_inf_2.snps[unlinked_snp])")
                         dst_inf.snps[unlinked_snp] = rand((src_inf_1.snps[unlinked_snp], src_inf_2.snps[unlinked_snp]))
+                        #println("SNP: $(unlinked_snp); D: $(dst_inf.snps[unlinked_snp])")
                     end
                 end
             end
+            ###
         end
 
-        # Add this infection to the destination host.
+        ###
+        # Calculate the probability of detection of the new infection.
+        # Probability based on the generalized immunity level and on a parameter which control how fast the GI impact the detection.
+        if P.generalized_immunity && dst_host.n_cleared_infections > 0
+            #dst_inf.p_detect = 1 / dst_host.n_cleared_infections
+            #dst_inf.p_detect = exp(-1 * dst_host.n_cleared_infections)
+            #dst_inf.p_detect = exp(-1 * dst_host.n_cleared_infections * P.generalized_immunity_detection)
+            dst_inf.p_detect = exp(-1 * dst_host.generalized_immunity * P.generalized_immunity_detection)
+        else
+            dst_inf.p_detect = 1
+        end
+        println("Destination host: $(dst_host.id)")
+        println("Detection parameter: $(P.generalized_immunity_detection)")
+        println("Number of cleared infections: $(dst_host.n_cleared_infections)")
+        println("GI level: $(dst_host.generalized_immunity)")
+        println("Probability of detection: $(dst_inf.p_detect)")
+        ###
+
+        # Add this infection to the destination host
         push!(dst_host.liver_infections, dst_inf)
-        # Update population wide host liver max.
+        # update population wide host liver max
         s.n_liver_infections_per_host_max = max(s.n_liver_infections_per_host_max, length(dst_host.liver_infections))
 
     end
@@ -489,13 +578,14 @@ end
 
 function advance_host!(t, s, host)
     if t > host.t_death
-        # If the host is past its death time.
+        # If the host is past its death time
         do_rebirth!(t, s, host)
     else
         i = 1
         while i <= length(host.liver_infections)
             infection = host.liver_infections[i]
             if infection.t_infection + P.t_liver_stage < t
+                # println("t = $(t): activating host $(host.id), inf $(infection.id)")
 
                 # If the infection is past the liver stage, remove it from the liver.
                 delete_and_swap_with_end!(host.liver_infections, i)
@@ -510,6 +600,25 @@ function advance_host!(t, s, host)
                     end
                     push!(host.active_infections, infection)
                     infection.t_expression = t
+
+                    ###
+                    # Here code detectability! (problems here)
+                    # Add condition to push in the detectable!
+                    if P.generalized_immunity && host.n_cleared_infections > 0
+                        # Choose if the active strain could be detected.
+                        # This choice is based on its detectability in its host.
+                        if rand() < infection.p_detect
+                            #println("The infection $(infection.id) with a probability of detection of $(infection.p_detect) is detectable.")
+                            #println("This infection is infecting host $(host.id) which currently has $(host.n_cleared_infections) cleared infections.")
+                            push!(host.active_infections_detectable, infection)
+                        else
+                            #println("The infection $(infection.id) with a probability of detection of $(infection.p_detect) is undetectable.")
+                            #println("This infection is infecting host $(host.id) which currently has $(host.n_cleared_infections) cleared infections.")
+                        end
+                    else
+                        push!(host.active_infections_detectable, infection)
+                    end
+                    ###
 
                     advance_immuned_genes!(t,s,host,length(host.active_infections))
 
@@ -535,7 +644,9 @@ function do_rebirth!(t, s, host)
     host.n_cleared_infections = 0
     empty!(host.liver_infections)
     empty!(host.active_infections)
+    empty!(host.active_infections_detectable)
     empty!(host.immunity)
+    host.generalized_immunity = 0
 end
 
 
@@ -547,7 +658,7 @@ end
 
 function do_immigration!(t, s, stats)
 
-    # Sample a random host and advance it (rebirth or infection activation).
+    # Sample a random host and advance it (rebirth or infection activation)
     host = rand(s.hosts)
     advance_host!(t, s, host)
 
@@ -558,7 +669,7 @@ function do_immigration!(t, s, stats)
         end
     end
 
-    # Construct infection by sampling from gene pool.
+    # Construct infection by sampling from gene pool
     infection = recycle_or_create_infection(s)
     infection.id = next_infection_id!(s)
     infection.t_infection = t
@@ -570,12 +681,15 @@ function do_immigration!(t, s, stats)
     for i in 1:P.n_genes_per_strain
         infection.genes[:,i] = s.gene_pool[:, rand(1:size(s.gene_pool)[2])]
     end
+    ###
     for snp in 1:P.n_snps_per_strain
         infection.snps[snp] = sample([1, 2],
         Weights([s.initial_snp_allele_frequencies[snp], 1 - s.initial_snp_allele_frequencies[snp]]))
     end
+    #infection.snps = rand(1:2, P.n_snps_per_strain)
+    ###
 
-    # Add infection to host.
+    # Add infection to host
     push!(host.liver_infections, infection)
 
     s.n_liver_infections_per_host_max = max(s.n_liver_infections_per_host_max, length(host.liver_infections))
@@ -588,7 +702,7 @@ end
 
 function get_rate_switching(t, s)
     if P.use_immunity_by_allele && !P.whole_gene_immune
-        # Switching rate set by total number of alleles.
+        #switching rate set by total number of alleles
         (P.switching_rate * P.n_loci) * P.n_hosts * (s.n_active_infections_per_host_max+s.n_liver_infections_per_host_max)
     else
         P.switching_rate * P.n_hosts * (s.n_active_infections_per_host_max+s.n_liver_infections_per_host_max)
@@ -596,11 +710,11 @@ function get_rate_switching(t, s)
 end
 
 function do_switching!(t, s, stats)
-    # Change to total number of infections instead of active infections alone.
-    index = rand(CartesianIndices((P.n_hosts, (s.n_active_infections_per_host_max+s.n_liver_infections_per_host_max))))
+    # change to total number of infections instead of active infections alone
+    index = rand(CartesianIndices((P.n_hosts, (s.n_active_infections_per_host_max + s.n_liver_infections_per_host_max))))
     host = s.hosts[index[1]]
 
-    # Advance host (rebirth or infection activation).
+    # Advance host (rebirth or infection activation)
     advance_host!(t, s, host)
     inf_index = index[2]
 
@@ -628,7 +742,23 @@ function do_switching!(t, s, stats)
         end
         s.n_cleared_infections += 1
         host.n_cleared_infections += 1
+        host.generalized_immunity += 1
+        #println("The GI level of host $(host.id) is $(host.generalized_immunity)")
         delete_and_swap_with_end!(host.active_infections, inf_index)
+        ###
+        #println("Is infection $(infection.id) detectable?")
+        inf_det_index = 1
+        for inf_det in host.active_infections_detectable
+            #println("One of the detectable infection: $(inf_det.id)")
+            if infection.id == inf_det.id
+                #println("Infection $(inf_det.id) corresponds to the active infection!")
+                act_inf_det = host.active_infections_detectable[inf_det_index]
+                #println("Confirmation that infection $(act_inf_det.id) index is $(inf_det_index).")
+                delete_and_swap_with_end!(host.active_infections_detectable, inf_det_index)
+            end
+                inf_det_index += 1
+        end
+        ###
     else
         # Otherwise, advance gene and/or locus expression(s).
         if P.use_immunity_by_allele  && !P.whole_gene_immune
@@ -651,7 +781,7 @@ function do_switching!(t, s, stats)
     i = 1
     while i <= length(host.active_infections)
         if advance_immuned_genes!(t,s,host,i)
-            # If there is no end of expression and reordering of infections, then index plus 1.
+            # if there is no end of expression and reordering of infections, then index plus 1
             i += 1
         end
     end
@@ -683,8 +813,21 @@ function advance_immuned_genes!(t, s, host, i)
             s.n_cleared_infections += 1
             host.n_cleared_infections += 1
             delete_and_swap_with_end!(host.active_infections, i)
-            # Here if deleting an infection, and the indexing changed, then tell the calling function
-            # it doesn't advancing its index.
+            ###
+            inf_det_index = 1
+            for inf_det in host.active_infections_detectable
+                #println("One of the detectable infection: $(inf_det.id)")
+                if infection.id == inf_det.id
+                    #println("Infection $(inf_det.id) corresponds to the active infection!")
+                    act_inf_det = host.active_infections_detectable[inf_det_index]
+                    #println("Confirmation that infection $(act_inf_det.id) index is $(inf_det_index).")
+                    delete_and_swap_with_end!(host.active_infections_detectable, inf_det_index)
+                end
+                    inf_det_index += 1
+            end
+            ###
+            #here if deleting an infection, and the indexing changed, then tell the calling function
+            #it doesn't advancing its index
             return false
         else
             # Otherwise, advance gene and/or locus expression(s).
@@ -708,7 +851,7 @@ end
 
 
 ### MUTATION EVENT ###
-# Update mutation and recombination rates towards all infections.
+#update mutation and recombinatin rates towards all infections
 function get_rate_mutation(t, s)
     P.mutation_rate * P.n_hosts * (s.n_active_infections_per_host_max+s.n_liver_infections_per_host_max) * P.n_genes_per_strain * P.n_loci
 end
@@ -720,7 +863,7 @@ function do_mutation!(t, s, stats)
     expression_index = index[3]
     locus = index[4]
 
-    # Advance host (rebirth or infection activation).
+    # Advance host (rebirth or infection activation)
     advance_host!(t, s, host)
 
     # If there's no active infection at the drawn index, reject this sample.
@@ -775,19 +918,19 @@ function do_ectopic_recombination!(t, s, stats)
     gene1 = infection.genes[:, gene_index_1]
     gene2 = infection.genes[:, gene_index_2]
 
-    # If the genes are the same, this is a no-op.
+    # If the genes are the same, this is a no-op
     if gene1 == gene2
         return false
     end
 
     breakpoint, p_functional = if P.ectopic_recombination_generates_new_alleles
-        # Choose a breakpoint.
+        # Choose a breakpoint
         breakpoint = P.n_loci * rand()
         p_functional = p_recombination_is_functional_real(gene1, gene2, breakpoint)
 
         (Int(ceil(breakpoint)), p_functional)
     else
-        # Choose a breakpoint.
+        # Choose a breakpoint
         breakpoint = rand(1:P.n_loci)
         if breakpoint == 1
             return false
@@ -805,7 +948,7 @@ function do_ectopic_recombination!(t, s, stats)
     create_new_allele = P.ectopic_recombination_generates_new_alleles &&
         rand() < P.p_ectopic_recombination_generates_new_allele
 
-    # Recombine to modify first gene, if functional.
+    # Recombine to modify first gene, if functional
     if !is_conversion && rand() < p_functional
         infection.genes[:, gene_index_1] = if create_new_allele
             recombine_genes_new_allele(s, gene1, gene2, breakpoint)
@@ -814,7 +957,7 @@ function do_ectopic_recombination!(t, s, stats)
         end
     end
 
-    # Recombine to modify second gene, if functional.
+    # Recombine to modify second gene, if functional
     if rand() < p_functional
         infection.genes[:, gene_index_2] = if create_new_allele
             recombine_genes_new_allele(s, gene2, gene1, breakpoint)
@@ -936,15 +1079,47 @@ function do_immunity_loss!(t, s, stats)
     host = s.hosts[index[1]]
     immunity_index = index[2]
 
-    # Advance host (rebirth or infection activation).
+    # Advance host (rebirth or infection activation)
     advance_host!(t, s, host)
 
     # If the immunity index is beyond this host's immunity count, reject this sample.
-    if immunity_index >  immuneLength(host.immunity)
+    if immunity_index > immuneLength(host.immunity)
         return false
     end
 
     decrement_immunity_at_sampled_index!(host.immunity, immunity_index)
+
+    false
+end
+
+### GENERALIZED IMMUNITY LOSS EVENT ###
+
+function get_rate_generalized_immunity_loss(t, s)
+    #P.generalized_immunity_loss_rate * P.n_hosts * s.n_generalized_immunities_per_host_max
+    P.generalized_immunity_loss_rate * P.n_hosts
+end
+
+function do_generalized_immunity_loss!(t, s, stats)
+    #println("Do generalized immunity loss.")
+    #index = rand(CartesianIndices((P.n_hosts)))
+    index = rand(1:P.n_hosts)
+    #host = s.hosts[index[1]]
+    host = s.hosts[index]
+    #println("Host involved in the generalized immunity loss: $(host.id)")
+
+    # Advance host (rebirth or infection activation).
+    advance_host!(t, s, host)
+
+    # If the host generalized immunity level is null, reject this sample.
+    if host.generalized_immunity < 1
+        #println("The host $(host.id) GI level is $(host.generalized_immunity) and cannot be decremented.")
+        return false
+    end
+
+    # Decrement generalized immunity.
+    #println("The host $(host.id) GI level is $(host.generalized_immunity) and can be decremented.")
+    host.generalized_immunity -= 1
+    #println("The host $(host.id) GI level after loss is $(host.generalized_immunity).")
 
     false
 end
@@ -969,10 +1144,12 @@ function next_strain_id!(s)
     id
 end
 
+###
 """
-    Find the SNPs that are in linkage disequilibrium (LD) with SNP i (i.e. linked SNPs).
+    Find the SNPs that are in linkage disequilibrium with SNP i (i.e. linked SNPs).
+    The function uses the list of SNPs and the pairwise LD matrix to .
     For each SNP, the function selects the linked SNP using the LD coefficients
-    from the pairwise LD matrix to weight the probability to drawing a given SNP.
+    to weight the probability to drawing a given SNP.
 """
 function find_linked_snps(i)
     linked_snps = [i]
@@ -983,6 +1160,7 @@ function find_linked_snps(i)
     end
     unique!(linked_snps)
 end
+###
 
 
 ### IMMUNITY FUNCTIONS ###
@@ -1004,17 +1182,17 @@ function increment_immunity!(s, host, gene)
 end
 
 function increment_immunity!(ih::ImmuneHistoryByGene, gene)
-    # Get old immunity level from immunity dict.
+    # Get old immunity level from immunity dict
     old_level = get(ih.d, gene, ImmunityLevel(0))
 
-    # Increment immunity if the level is not at the maximum value (255 = 0xFF).
+    # Increment immunity if the level is not at the maximum value (255 = 0xFF)
     if old_level < typemax(ImmunityLevel)
         ih.d[gene] = old_level + 1
     end
 end
 
 function increment_immunity!(ih::ImmuneHistoryByAllele, gene)
-    # Increment immunity at each locus.
+    # Increment immunity at each locus
     for (locus, allele_id) in enumerate(gene)
         old_level = get(ih.vd[locus], allele_id, ImmunityLevel(0))
         if old_level < typemax(ImmunityLevel)
@@ -1039,10 +1217,10 @@ function decrement_immunity_at_sampled_index!(ih::ImmuneHistoryByGene, index)
 end
 
 function decrement_immunity!(ih::ImmuneHistoryByGene, gene)
-    # Get old immunity level from immunity dict.
+    # Get old immunity level from immunity dict
     old_level = ih.d[gene]
 
-    # Decrement immunity, removing it entirely if we reach 0.
+    # Decrement immunity, removing it entirely if we reach 0
     if old_level == 1
         delete!(ih.d, gene)
     else
@@ -1094,7 +1272,7 @@ function is_immune(ih::ImmuneHistoryByAllele, gene, loc)
     true
 end
 
-# Push the current infection's duration calculations into durations vector.
+# push the current infection's duration calculations into durations vector
 function add_infectionDuration!(t, s, host, i)
     get_duration!(host.active_infections, i, t)
     newInfDur = infectionDuration(

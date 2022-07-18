@@ -12,7 +12,9 @@ const Locus = UInt8
 const HostId = UInt32
 const InfectionId = UInt32
 const GeneId = UInt32
+###
 const SnpId = UInt8
+###
 
 const AlleleId = if P.ectopic_recombination_generates_new_alleles
     UInt32
@@ -26,6 +28,9 @@ const ExpressionIndexLocus = UInt8
 const ImmunityLevel = UInt16 # UInt8
 const Gene = SVector{P.n_loci, AlleleId}  # Immutable fixed-size vector
 const MGene = MVector{P.n_loci, AlleleId} # Mutable fixed-size vector
+###
+#const Snp = SVector{UInt8, P.n_snps_per_strain}  # Immutable fixed-size vector
+###
 
 abstract type ImmuneHistory end
 
@@ -123,11 +128,18 @@ matrix of allele IDs), and the currently expressed index.
     "Duration of the infection."
     duration::Float64
 
+    ###
     """
     Biallelic neutral SNPs, specified as 1 or 2 (e.g. A or G).
     These SNPs do not contribute to the infection duration or host immune memory.
     """
     snps::Array{SnpId, 1}
+
+    """
+    Probability of detection.
+    """
+    p_detect::Float64
+    ###
 end
 
 """
@@ -156,6 +168,11 @@ Infection arrays are dynamically sized but currently limited to
     "Actively expressed infections."
     active_infections::Array{Infection}
 
+    ###
+    "Actively expressed infections which are detectable."
+    active_infections_detectable::Array{Infection}
+    ###
+
     "Counts of finished infections for the host."
     n_cleared_infections::UInt32
 
@@ -170,6 +187,16 @@ Infection arrays are dynamically sized but currently limited to
     When the level reaches 0, the gene is removed from the dictionary.
     """
     immunity::ImmuneHistory
+
+    ###
+    """
+    Generalized immunity.
+    When a host clears an infection it results  in an incremented generalized
+    immunity level; generalized immunity loss results in a decremented immunity
+    level.
+    """
+    generalized_immunity::UInt32
+    ###
 end
 
 """
@@ -295,11 +322,13 @@ management auxiliaries.
     """
     infected_ratio::Float64
 
+    ###
     """
     Array of initial SNP allele frequencies.
     Used to pick an allele at each SNP during the initialization and immigration.
     """
     initial_snp_allele_frequencies::Array{Float64, 1}
+    ###
 end
 
 

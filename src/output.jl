@@ -108,6 +108,7 @@ function initialize_database()
             n_infections INTEGER,
             n_infected_liver INTEGER,
             n_infected_active INTEGER,
+            n_infected_active_detectable INTEGER,
             n_infected INTEGER,
             n_bites INTEGER,
             n_infected_bites INTEGER,
@@ -135,7 +136,8 @@ function initialize_database()
             birth_time REAL,
             death_time REAL,
             n_infections_liver INTEGER,
-            n_infections_active INTEGER
+            n_infections_active INTEGER,
+            n_infections_active_detectable INTEGER
         )
     """)
 
@@ -146,7 +148,8 @@ function initialize_database()
             infection_id INTEGER,
             infection_time REAL,
             strain_id INTEGER,
-            expression_index INTEGER
+            expression_index INTEGER,
+            p_detect REAL
         );
     """)
 
@@ -181,6 +184,9 @@ function initialize_database()
         );
     """)
 
+    ###
+    #allele_snp_columns = join(["allele_snp_id_$(i) INTEGER" for i in 1:P.n_snps_per_strain], ", ")
+    #$(allele_snp_columns),
     execute(db, """
         CREATE TABLE sampled_infection_snps(
             infection_id INTEGER,
@@ -196,14 +202,15 @@ function initialize_database()
             allele_frequencies FLOAT
         );
     """)
+    ###
 
     VarModelDB(
         db,
         make_insert_statement(db, "meta", 2),
-        make_insert_statement(db, "summary", 13),
+        make_insert_statement(db, "summary", 14),
         make_insert_statement(db, "gene_strain_counts", 5),
-        make_insert_statement(db, "sampled_hosts", 6),
-        make_insert_statement(db, "sampled_infections", 6),
+        make_insert_statement(db, "sampled_hosts", 7),
+        make_insert_statement(db, "sampled_infections", 7),
         make_insert_statement(db, "sampled_durations", 6),
         make_insert_statement(db, "sampled_infection_genes", 2 + P.n_loci),
         make_insert_statement(db, "sampled_immunity", 5),
@@ -239,6 +246,8 @@ function write_output!(db, t, s, stats)
     ) == 0
         println("t = $(t)")
 
+        #println("write_output!($(t))")
+
         execute(db, "BEGIN TRANSACTION")
 
         if t % P.summary_period == 0
@@ -265,15 +274,22 @@ end
 Write output to `summary` table
 """
 function write_summary(db, t, s, stats)
+#     println("write_summary($(t))")
 
     # Compute number of infections (liver, active, and both) with a simple tally/sum.
     n_infections_liver = sum(length(host.liver_infections) for host in s.hosts)
     n_infections_active = sum(length(host.active_infections) for host in s.hosts)
+    ###
+    n_infections_active_detectable = sum(length(host.active_infections_detectable) for host in s.hosts)
+    ###
     n_infections = n_infections_liver + n_infections_active
 
     # Compute number of individuals with infections (liver, active, or either).
     n_infected_liver = sum(length(host.liver_infections) > 0 for host in s.hosts)
     n_infected_active = sum(length(host.active_infections) > 0 for host in s.hosts)
+    ###
+    n_infected_active_detectable = sum(length(host.active_infections_detectable) > 0 for host in s.hosts)
+    ###
     n_infected = sum(
         length(host.liver_infections) > 0 || length(host.active_infections) > 0
         for host in s.hosts
@@ -291,6 +307,7 @@ function write_summary(db, t, s, stats)
         n_infections,
         n_infected_liver,
         n_infected_active,
+        n_infected_active_detectable,
         n_infected,
         stats.n_bites,
         stats.n_infected_bites,
@@ -308,6 +325,7 @@ end
 Write output for periodically sampled hosts.
 """
 function write_host_samples(db, t, s)
+#     println("write_host_samples($(t))")
 
     # Sample `host_sample_size` hosts randomly (without replacement).
     hosts = sample(s.hosts, P.host_sample_size, replace = false)
@@ -320,7 +338,7 @@ function write_host_samples(db, t, s)
         db.sampled_hosts,
         (
             t, Int64(host.id), host.t_birth, host.t_death,
-            length(host.liver_infections), length(host.active_infections)
+            length(host.liver_infections), length(host.active_infections), length(host.active_infections_detectable)
         )
         )
 
@@ -354,17 +372,21 @@ function write_infection(db, t, host, infection)
         db.sampled_infections,
         (
             t, Int64(host.id), Int64(infection.id), infection.t_infection, Int64(infection.strain_id),
-            infection.expression_index == 0 ? missing : Int64(infection.expression_index)
+            infection.expression_index == 0 ? missing : Int64(infection.expression_index), infection.p_detect
         )
     )
     for i in 1:P.n_genes_per_strain
         execute(db.sampled_infection_genes, vcat([infection.id, i], infection.genes[:,i]))
     end
+    ###
     if P.n_snps_per_strain > 0
         for i in 1:P.n_snps_per_strain
+            #println("Infection ID: $([infection.id, i])")
+            #println("Infection SNPs: $(infection.snps[i])")
             execute(db.sampled_infection_snps, vcat([infection.id, i], infection.snps[i]))
         end
     end
+    ###
 end
 
 """
@@ -392,6 +414,7 @@ simply scans all host infections and assembles sets of all genes and all
 strains.
 """
 function write_gene_strain_counts(db, t, s)
+#     println("write_gene_strain_counts($(t))")
     genesLiver::Set{Gene} = Set()
     strainsLiver::BitSet = BitSet()
     genesBlood::Set{Gene} = Set()
@@ -413,6 +436,7 @@ This function simply adds genes and strains from each infection to corresponding
 sets.
 """
 function count_genes_and_strains!(genes, strains, infections)
+#     println("count_circulating_genes_and_strains()")
     for infection in infections
         for i in 1:P.n_genes_per_strain
             push!(genes, infection.genes[:,i])
@@ -433,11 +457,14 @@ function write_immunity(db, t, host)
     end
 end
 
+###
 """
 Write the initial snp allele frequencies.
 """
 function write_initial_snp_allele_frequencies(db, s)
     for snp in 1:P.n_snps_per_strain
+        #println("SNP: $(snp); Frequencies: $(s.initial_snp_allele_frequencies[snp])")
         execute(db.initial_snp_allele_frequencies, (Int64(snp), Float64(round(s.initial_snp_allele_frequencies[snp], digits = 3))))
     end
 end
+###

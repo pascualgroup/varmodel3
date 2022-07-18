@@ -318,17 +318,18 @@ keyword constructor for the class.
     """
     migrants_match_local_prevalence::Union{Bool, Nothing} = nothing
 
+    ###
     """
         Number of biallelic neutral single nucleotide polymorphims (SNPs) in strain.
         These SNPs do not contribute to the infection or host immune memory.
-        They are used to keep track of the neutral part of each parasite genome.
+        They are used to X the most common approach for genotyping studies.
     """
     n_snps_per_strain::Union{Int, Nothing} = nothing
 
     """
         Whether the initial allele frequencies of the SNPs are distinct.
         If `true`, then the initial allele frequency are distinct in each SNP.
-        For example, while one SNP could have its minor allele frequency (MAF)
+        For example, while one SNP could have its minimum allele frequency (MAF)
         equals to 0.5, another SNP could have its MAF equals to 0.3.
         If `false`, then the initial allele frequencies are similar in all SNPs,
         i.e. their initial MAFs equal 0.5.
@@ -361,6 +362,35 @@ keyword constructor for the class.
         create a pairwise LD matrix.
     """
     snp_pairwise_ld::Union{Array{Float32, 2}, Nothing} = nothing
+
+    """
+        Whether detectability and transmissibility is affected by the number of
+        cleared infections irrespective of their antigenic diversity. If `true`,
+        then detectability and transmissibility of a strain is reduced when the
+        number of cleared infections increases. If `false`, then detectability
+        and transmissibility are constant.
+    """
+    generalized_immunity::Union{Bool, Nothing} = nothing
+
+    """
+        If `generalized_immunity` is `true`, then this is the parameter controlling
+        how fast the generalized immunity, i.e. the number of cleared infections,
+        reduces the detectability.
+    """
+    generalized_immunity_detection::Union{Float32, Nothing} = nothing
+
+    """
+        If `generalized_immunity` is `true`, then this is the parameter controlling
+        how fast the generalized immunity, i.e. the number of cleared infections,
+        reduces the transmissibility.
+    """
+    generalized_immunity_transmissibility::Union{Float32, Nothing} = nothing
+
+    """
+        Rate at which generalized immunity is lost per host.
+    """
+    generalized_immunity_loss_rate::Union{Float64, Nothing} = nothing
+    ###
 end
 
 """
@@ -482,6 +512,7 @@ function validate(p::Params)
 
     @assert p.migrants_match_local_prevalence !== nothing
 
+    ###
     @assert p.n_snps_per_strain !== nothing
     @assert p.n_snps_per_strain >= 0
     if p.n_snps_per_strain > 0
@@ -494,12 +525,38 @@ function validate(p::Params)
             @assert p.initial_snp_allele_frequency[2] > 0.0
             @assert p.initial_snp_allele_frequency[2] <= 1.0
             @assert p.initial_snp_allele_frequency[1] < p.initial_snp_allele_frequency[2]
+            #if p.minimum_initial_snp_allele_frequency !== nothing
+            #    @assert p.minimum_initial_snp_allele_frequency >= 0.0
+            #    @assert p.minimum_initial_snp_allele_frequency < 1.0
+            #end
+            #if p.maximum_initial_snp_allele_frequency !== nothing
+            #    @assert p.maximum_initial_snp_allele_frequency > 0.0
+            #    @assert p.maximum_initial_snp_allele_frequency <= 1.0
+            #end
+            #if p.minimum_initial_snp_allele_frequency !== nothing && p.maximum_initial_snp_allele_frequency !== nothing
+            #    @assert p.minimum_initial_snp_allele_frequency < p.maximum_initial_snp_allele_frequency
+            #end
         end
         @assert p.snp_linkage_disequilibrium !== nothing
+        #println("Number of SNPs: $(p.n_snps_per_strain)")
+        #println("Matrix: $(p.snp_pairwise_ld)")
+        #println("Size: $(size(p.snp_pairwise_ld))")
+        #println("Number of rows: $(size(p.snp_pairwise_ld)[1])")
+        #println("Number of columns: $(size(p.snp_pairwise_ld)[2])")
         if p.snp_linkage_disequilibrium
             @assert p.n_snps_per_strain >= 2
             @assert size(p.snp_pairwise_ld)[1] == p.n_snps_per_strain
             @assert size(p.snp_pairwise_ld)[2] == p.n_snps_per_strain
         end
     end
+    @assert p.generalized_immunity !== nothing
+    if p.generalized_immunity
+        @assert p.generalized_immunity_detection !== nothing
+        @assert p.generalized_immunity_detection > 0.0
+        @assert p.generalized_immunity_transmissibility !== nothing
+        @assert p.generalized_immunity_transmissibility > 0.0
+        @assert p.generalized_immunity_loss_rate !== nothing
+        @assert p.generalized_immunity_loss_rate >= 0.0
+    end
+    ###
 end
