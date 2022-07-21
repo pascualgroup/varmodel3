@@ -364,25 +364,23 @@ keyword constructor for the class.
     snp_pairwise_ld::Union{Array{Float32, 2}, Nothing} = nothing
 
     """
-        Whether detectability and transmissibility is affected by the number of
-        cleared infections irrespective of their antigenic diversity. If `true`,
-        then detectability and transmissibility of a strain is reduced when the
-        number of cleared infections increases. If `false`, then detectability
-        and transmissibility are constant.
+        Whether detectability and transmissibility is affected by the generalized
+        immunity (GI) level, i.e. the number of cleared infections irrespective
+        of their antigenic diversity. If `true`, then detectability and
+        transmissibility of a strain is reduced when the GI level increases. If
+        `false`, then detectability and transmissibility are constant.
     """
     generalized_immunity::Union{Bool, Nothing} = nothing
 
     """
         If `generalized_immunity` is `true`, then this is the parameter controlling
-        how fast the generalized immunity, i.e. the number of cleared infections,
-        reduces the detectability.
+        how fast the generalized immunity level reduces the detectability.
     """
     generalized_immunity_detection::Union{Float32, Nothing} = nothing
 
     """
         If `generalized_immunity` is `true`, then this is the parameter controlling
-        how fast the generalized immunity, i.e. the number of cleared infections,
-        reduces the transmissibility.
+        how fast the generalized immunity level reduces the transmissibility.
     """
     generalized_immunity_transmissibility::Union{Float32, Nothing} = nothing
 
@@ -390,6 +388,35 @@ keyword constructor for the class.
         Rate at which generalized immunity is lost per host.
     """
     generalized_immunity_loss_rate::Union{Float64, Nothing} = nothing
+
+    ###
+    """
+        Whether infections are impacted by malaria drug treatments.
+    """
+    drug_treatment::Union{Bool, Nothing} = nothing
+
+    """
+        Whether one SNP has a resistant or susceptible allele to drug treatments.
+        If `true`, the strains carrying the resistant allele will persist after
+        drug treatments, but the strains carrying the suscetible allele will be purged.
+        If `false`, all the biallelic SNPs are neutral, i.e. susceptible to drug treatment.
+    """
+    resistant_snp::Union{Bool, Nothing} = nothing
+
+    """
+        If `generalized_immunity` is `true`, then this is the parameter controlling
+        how fast the generalized immunity level reduces the symptoms.
+    """
+    generalized_immunity_symptoms::Union{Float64, Nothing} = nothing
+
+    """
+        XXX
+    """
+    symptoms::Union{Float64, Nothing} = nothing
+    """
+        XXX
+    """
+    detectability::Union{Float64, Nothing} = nothing
     ###
 end
 
@@ -557,6 +584,20 @@ function validate(p::Params)
         @assert p.generalized_immunity_transmissibility > 0.0
         @assert p.generalized_immunity_loss_rate !== nothing
         @assert p.generalized_immunity_loss_rate >= 0.0
+        @assert p.generalized_immunity_symptoms !== nothing
+        @assert p.generalized_immunity_symptoms > 0.0
+        @assert p.detectability !== nothing
+        @assert p.detectability > 0.0
+        @assert p.detectability <= 1.0
+    end
+    ###
+    @assert p.drug_treatment !== nothing
+    #if p.generalized_immunity && p.drug_treatment && p.n_snps_per_strain > 0
+    if p.drug_treatment && p.n_snps_per_strain > 0
+        @assert p.resistant_snp !== nothing
+        @assert p.symptoms !== nothing
+        @assert p.symptoms > 0.0
+        @assert p.symptoms <= 1.0
     end
     ###
 end

@@ -139,6 +139,11 @@ matrix of allele IDs), and the currently expressed index.
     Probability of detection.
     """
     p_detect::Float64
+
+    """
+    Probability of generating symptoms.
+    """
+    p_symptoms::Float64
     ###
 end
 

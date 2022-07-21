@@ -199,7 +199,8 @@ function initialize_database()
     execute(db, """
         CREATE TABLE initial_snp_allele_frequencies(
             snp_index INTEGER,
-            allele_frequencies FLOAT
+            allele_frequencies FLOAT,
+            snp_type STRING
         );
     """)
     ###
@@ -215,7 +216,7 @@ function initialize_database()
         make_insert_statement(db, "sampled_infection_genes", 2 + P.n_loci),
         make_insert_statement(db, "sampled_immunity", 5),
         make_insert_statement(db, "sampled_infection_snps", 3),
-        make_insert_statement(db, "initial_snp_allele_frequencies", 2)
+        make_insert_statement(db, "initial_snp_allele_frequencies", 3)
     )
 end
 
@@ -464,7 +465,11 @@ Write the initial snp allele frequencies.
 function write_initial_snp_allele_frequencies(db, s)
     for snp in 1:P.n_snps_per_strain
         #println("SNP: $(snp); Frequencies: $(s.initial_snp_allele_frequencies[snp])")
-        execute(db.initial_snp_allele_frequencies, (Int64(snp), Float64(round(s.initial_snp_allele_frequencies[snp], digits = 3))))
+        snp_type = "neutral"
+        if P.resistant_snp && snp == 1
+            snp_type = "selected"
+        end
+        execute(db.initial_snp_allele_frequencies, (Int64(snp), Float64(round(s.initial_snp_allele_frequencies[snp], digits = 3)), snp_type))
     end
 end
 ###
