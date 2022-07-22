@@ -7,6 +7,7 @@ This is a collection of scripts to analyze the sqlite output. Below are notes ab
 * [Calculate MOIvar](#Calculate-MOIvar)
 * [Calculate running times](#Calculate-running-times)
 * [Calculate prevalence](#Calculate-prevalence)
+* [Calculate SNP call proportions](#Calculate-SNP-call-proportions)
 
 ## Calculate MOIvar
 This script calculates the multiplicity of infection (MOI) per hosts using the *var*coding approach. The *var*coding approach (also termed *var* genotyping or *var* fingerprinting), employs the highly polymorphic sequences encoding the immunogenic DBLα domain of PfEMP1 (*Plasmodium falciparum* erythrocyte membrane protein 1), the major surface antigen of the blood stage of infection ([Rask *et al.* 2010](https://journals.plos.org/ploscompbiol/article?id=10.1371/journal.pcbi.1000933)). The multigene family known as *var* encodes variants of this surface antigen which can reach tens of thousands of variants in endemic populations ([Tonkin-Hill *et al.* 2021](https://journals.plos.org/plosgenetics/article?id=10.1371/journal.pgen.1009269)). The extensive diversity of the *var* gene family together with the very low percentage of *var* genes shared between parasites facilitate measuring MOI by amplifying, pooling, sequencing, and counting the number of DBLα types in a host.
@@ -24,7 +25,7 @@ For each host, this script also exports from the simulations the number of uniqu
 | `time`  | Time to make the calculations (required) |
 | `measurement`  | Path to the the measurement model (optional) |
 #### Notes
-The MOI calculations only take into account the active infection(s). The input file name should not contains a "." except before the extension (e.g. "input_file_name.sqlite"). To run it, ensure that you are using Python v.3.7, and have installed the following dependencies: [os](https://docs.python.org/3/library/os.html), [sqlite3](https://docs.python.org/3/library/sqlite3.html), [pandas](https://pandas.pydata.org/), [random](https://docs.python.org/3/library/random.html), [numpy](https://numpy.org/), and [argparse](https://docs.python.org/3/library/argparse.html).
+The MOI calculations only take into account the active infection(s). The input file name should not contain a `.` except before the extension (e.g., `input_file_name.sqlite`). To run it, ensure that you are using Python v.3.7, and have installed the following dependencies: [os](https://docs.python.org/3/library/os.html), [sqlite3](https://docs.python.org/3/library/sqlite3.html), [pandas](https://pandas.pydata.org/), [random](https://docs.python.org/3/library/random.html), [numpy](https://numpy.org/), and [argparse](https://docs.python.org/3/library/argparse.html).
 
 ## Calculate running times
 This script calculates and summarizes the running times per runs and per replicates. It uses the `summary` and `meta` tables from the varmodel3 output database(s) (in [SQLite3 format](https://www.sqlite.org/fileformat.html)). The results will be stored into two output files: one for the running time per run and another one for the running times per replicate.
@@ -55,6 +56,19 @@ It uses the "sampled_host" table from the varmodel3 output database (in [SQLite3
 | `time`  | Time to make the calculations (days) (required) |
 
 #### Notes
-The input file name should not contains a "." except before the extension (e.g. "input_file_name.sqlite").
+The input file name should not contain a `.` except before the extension (e.g., `input_file_name.sqlite`).
 The number of hosts and prevalence calculations only take into account the hosts with at least one active infection.
 To run it, ensure that you are using Python v.3.7, and have installed the following dependencies: [os](https://docs.python.org/3/library/os.html), [sqlite3](https://docs.python.org/3/library/sqlite3.html), [pandas](https://pandas.pydata.org/), and [argparse](https://docs.python.org/3/library/argparse.html).
+
+## Calculate SNP call proportions
+This script calculates the proportions of single nucleotide polymorphism (SNP) calls per host and per locus from a file in [THE REAL McCOIL categorical method format](https://github.com/EPPIcenter/THEREALMcCOIL/tree/master/categorical_method) ([Chang *et al.* 2017](https://journals.plos.org/ploscompbiol/article?id=10.1371/journal.pcbi.1005348)). The proportion of heterozygote (`prop_hetero`; also known as double allele calls (DACs) or mixed allele calls (MACs)), homozygote major (`prop_homo_maj`), homozygote minor (`prop_homo_min`), and missing (`prop_miss`) calls are calculated. The results will be stored into two output files: 1) `file_name_PropCalls_Ind.txt` for the proportions of SNP calls per host; and 2) `file_name_PropCalls_Loc.txt` for the proportions of SNP calls per locus.
+#### Example command
+`python CalculPropCalls.py --inputfile '/path/to/file.txt`
+
+`python CalculPropCalls.py -h` Will print a full list of command arguments.
+#### Command arguments
+| Name | Description |
+| :--: | :---------: | 
+| `inputfile` | Path to the input file (required) |
+#### Notes
+The input file name should not contain a `.` except before the extension (e.g., `input_file_name.txt`). To run it, ensure that you are using Python v.3.7, and have installed the following dependencies: [os](https://docs.python.org/3/library/os.html) and [argparse](https://docs.python.org/3/library/argparse.html).
