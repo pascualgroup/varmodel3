@@ -466,8 +466,10 @@ function write_initial_snp_allele_frequencies(db, s)
     for snp in 1:P.n_snps_per_strain
         #println("SNP: $(snp); Frequencies: $(s.initial_snp_allele_frequencies[snp])")
         snp_type = "neutral"
-        if P.resistant_snp && snp == 1
-            snp_type = "selected"
+        if P.drug_treatment
+            if P.resistant_snp && snp == 1
+                snp_type = "selected"
+            end
         end
         execute(db.initial_snp_allele_frequencies, (Int64(snp), Float64(round(s.initial_snp_allele_frequencies[snp], digits = 3)), snp_type))
     end
