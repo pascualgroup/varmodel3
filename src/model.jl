@@ -503,7 +503,7 @@ function advance_host!(t, s, host)
                 # Otherwise, just put it into the recycle bin.
                 if isnothing(P.n_infections_active_max) || length(host.active_infections) < P.n_infections_active_max
                     infection.expression_index = 1
-                    if P.whole_gene_immune
+                    if !P.use_immunity_by_allele || P.whole_gene_immune
                         infection.expression_index_locus = P.n_loci
                     else
                         infection.expression_index_locus = 1
