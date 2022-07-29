@@ -75,8 +75,10 @@ function run()
                 recompute_rejection_upper_bounds!(s)
             end
 
-            if P.migrants_match_local_prevalence && t_next_integer % P.migration_rate_update_period == 0
-                recompute_infected_ratio!(s)
+            if P.migrants_match_local_prevalence
+                if t_next_integer % P.migration_rate_update_period == 0
+                    recompute_infected_ratio!(s)
+                end
             end
 
             if t_next_integer % P.upper_bound_recomputation_period == 0

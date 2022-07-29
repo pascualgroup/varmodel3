@@ -486,6 +486,9 @@ function validate(p::Params)
     end
 
     @assert p.migrants_match_local_prevalence !== nothing
+    if p.migrants_match_local_prevalence
+        @assert p.migration_rate_update_period !== nothing
+    else
 
     @assert p.n_snps_per_strain !== nothing
     @assert p.n_snps_per_strain >= 0
