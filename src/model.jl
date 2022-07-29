@@ -635,7 +635,7 @@ function do_switching!(t, s, stats)
 
     # If we're at the end, clear the infection and return.
     if infection.expression_index == P.n_genes_per_strain && infection.expression_index_locus == P.n_loci
-        if s.n_cleared_infections % P.sample_duration == 0
+        if s.n_cleared_infections % P.sample_infection_duration_every == 0
             # Calculate and write the infection duration.
             add_infectionDuration!(t, s, host, inf_index)
         end
@@ -689,7 +689,7 @@ function advance_immuned_genes!(t, s, host, i)
 
         # If we're at the end, clear the infection and return.
         if infection.expression_index == P.n_genes_per_strain && infection.expression_index_locus == P.n_loci
-            if s.n_cleared_infections % P.sample_duration == 0
+            if s.n_cleared_infections % P.sample_infection_duration_every == 0
                 # Calculate and write the infection duration.
                 add_infectionDuration!(t, s, host, i)
             end

@@ -296,10 +296,15 @@ keyword constructor for the class.
     n_infections_active_max::Union{Int, Nothing} = nothing
 
     """
-        Sample an infection duration every `sample_duration` infection(s).
-        Currently used to reduce the running time.
+        Parameter controlling how often to record infection durations.
+
+        Every `sample_infection_duration_every` clearances, duration and other
+        related information will be recorded about the infection.
+
+        Q: would the statistical distribution be affected if the infections were
+        chosen based on infection time rather than clearance time?
     """
-    sample_duration::Union{Int, Nothing} = nothing
+    sample_infection_duration_every::Union{Int, Nothing} = nothing
 
     """
         Whether a host gains immunity towards a gene if the host has seen all
@@ -388,8 +393,8 @@ function validate(p::Params)
     @assert p.gene_strain_count_period !== nothing
     @assert p.gene_strain_count_period > 0
 
-    @assert p.sample_duration !== nothing
-    @assert p.sample_duration >= 0
+    @assert p.sample_infection_duration_every !== nothing
+    @assert p.sample_infection_duration_every >= 0
 
     if p.verification_period !== nothing
         @assert p.verification_period > 0

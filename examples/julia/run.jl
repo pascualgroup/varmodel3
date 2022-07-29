@@ -38,7 +38,7 @@ const P = let
 
         verification_period = 360,
 
-        sample_duration = 1000,
+        sample_infection_duration_every = 1000,
 
         rng_seed = nothing,
         use_immunity_by_allele = false,
