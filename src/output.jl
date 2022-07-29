@@ -242,9 +242,6 @@ function write_output!(db, t, s, stats)
         execute(db, "BEGIN TRANSACTION")
 
         if t % P.summary_period == 0
-            if P.migrants_match_local_prevalence
-                recompute_infected_ratio!(s, stats)
-            end
             write_summary(db, t, s, stats)
             write_duration!(db, t, s)
         end

@@ -75,6 +75,16 @@ function run()
                 recompute_rejection_upper_bounds!(s)
             end
 
+            if P.migrants_match_local_prevalence
+                if t_next_integer % P.migration_rate_update_period == 0
+                    recompute_infected_ratio!(s)
+                end
+            end
+
+            if t_next_integer % P.upper_bound_recomputation_period == 0
+                recompute_rejection_upper_bounds!(s)
+            end
+
             t_next_integer += 1
         end
 
@@ -118,8 +128,14 @@ function recompute_rejection_upper_bounds!(s)
     s.n_liver_infections_per_host_max = maximum(length(host.liver_infections) for host in s.hosts)
 end
 
-function recompute_infected_ratio!(s, stats)
-    s.infected_ratio = stats.n_transmitting_bites / stats.n_bites
+function recompute_infected_ratio!(s)
+    s.infected_ratio = if s.n_bites_for_migration_rate == 0
+        1.0
+    else
+        s.n_transmitting_bites_for_migration_rate / s.n_bites_for_migration_rate
+    end
+    s.n_transmitting_bites_for_migration_rate = 0
+    s.n_bites_for_migration_rate = 0
 end
 
 
@@ -245,6 +261,8 @@ function initialize_state()
         n_liver_infections_per_host_max = 0,
         n_cleared_infections = 0,
         durations = [],
+        n_transmitting_bites_for_migration_rate = 0,
+        n_bites_for_migration_rate = 0,
         infected_ratio = 1.0,
         initial_snp_allele_frequencies = snp_all_freq
     )
@@ -341,6 +359,7 @@ end
 function do_biting!(t, s, stats)
 
     stats.n_bites += 1
+    s.n_bites_for_migration_rate += 1
 
     # Uniformly randomly sample infecting host (source) and host being infected
     # (destination).
@@ -474,6 +493,7 @@ function do_biting!(t, s, stats)
 
     if transmitted
         stats.n_transmitting_bites += 1
+        s.n_transmitting_bites_for_migration_rate += 1
         true
     else
         false

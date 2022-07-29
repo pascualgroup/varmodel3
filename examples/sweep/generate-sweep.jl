@@ -312,6 +312,7 @@ function init_base_params()
         biting_rate = 0.0005 * daily_biting_rate_multiplier,
 
         migrants_match_local_prevalence = true,
+        migration_rate_update_period = 30,
 
         n_snps_per_strain = 24,
 

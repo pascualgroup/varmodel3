@@ -290,8 +290,18 @@ management auxiliaries.
     durations::Array{infectionDuration}
 
     """
+    Number of transmitting bites, in current period, for migration rate update.
+    """
+    n_transmitting_bites_for_migration_rate
+
+    """
+    Number of bites total, in this period, for migration rate update.
+    """
+    n_bites_for_migration_rate
+
+    """
     Ratio between the number of infected bites and the number of total bites
-    during the sampling period.
+    during the sampling period, used as multiplier on migration rate.
     """
     infected_ratio::Float64
 
