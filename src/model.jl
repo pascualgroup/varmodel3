@@ -637,7 +637,7 @@ function do_switching!(t, s, stats)
     if infection.expression_index == P.n_genes_per_strain && infection.expression_index_locus == P.n_loci
         if s.n_cleared_infections % P.sample_infection_duration_every == 0
             # Calculate and write the infection duration.
-            add_infectionDuration!(t, s, host, inf_index)
+            add_infection_duration!(t, s, host, inf_index)
         end
         s.n_cleared_infections += 1
         host.n_cleared_infections += 1
@@ -691,7 +691,7 @@ function advance_immuned_genes!(t, s, host, i)
         if infection.expression_index == P.n_genes_per_strain && infection.expression_index_locus == P.n_loci
             if s.n_cleared_infections % P.sample_infection_duration_every == 0
                 # Calculate and write the infection duration.
-                add_infectionDuration!(t, s, host, i)
+                add_infection_duration!(t, s, host, i)
             end
             s.n_cleared_infections += 1
             host.n_cleared_infections += 1
@@ -1108,9 +1108,9 @@ function is_immune(ih::ImmuneHistoryByAllele, gene, loc)
 end
 
 # Push the current infection's duration calculations into durations vector.
-function add_infectionDuration!(t, s, host, i)
+function add_infection_duration!(t, s, host, i)
     get_duration!(host.active_infections, i, t)
-    newInfDur = infectionDuration(
+    newInfDur = InfectionDuration(
         id=host.active_infections[i].id,
         host_id=host.id,
         n_cleared_infections=host.n_cleared_infections,

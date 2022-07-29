@@ -56,7 +56,7 @@ Struct storing the information of a sampled duration, with its host's
  and get sampled at the probability of  1/`sample_duration`
 """
 
-@with_kw mutable struct infectionDuration
+@with_kw mutable struct InfectionDuration
     id::InfectionId
     host_id::HostId
     n_cleared_infections::UInt32
@@ -287,7 +287,7 @@ management auxiliaries.
     n_cleared_infections::Int
 
     ""
-    durations::Array{infectionDuration}
+    durations::Array{InfectionDuration}
 
     """
     Number of transmitting bites, in current period, for migration rate update.
