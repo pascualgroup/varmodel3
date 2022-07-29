@@ -319,6 +319,11 @@ keyword constructor for the class.
     migrants_match_local_prevalence::Union{Bool, Nothing} = nothing
 
     """
+        How often to update migration rate based on local prevalence.
+    """
+    migration_rate_update_period::Union{Int, Nothing} = nothing
+
+    """
         Number of biallelic neutral single nucleotide polymorphims (SNPs) in strain.
         These SNPs do not contribute to the infection or host immune memory.
         They are used to keep track of the neutral part of each parasite genome.
