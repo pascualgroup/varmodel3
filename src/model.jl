@@ -130,7 +130,7 @@ end
 
 function recompute_infected_ratio!(s)
     s.infected_ratio = if s.n_bites_for_migration_rate == 0
-        1.0
+        0.0
     else
         s.n_transmitting_bites_for_migration_rate / s.n_bites_for_migration_rate
     end
