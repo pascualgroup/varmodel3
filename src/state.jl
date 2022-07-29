@@ -309,6 +309,13 @@ Verify that various pieces of state are consistent with each other.
 function verify(t, s::State)
     println("verify($(t), s)")
 
+    # Verify that gene pool consists of all unique genes
+    gene_pool_set = Set()
+    for i in 1:size(s.gene_pool)[2]
+        push!(gene_pool_set, s.gene_pool[:,i])
+    end
+    @assert length(gene_pool_set) == size(s.gene_pool)[2]
+
     for host in s.hosts
         if P.n_infections_liver_max !== missing
             @assert length(host.liver_infections) <= P.n_infections_liver_max
