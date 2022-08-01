@@ -5,6 +5,7 @@ This is a collection of scripts to analyze the sqlite output. Below are notes ab
 ## Contents
 
 * [Calculate MOIvar](#Calculate-MOIvar)
+* [Calculate PTS](#Calculate-PTS)
 * [Calculate running times](#Calculate-running-times)
 * [Calculate prevalence](#Calculate-prevalence)
 * [Calculate SNP call proportions](#Calculate-SNP-call-proportions)
@@ -26,6 +27,20 @@ For each host, this script also exports from the simulations the number of uniqu
 | `measurement`  | Path to the the measurement model (optional) |
 #### Notes
 The MOI calculations only take into account the active infection(s). The input file name should not contain a `.` except before the extension (e.g., `input_file_name.sqlite`). Expected warning message: `CalculMOIvar.py:48: SettingWithCopyWarning: A value is trying to be set on a copy of a slice from a DataFrame`. To run it, ensure that you are using Python v.3.7, and have installed the following dependencies: [os](https://docs.python.org/3/library/os.html), [sqlite3](https://docs.python.org/3/library/sqlite3.html), [pandas](https://pandas.pydata.org/), [random](https://docs.python.org/3/library/random.html), [numpy](https://numpy.org/), and [argparse](https://docs.python.org/3/library/argparse.html).
+
+## Calculate PTS
+This script calculates the pairwise type sharing (PTS) between var repertoires. *PTSij = 2nij / (ni + nj)*, where *ni* and *nj* are the number of unique *var* genes within each repertoire *i* and *j*, and *nij* is the total number of *var* genes shared between repertoires *i* and *j* [(Barry *et al.* 2007)](https://journals.plos.org/plospathogens/article?id=10.1371/journal.ppat.0030034). It uses the `sampled_infections`, and `sampled_infection_genes` tables from the varmodel3 output database (in [SQLite3 format](https://www.sqlite.org/fileformat.html)).
+#### Example command
+`python CalculPTS.py --inputfile '/path/to/file.txt' --time 300`
+
+`python CalculPTS.py -h` Will print a full list of command arguments.
+#### Command arguments
+| Name | Description |
+| :--: | :---------: | 
+| `inputfile` | Path to the input file (required) |
+| `time`  | Time to make the calculations (required) |
+#### Notes
+The input file name should not contain a `.` except before the extension (e.g., `input_file_name.sqlite`). The calculations only take into account the active infection. Expected warning message: `CalculPTS.py:41: SettingWithCopyWarning: A value is trying to be set on a copy of a slice from a DataFrame.`. To run it, ensure that you are using Python v.3.7, and have installed the following dependencies: [os](https://docs.python.org/3/library/os.html), [sqlite3](https://docs.python.org/3/library/sqlite3.html), [pandas](https://pandas.pydata.org/), and [argparse](https://docs.python.org/3/library/argparse.html).
 
 ## Calculate running times
 This script calculates and summarizes the running times per runs and per replicates. It uses the `summary` and `meta` tables from the varmodel3 output database(s) (in [SQLite3 format](https://www.sqlite.org/fileformat.html)). The results will be stored into two output files: one for the running time per run and another one for the running times per replicate.
