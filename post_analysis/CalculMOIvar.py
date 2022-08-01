@@ -28,7 +28,7 @@ def CalculMOIvar(inputfile, time, measurement):
         os.chdir(os.path.dirname(os.path.abspath(inputfile)))
         
         # Extract and reformat information from the output database:
-        con = sqlite3.connect('output.sqlite')
+        con = sqlite3.connect(inputfile)
         df1 = pd.read_sql_query('SELECT time, host_id, infection_id, strain_id, expression_index FROM sampled_infections', con)
         df1.columns = ['time', 'host_id', 'infection_id', 'strain_id', 'expression_index_infection']
         df1 = df1.dropna()
