@@ -41,10 +41,8 @@ const P = let
         sample_infection_duration_every = 1000,
 
         rng_seed = nothing,
-        use_immunity_by_allele = false,
 
-#         use_immunity_by_allele = true,
-#         whole_gene_immune = false,
+        whole_gene_immune = false,
 
         t_year = t_year,
         t_end = (111) * t_year,

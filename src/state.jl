@@ -27,20 +27,10 @@ const ImmunityLevel = UInt16 # UInt8
 const Gene = SVector{P.n_loci, AlleleId}  # Immutable fixed-size vector
 const MGene = MVector{P.n_loci, AlleleId} # Mutable fixed-size vector
 
-abstract type ImmuneHistory end
-
-struct ImmuneHistoryByGene <: ImmuneHistory
-    d::Dict{Gene, ImmunityLevel}
-
-    function ImmuneHistoryByGene()
-        new(Dict{Gene, ImmunityLevel}())
-    end
-end
-
-struct ImmuneHistoryByAllele <: ImmuneHistory
+struct ImmuneHistory
     vd::Vector{Dict{AlleleId, ImmunityLevel}}
 
-    function ImmuneHistoryByAllele()
+    function ImmuneHistory()
         vd = Vector{Dict{AlleleId, ImmunityLevel}}()
         for locus in 1:P.n_loci
             push!(vd, Dict{AlleleId, ImmunityLevel}())
@@ -162,12 +152,12 @@ Infection arrays are dynamically sized but currently limited to
     """
     Immune history.
 
-    A dictionary (hash table) mapping genes to immunity level, which are
-    stored as 8-bit unsigned integers for memory efficiency and saturate at
-    `immunity_level_max`. Expression of a gene results in an incremented
-    immunity level; immunity loss results in a decremented immunity level.
+    A struct consisting of a single vector of dictionaries, where each
+    dictionary stores the immunity level to different alleles for a single
+    locus. Expression of a gene results in incremented immunity level to all
+    alleles in that gene; immunity loss results in decremented immunity levels.
 
-    When the level reaches 0, the gene is removed from the dictionary.
+    When the level reaches 0, the allele is removed from the dictionary.
     """
     immunity::ImmuneHistory
 end

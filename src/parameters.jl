@@ -79,19 +79,6 @@ keyword constructor for the class.
     verification_period::Union{Int, Nothing} = nothing
 
     """
-    Immunity model.
-
-    If `use_immunity_by_allele == false`, hosts acquire immune memory to var genes
-    as a whole. To be immune to a gene, they need to have seen precisely that
-    gene (sequence of alleles) in the past.
-
-    If `use_immunity_by_allele == true`, hosts acquire immunity to individual
-    alleles at each locus. To be immune to a gene, they need to have seen every
-    allele at each locus in the past, but not necessarily in the same gene.
-    """
-    use_immunity_by_allele::Union{Bool, Nothing} = nothing
-
-    """
     Number of time units in a year.
 
     Currently used only to constrain size of `biting_rate_multiplier`.
@@ -400,8 +387,6 @@ function validate(p::Params)
         @assert p.verification_period > 0
     end
 
-    @assert p.use_immunity_by_allele !== nothing
-
     @assert p.t_year !== nothing
     @assert p.t_year > 0
 
@@ -486,9 +471,7 @@ function validate(p::Params)
         @assert p.n_infections_active_max >= 0
     end
 
-    if p.use_immunity_by_allele
-        @assert p.whole_gene_immune !== nothing
-    end
+    @assert p.whole_gene_immune !== nothing
 
     @assert p.migrants_match_local_prevalence !== nothing
     if p.migrants_match_local_prevalence
