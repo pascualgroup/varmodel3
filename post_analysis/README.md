@@ -9,6 +9,7 @@ This is a collection of scripts to analyze the sqlite output. Below are notes ab
 * [Calculate running times](#Calculate-running-times)
 * [Calculate prevalence](#Calculate-prevalence)
 * [Calculate SNP call proportions](#Calculate-SNP-call-proportions)
+* [Compare diversity metrics](#Compare-diversity-metrics)
 
 ## Calculate MOIvar
 This script calculates the multiplicity of infection (MOI) per hosts using the *var*coding approach. The *var*coding approach (also termed *var* genotyping or *var* fingerprinting), employs the highly polymorphic sequences encoding the immunogenic DBLα domain of PfEMP1 (*Plasmodium falciparum* erythrocyte membrane protein 1), the major surface antigen of the blood stage of infection ([Rask *et al.* 2010](https://journals.plos.org/ploscompbiol/article?id=10.1371/journal.pcbi.1000933)). The multigene family known as *var* encodes variants of this surface antigen which can reach tens of thousands of variants in endemic populations ([Tonkin-Hill *et al.* 2021](https://journals.plos.org/plosgenetics/article?id=10.1371/journal.pgen.1009269)). The extensive diversity of the *var* gene family together with the very low percentage of *var* genes shared between parasites facilitate measuring MOI by amplifying, pooling, sequencing, and counting the number of DBLα types in a host.
@@ -87,3 +88,18 @@ This script calculates the proportions of single nucleotide polymorphism (SNP) c
 | `inputfile` | Path to the input file (required) |
 #### Notes
 The input file name should not contain a `.` except before the extension (e.g., `input_file_name.txt`). To run it, ensure that you are using Python v.3.7, and have installed the following dependencies: [os](https://docs.python.org/3/library/os.html) and [argparse](https://docs.python.org/3/library/argparse.html).
+
+## Compare diversity metrics
+This script compares the varmodel3 output databases (in [SQLite3 format](https://www.sqlite.org/fileformat.html)) located in two distinct directories. It could be used to evaluate new versions of the model, e.g., outputs before vs. after a new implementation. Four major diversity metrics are compared: the average prevalence, pairwise type sharing (PTS), and number of strains and genes per replicate. For each diversity metric, the script plots its distributions and perform a [two-sample Kolmogorov-Smirnov test](https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats.kstest.html). It uses the `sampled_hosts`, `gene_strain_counts`, `sampled_infections`, and `sampled_infection_genes` tables from the output database. 
+#### Example command
+`python DivMetComp.py --directory1 '/path/to/directory1' --directory2 '/path/to/directory2' --replicates 10`
+
+`python DivMetComp.py -h` Will print a full list of command arguments.
+#### Command arguments
+| Name | Description |
+| :--: | :---------: | 
+| `directory1` | Path to the directory containing the 1st set of varmodel3 output files (required) |
+| `directory2` | Path to the directory containing the 2nd set of varmodel3 output files (required) |
+| `replicates`  | Number of replicates per run (required) |
+#### Notes
+A minimum of 2 replicates is required, but we recommend using at least 10 replicates. To run it, ensure that you are using Python v.3.7, and have installed the following dependencies: [os](https://docs.python.org/3/library/os.html), [sqlite3](https://docs.python.org/3/library/sqlite3.html), [pandas](https://pandas.pydata.org/), [numpy](https://numpy.org/), [scipy](https://scipy.org/), [matplotlib](https://matplotlib.org/), and [argparse](https://docs.python.org/3/library/argparse.html).
