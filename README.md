@@ -80,6 +80,7 @@ The parameter names should match the variables defined in `src/parameters.jl`, a
 | `mean_host_lifetime` | `Float32` | Mean of exponential distribution used to draw host lifetime |
 | `mean_n_mutations_per_epitope` | `Float64` | Mean number of mutations per epitope for similarity calculation |
 | `migrants_match_local_prevalence` | `Bool` | Whether the immigration rate needs to time the local infection rate |
+| `migration_rate_update_period` | `Int` | How often to update migration rate based on local prevalence |
 | `mutation_rate` | `Float64` | Rate of mutation, per active infection |
 | `n_alleles_per_locus_initial` | `Int` | Initial number of alleles for each epitope locus |
 | `n_genes_initial` | `Int` | Number of genes in the initial gene pool |
