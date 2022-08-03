@@ -27,7 +27,7 @@ For each host, this script also exports from the simulations the number of uniqu
 | `time`  | Time to make the calculations (required) |
 | `measurement`  | Path to the the measurement model (optional) |
 #### Notes
-The MOI calculations only take into account the active infection(s). The input file name should not contain a `.` except before the extension (e.g., `input_file_name.sqlite`). Expected warning message: `CalculMOIvar.py:48: SettingWithCopyWarning: A value is trying to be set on a copy of a slice from a DataFrame`. To run it, ensure that you are using Python v.3.7, and have installed the following dependencies: [os](https://docs.python.org/3/library/os.html), [sqlite3](https://docs.python.org/3/library/sqlite3.html), [pandas](https://pandas.pydata.org/), [random](https://docs.python.org/3/library/random.html), [numpy](https://numpy.org/), and [argparse](https://docs.python.org/3/library/argparse.html).
+The MOI calculations only take into account the active infection(s). The input file name should not contain a `.` except before the extension (*e.g.,* `input_file_name.sqlite`). Expected warning message: `CalculMOIvar.py:48: SettingWithCopyWarning: A value is trying to be set on a copy of a slice from a DataFrame`. To run it, ensure that you are using Python v.3.7, and have installed the following dependencies: [os](https://docs.python.org/3/library/os.html), [sqlite3](https://docs.python.org/3/library/sqlite3.html), [pandas](https://pandas.pydata.org/), [random](https://docs.python.org/3/library/random.html), [numpy](https://numpy.org/), and [argparse](https://docs.python.org/3/library/argparse.html).
 
 ## Calculate PTS
 This script calculates the pairwise type sharing (PTS) between var repertoires. *PTSij = 2nij / (ni + nj)*, where *ni* and *nj* are the number of unique *var* genes within each repertoire *i* and *j*, and *nij* is the total number of *var* genes shared between repertoires *i* and *j* [(Barry *et al.* 2007)](https://journals.plos.org/plospathogens/article?id=10.1371/journal.ppat.0030034). It uses the `sampled_infections`, and `sampled_infection_genes` tables from the varmodel3 output database (in [SQLite3 format](https://www.sqlite.org/fileformat.html)).
@@ -41,7 +41,7 @@ This script calculates the pairwise type sharing (PTS) between var repertoires. 
 | `inputfile` | Path to the input file (required) |
 | `time`  | Time to make the calculations (required) |
 #### Notes
-The input file name should not contain a `.` except before the extension (e.g., `input_file_name.sqlite`). The calculations only take into account the active infection. Expected warning message: `CalculPTS.py:41: SettingWithCopyWarning: A value is trying to be set on a copy of a slice from a DataFrame.`. To run it, ensure that you are using Python v.3.7, and have installed the following dependencies: [os](https://docs.python.org/3/library/os.html), [sqlite3](https://docs.python.org/3/library/sqlite3.html), [pandas](https://pandas.pydata.org/), and [argparse](https://docs.python.org/3/library/argparse.html).
+The input file name should not contain a `.` except before the extension (*e.g.,* `input_file_name.sqlite`). The calculations only take into account the active infection. Expected warning message: `CalculPTS.py:41: SettingWithCopyWarning: A value is trying to be set on a copy of a slice from a DataFrame.`. To run it, ensure that you are using Python v.3.7, and have installed the following dependencies: [os](https://docs.python.org/3/library/os.html), [sqlite3](https://docs.python.org/3/library/sqlite3.html), [pandas](https://pandas.pydata.org/), and [argparse](https://docs.python.org/3/library/argparse.html).
 
 ## Calculate running times
 This script calculates and summarizes the running times per runs and per replicates. It uses the `summary` and `meta` tables from the varmodel3 output database(s) (in [SQLite3 format](https://www.sqlite.org/fileformat.html)). The results will be stored into two output files: one for the running time per run and another one for the running times per replicate.
@@ -60,7 +60,7 @@ The input file(s) should be in a directory with the following structure: `direct
 
 ## Calculate prevalence
 The script `CalculPreval.py` calculates the prevalence, the number of participants, and the number of hosts at a specific time.
-It uses the "sampled_host" table from the varmodel3 output database (in [SQLite3 format](https://www.sqlite.org/fileformat.html) format).
+It uses the "sampled_host" table from the varmodel3 output database (in [SQLite3 format](https://www.sqlite.org/fileformat.html)).
 #### Example command
 `python CalculPreval.py --inputfile '/path/to/file.txt' --time 300`
 
@@ -72,7 +72,7 @@ It uses the "sampled_host" table from the varmodel3 output database (in [SQLite3
 | `time`  | Time to make the calculations (days) (required) |
 
 #### Notes
-The input file name should not contain a `.` except before the extension (e.g., `input_file_name.sqlite`).
+The input file name should not contain a `.` except before the extension (*e.g.,* `input_file_name.sqlite`).
 The number of hosts and prevalence calculations only take into account the hosts with at least one active infection.
 To run it, ensure that you are using Python v.3.7, and have installed the following dependencies: [os](https://docs.python.org/3/library/os.html), [sqlite3](https://docs.python.org/3/library/sqlite3.html), [pandas](https://pandas.pydata.org/), and [argparse](https://docs.python.org/3/library/argparse.html).
 
@@ -87,10 +87,10 @@ This script calculates the proportions of single nucleotide polymorphism (SNP) c
 | :--: | :---------: | 
 | `inputfile` | Path to the input file (required) |
 #### Notes
-The input file name should not contain a `.` except before the extension (e.g., `input_file_name.txt`). To run it, ensure that you are using Python v.3.7, and have installed the following dependencies: [os](https://docs.python.org/3/library/os.html) and [argparse](https://docs.python.org/3/library/argparse.html).
+The input file name should not contain a `.` except before the extension (*e.g.,* `input_file_name.txt`). To run it, ensure that you are using Python v.3.7, and have installed the following dependencies: [os](https://docs.python.org/3/library/os.html) and [argparse](https://docs.python.org/3/library/argparse.html).
 
 ## Compare diversity metrics
-This script compares the varmodel3 output databases (in [SQLite3 format](https://www.sqlite.org/fileformat.html)) located in two distinct directories. It could be used to evaluate new versions of the model, e.g., outputs before vs. after a new implementation. Four major diversity metrics are compared: the average prevalence, pairwise type sharing (PTS), and number of strains and genes per replicate. For each diversity metric, the script plots its distributions and perform a [two-sample Kolmogorov-Smirnov test](https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats.kstest.html). It uses the `sampled_hosts`, `gene_strain_counts`, `sampled_infections`, and `sampled_infection_genes` tables from the output database. 
+This script compares the varmodel3 output databases (in [SQLite3 format](https://www.sqlite.org/fileformat.html)) located in two distinct directories. It could be used to evaluate new versions of the model, *e.g.,* outputs before vs. after a new implementation. Four major diversity metrics are compared: the average prevalence, pairwise type sharing (PTS), and number of strains and genes per replicate. For each diversity metric, the script plots its distributions and perform a [two-sample Kolmogorov-Smirnov test](https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats.kstest.html). It uses the `sampled_hosts`, `gene_strain_counts`, `sampled_infections`, and `sampled_infection_genes` tables from the output database. 
 #### Example command
 `python DivMetComp.py --directory1 '/path/to/directory1' --directory2 '/path/to/directory2' --replicates 10`
 
