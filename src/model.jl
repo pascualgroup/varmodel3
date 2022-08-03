@@ -123,7 +123,7 @@ function run()
 end
 
 function recompute_rejection_upper_bounds!(s)
-    s.n_immunities_per_host_max = maximum(immuneLength(host.immunity) for host in s.hosts)
+    s.n_immunities_per_host_max = maximum(immunity_count(host.immunity) for host in s.hosts)
     s.n_active_infections_per_host_max = maximum(length(host.active_infections) for host in s.hosts)
     s.n_liver_infections_per_host_max = maximum(length(host.liver_infections) for host in s.hosts)
 end
@@ -948,7 +948,7 @@ function do_immunity_loss!(t, s, stats)
     advance_host!(t, s, host)
 
     # If the immunity index is beyond this host's immunity count, reject this sample.
-    if immunity_index >  immuneLength(host.immunity)
+    if immunity_index >  immunity_count(host.immunity)
         return false
     end
 
@@ -1001,10 +1001,14 @@ function empty!(ih::ImmuneHistory)
     end
 end
 
+function immunity_count(ih::ImmuneHistory)
+    sum(length(ih.vd[locus]) for locus in 1:length(ih.vd))
+end
+
 
 function increment_immunity!(s, host, gene)
     increment_immunity!(host.immunity, gene)
-    s.n_immunities_per_host_max = max(s.n_immunities_per_host_max, immuneLength(host.immunity))
+    s.n_immunities_per_host_max = max(s.n_immunities_per_host_max, immunity_count(host.immunity))
 end
 
 function increment_immunity!(ih::ImmuneHistory, gene)
@@ -1015,10 +1019,6 @@ function increment_immunity!(ih::ImmuneHistory, gene)
             ih.vd[locus][allele_id] = old_level + 1
         end
     end
-end
-
-function immuneLength(ih::ImmuneHistory)
-    sum(length(ih.vd[locus]) for locus in 1:length(ih.vd))
 end
 
 function decrement_immunity_at_sampled_index!(ih::ImmuneHistory, index)
@@ -1068,7 +1068,7 @@ function add_infection_duration!(t, s, host, i)
         id=host.active_infections[i].id,
         host_id=host.id,
         n_cleared_infections=host.n_cleared_infections,
-        n_immuned_alleles=immuneLength(host.immunity),
+        n_immuned_alleles=immunity_count(host.immunity),
         t_infection = host.active_infections[i].t_infection,
         t_expression = host.active_infections[i].t_expression,
         duration = host.active_infections[i].duration
