@@ -519,7 +519,7 @@ function advance_host!(t, s, host)
                     push!(host.active_infections, infection)
                     infection.t_expression = t
 
-                    advance_immuned_genes!(t,s,host,length(host.active_infections))
+                    advance_immune_genes!(t,s,host,length(host.active_infections))
 
                     if length(host.active_infections) > s.n_active_infections_per_host_max
                         s.n_active_infections_per_host_max = length(host.active_infections)
@@ -658,7 +658,7 @@ function do_switching!(t, s, stats)
     """
     i = 1
     while i <= length(host.active_infections)
-        if advance_immuned_genes!(t,s,host,i)
+        if advance_immune_genes!(t,s,host,i)
             # If there is no end of expression and reordering of infections, then index plus 1.
             i += 1
         end
@@ -668,7 +668,7 @@ function do_switching!(t, s, stats)
 end
 
 # This function moves the expression index of an infection to its first non-immune allele/gene.
-function advance_immuned_genes!(t, s, host, i)
+function advance_immune_genes!(t, s, host, i)
 
     # Advance expression until a non-immune gene or allele is reached.
     infection = host.active_infections[i]
@@ -1068,7 +1068,7 @@ function add_infection_duration!(t, s, host, i)
         id=host.active_infections[i].id,
         host_id=host.id,
         n_cleared_infections=host.n_cleared_infections,
-        n_immuned_alleles=immunity_count(host.immunity),
+        n_immune_alleles=immunity_count(host.immunity),
         t_infection = host.active_infections[i].t_infection,
         t_expression = host.active_infections[i].t_expression,
         duration = host.active_infections[i].duration

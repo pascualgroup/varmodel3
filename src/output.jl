@@ -154,7 +154,7 @@ function initialize_database()
         CREATE TABLE sampled_durations (
             host_id INTEGER,
             n_cleared_infections INTEGER,
-            n_immuned_alleles INTEGER,
+            n_immune_alleles INTEGER,
             infection_time REAL,
             expression_time REAL,
             infection_duration REAL
@@ -373,7 +373,7 @@ function write_duration!(db, t, s)
             db.sampled_durations,
             (
                 Int64(dur.host_id), Int64(dur.n_cleared_infections),
-                Int64(dur.n_immuned_alleles),
+                Int64(dur.n_immune_alleles),
                 dur.t_infection, dur.t_expression, dur.duration
             )
         )
