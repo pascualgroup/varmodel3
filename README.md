@@ -94,7 +94,7 @@ The parameter names should match the variables defined in `src/parameters.jl`, a
 | `p_ectopic_recombination_is_conversion` | `Float64` | Probability that an ectopic recombination is a conversion |
 | `rho_recombination_tolerance` | `Float64` | Recombination tolerance, rho, Drummond et al |
 | `rng_seed` | `Int` | Seed for random number generator |
-| `sample_duration` | `Int` | Sample an infection duration every `sample_duration` infection(s) |
+| `sample_infection_duration_every` | `Int` | Sample an infection duration every `sample_infection_duration_every` clearances |
 | `snp_linkage_disequilibrium` | `Bool` | Whether the SNPs (or some SNPs) are in linkage disequilibrium (LD) |
 | `snp_pairwise_ld` | `Array{Float32, 2}` | Pairwise linkage disequilibrium (LD) matrix |
 | `summary_period` | `Int` | How often to write summary output |
@@ -105,7 +105,6 @@ The parameter names should match the variables defined in `src/parameters.jl`, a
 | `t_end` | `Int` | Simulation end time |
 | `t_year` | `Int` | Number of time units in a year |
 | `upper_bound_recomputation_period` | `Int` | How often to recompute upper bounds for rejection sampling |
-| `use_immunity_by_allele` | `Bool` | Immunity model |
 | `verification_period` | `Int` | How often to verify consistency of simulation state |
 | `whole_gene_immune` | `Bool` | Whether a host gains immunity towards a gene if the host has seen all the alleles |
 
