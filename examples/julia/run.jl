@@ -23,7 +23,6 @@ include("../../preamble.jl")
 const P = let
     t_year = 360
     daily_biting_rate_multiplier = readdlm("../mosquito_population.txt", Float64)[:,1]
-    #snp_ld_matrix = readdlm("../pairwise_ld_coefficient_24snps.txt", Float64)
 
     Params(
         upper_bound_recomputation_period = 30,
@@ -31,21 +30,19 @@ const P = let
         output_db_filename = "output.sqlite",
 
         summary_period = 30,
-        gene_strain_count_period = 360,
+        gene_strain_count_period = 30,
 
         host_sampling_period = 30,
         host_sample_size = 100,
 
         verification_period = 360,
-
+        
         sample_duration = 1000,
 
         rng_seed = nothing,
-        use_immunity_by_allele = false,
-
-#         use_immunity_by_allele = true,
-#         whole_gene_immune = false,
-
+        use_immunity_by_allele = true,
+        whole_gene_immune = false,
+        
         t_year = t_year,
         t_end = (111) * t_year,
 
@@ -89,22 +86,33 @@ const P = let
 
         immigration_rate_fraction = 0.0026,
 
-        n_infections_liver_max = 10,
-        n_infections_active_max = 10,
+        n_infections_liver_max = 20,
+        n_infections_active_max = 20,
 
         biting_rate = 0.0005 * daily_biting_rate_multiplier,
-
+	
         migrants_match_local_prevalence = true,
-        
+
         n_snps_per_strain = 24,
-        
+
         distinct_initial_snp_allele_frequencies = false,
-#         distinct_initial_snp_allele_frequencies = true,
-#         initial_snp_allele_frequency = [0.1, 0.9],
+#       initial_snp_allele_frequency = [0.1, 0.9],
 
         snp_linkage_disequilibrium = false,
-#         snp_linkage_disequilibrium = true,
-#         snp_pairwise_ld = snp_ld_matrix,
+#       snp_linkage_disequilibrium = true,
+#       snp_pairwise_ld = snp_ld_matrix,
+
+		detectability = 0.9,
+		generalized_immunity = true,
+		generalized_immunity_loss_rate = 0.001,
+		generalized_immunity_detectability = 0.5,
+		generalized_immunity_transmissibility = 0.5,
+		###
+		#generalized_immunity_pathogenicity = 0.75,
+		#pathogenicity = 0.9,
+		drug_treatment = false,
+		#resistant_snp = false,
+		#resistant_cost = 0.9,
     )
 end
 
