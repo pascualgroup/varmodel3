@@ -41,7 +41,7 @@ This script calculates the pairwise type sharing (PTS) between var repertoires. 
 | `inputfile` | Path to the input file (required) |
 | `time`  | Time to make the calculations (required) |
 #### Notes
-The input file name should not contain a `.` except before the extension (*e.g.,* `input_file_name.sqlite`). The calculations only take into account the active infection. Expected warning message: `CalculPTS.py:41: SettingWithCopyWarning: A value is trying to be set on a copy of a slice from a DataFrame.`. To run it, ensure that you are using Python v.3.7, and have installed the following dependencies: [os](https://docs.python.org/3/library/os.html), [sqlite3](https://docs.python.org/3/library/sqlite3.html), [pandas](https://pandas.pydata.org/), and [argparse](https://docs.python.org/3/library/argparse.html).
+The input file name should not contain a `.` except before the extension (*e.g.,* `input_file_name.sqlite`). The calculations only take into account the active infection. To run it, ensure that you are using Python v.3.7, and have installed the following dependencies: [os](https://docs.python.org/3/library/os.html), [sqlite3](https://docs.python.org/3/library/sqlite3.html), [pandas](https://pandas.pydata.org/), and [argparse](https://docs.python.org/3/library/argparse.html).
 
 ## Calculate running times
 This script calculates and summarizes the running times per runs and per replicates. It uses the `summary` and `meta` tables from the varmodel3 output database(s) (in [SQLite3 format](https://www.sqlite.org/fileformat.html)). The results will be stored into two output files: one for the running time per run and another one for the running times per replicate.
