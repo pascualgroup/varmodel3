@@ -454,13 +454,9 @@ function do_biting!(t, s, stats)
                         # one source infection.
                         if size(linked_snps)[1] > 1
                             unlinked_snps = setdiff(unlinked_snps, linked_snps)
-                            parent = rand(["src_inf_1", "src_inf_2"])
+                            parent_inf = rand((src_inf_1, src_inf_2))
                             for linked_snp in linked_snps
-                                if parent == "src_inf_1"
-                                    dst_inf.snps[linked_snp] = src_inf_1.snps[linked_snp]
-                                elseif parent == "src_inf_2"
-                                    dst_inf.snps[linked_snp] = src_inf_2.snps[linked_snp]
-                                end
+                                dst_inf.snps[linked_snp] = parent_inf.snps[linked_snp]
                             end
                         end
                         i += 1
