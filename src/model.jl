@@ -984,14 +984,13 @@ end
 """
 function find_linked_snps(i)
     linked_snps = [i]
-    j = i + 1
-    while j <= P.n_snps_per_strain
-        append!(linked_snps, sample([j, i], Weights([P.snp_pairwise_ld[j, i], 1 - P.snp_pairwise_ld[j, i]])))
-        j += 1
+    for j = (i+1):P.n_snps_per_strain
+        if rand() < P.snp_pairwise_ld[j, i]
+            append!(linked_snps, j)
+        end
     end
-    unique!(linked_snps)
+    linked_snps
 end
-
 
 ### IMMUNITY FUNCTIONS ###
 
