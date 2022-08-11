@@ -16,6 +16,7 @@ import os.path
 import sqlite3
 import pandas as pd
 import argparse
+pd.options.mode.chained_assignment = None
 parser = argparse.ArgumentParser()
 parser.add_argument('-i', "--inputfile", required = True, help = 'Path to the input file')
 parser.add_argument('-t', "--time", type = int, required = True, help = 'Time to make the calculations')
@@ -41,9 +42,9 @@ def CalculPTS(inputfile, time):
             df_time["gene_id"] = df_time["allele_id_1"].astype(str) + '_' + df_time["allele_id_2"].astype(str)
 
             # Convert data between wide and long forms (matrix output; i.e. 0 or 1 for absent or present gene in that strain).
-            g = df_time.groupby('infection_id')['gene_id'].apply(list).reset_index()
+            g = df_time.groupby('strain_id')['gene_id'].apply(list).reset_index()
             genemat_time = g.join(pd.get_dummies(g['gene_id'].apply(pd.Series).stack()).sum(level = 0)).drop('gene_id', 1)
-            infection_id = genemat_time['infection_id']
+            strain_id = genemat_time['strain_id']
             genemat_time = genemat_time.iloc[: , 1:]
             genemat_time = genemat_time.to_numpy()
 
@@ -55,8 +56,8 @@ def CalculPTS(inputfile, time):
             # Export the results:
             outputfile = inputfile.split("/")[-1].split(".")[0] + "_PTS_" + str(time) + "days.csv"
             out = pd.DataFrame(networkSim_time)
-            out = out.rename(columns = infection_id)
-            out.index = infection_id
+            out = out.rename(columns = strain_id)
+            out.index = strain_id
             out.to_csv(outputfile, index = True, header = True)
         
         else:
