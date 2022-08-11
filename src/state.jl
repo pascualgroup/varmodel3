@@ -136,14 +136,19 @@ matrix of allele IDs), and the currently expressed index.
     snps::Array{SnpId, 1}
 
     """
-    Probability of detection.
+    Detectability, i.e. probability of detection.
     """
     p_detect::Float64
 
     """
-    Probability of generating symptoms.
+    Pathogenicity, i.e. probability of generating symptoms.
     """
     p_symptoms::Float64
+
+    """
+    Transmmissibility, i.e. probability of transmission.
+    """
+    p_transmit::Float64
     ###
 end
 
