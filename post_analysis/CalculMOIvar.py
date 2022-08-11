@@ -16,7 +16,8 @@ import sqlite3
 import pandas as pd
 import argparse
 import random
-import numpy
+import numpy as np
+pd.options.mode.chained_assignment = None
 parser = argparse.ArgumentParser()
 parser.add_argument('-i', "--inputfile", required = True, help = 'Path to the input file')
 parser.add_argument('-t', "--time", type = int, required = True, help = 'Time to make the calculations')
@@ -74,9 +75,9 @@ def CalculMOIvar(inputfile, time, measurement):
                     for strain in var['strain_id'].unique():
                         var_strain = df_time[df_time['strain_id'] == strain]
                         nb_var_strain = len(var_strain['gene_id'].unique())
-                        samp = int(random.choices(population = numpy.array(err.iloc[:, 0]), weights = numpy.array(err.iloc[:, 1]), k = 1)[0])
+                        samp = int(random.choices(population = np.array(err.iloc[:, 0]), weights = np.array(err.iloc[:, 1]), k = 1)[0])
                         while (samp > nb_var_strain):
-                             samp = int(random.choices(population = numpy.array(err.iloc[:, 0]), weights = numpy.array(err.iloc[:, 1]), k = 1)[0])
+                             samp = int(random.choices(population = np.array(err.iloc[:, 0]), weights = np.array(err.iloc[:, 1]), k = 1)[0])
                         var_samp = random.sample(list(var_strain.gene_id), samp)
                         subsamp.extend(var_samp)
                     nb_var_err = len(set(subsamp))
