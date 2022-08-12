@@ -3,7 +3,7 @@
 """
 Created on Mon Jul 18 15:10:13 2022
 @author: Frederic Labbe
-This script calculates the multiplicity of infection (MOI) per hosts using the varcoding approach.
+This script calculates the multiplicity of infection (MOI) per host using the varcoding approach.
 For each host, it also exports the number of unique var genes and the true MOI.
 It uses the "sampled_infections", "sample_hosts", and "sampled_infection_genes" tables from the varmodel3 output database (in SQLite3 format).
 Note: the input file name should not contains a "." except before the extension (e.g. "input_file_name.sqlite").
@@ -17,6 +17,7 @@ import pandas as pd
 import argparse
 import random
 import numpy as np
+import sys
 pd.options.mode.chained_assignment = None
 parser = argparse.ArgumentParser()
 parser.add_argument('-i', "--inputfile", required = True, help = 'Path to the input file')
@@ -53,7 +54,7 @@ def CalculMOIvar(inputfile, time, measurement):
                 if os.path.exists(measurement):
                     f.write("host_id\tMOI\tnb_var\tMOIvar\tnb_var_err\tMOIvar_err\n")
                 else:
-                    print('Error: provide a valid path to the measurement model') 
+                    sys.exit('Error: provide a valid path to the measurement model') 
             else:
                 f.write("host_id\tMOI\tnb_var\tMOIvar\n")
             for host in df_time['host_id'].unique():
@@ -93,9 +94,9 @@ def CalculMOIvar(inputfile, time, measurement):
                     f.write("{}\t{}\t{}\t{}\n".format(host, MOI, nb_var, MOIvar))
             f.close()
         else:
-             print('Error: provide a valid time')
+             sys.exit('Error: provide a valid time')
     else:
-       print('Error: provide a valid path to the input file')
+       sys.exit('Error: provide a valid path to the input file')
 
 if __name__ == '__main__':
      CalculMOIvar(args.inputfile, args.time, args.measurement)
