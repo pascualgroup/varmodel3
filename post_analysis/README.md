@@ -9,6 +9,7 @@ This is a collection of scripts to analyze the sqlite output. Below are notes ab
 * [Calculate running times](#Calculate-running-times)
 * [Calculate prevalence](#Calculate-prevalence)
 * [Calculate SNP call proportions](#Calculate-SNP-call-proportions)
+* [Calculate targets](#Calculate-targets)
 * [Compare diversity metrics](#Compare-diversity-metrics)
 
 ## Calculate MOIvar
@@ -88,6 +89,27 @@ This script calculates the proportions of single nucleotide polymorphism (SNP) c
 | `inputfile` | Path to the input file (required) |
 #### Notes
 The input file name should not contain a `.` except before the extension (*e.g.,* `input_file_name.txt`). To run it, ensure that you are using Python v.3.7, and have installed the following dependencies: [os](https://docs.python.org/3/library/os.html), [argparse](https://docs.python.org/3/library/argparse.html), and [sys](https://docs.python.org/3/library/sys.html).
+
+## Calculate targets
+This script calculates the targets for the model fitting. These targets correspond to five diversity metrics: the prevalence, multiplicty of infection (MOI), pairwise type sharing (PTS), and number of strains and genes. It uses the "sampled_host", "sampled_infections", and "sampled_infection_genes" tables from the varmodel3 output database (in [SQLite3 format](https://www.sqlite.org/fileformat.html)). To account for measurement error, calculations can be done with a measurement model using `--measurement`. If so, it is required to provide an additional file describing the distribution of the number of gene per monoclonal infection ([Labbe *et al.* 2022](https://www.biorxiv.org/content/10.1101/2022.06.27.497801v1)). The later should contains two columns: 1) the number of genes per monoclonal infection, and 2) the weight reflecting the gene counts density function). If `--measurement` is used, it is also required to provide the proportion of host to keep for the calculations (e.g. proportion of infections that can be detected by microscopy).
+
+#### Example command
+`python Targets.py --inputfile '/path/to/file.txt' --time 300 --measurement --distribution '/path/to/distribution.txt' --prop 0.57`
+
+`python Targets.py -h` Will print a full list of command arguments.
+#### Command arguments
+| Name | Description |
+| :--: | :---------: | 
+| `inputfile` | Path to the input file (required) |
+| `time` | Time to make the calculate the targets (required) |
+| `measurement` | Wether calculations take into account a measurement model (optional) |
+| `distribution` | Path to file describing the distribution of the number gene per monoclonal infection (optional) |
+| `prop` | Proportion of host to keep in the calculations (optional) |
+#### Notes
+The input file name should not contain a `.` except before the extension (*e.g.,* `input_file_name.txt`). To run it, ensure that you are using Python v.3.7, and have installed the following dependencies: [os](https://docs.python.org/3/library/os.html), [sqlite3](https://docs.python.org/3/library/sqlite3.html), [pandas](https://pandas.pydata.org/), [numpy](https://numpy.org/), [random](https://docs.python.org/3/library/random.html), [argparse](https://docs.python.org/3/library/argparse.html), and [sys](https://docs.python.org/3/library/sys.html).
+
+
+
 
 ## Compare diversity metrics
 This script compares the varmodel3 output databases (in [SQLite3 format](https://www.sqlite.org/fileformat.html)) located in two distinct directories. It could be used to evaluate new versions of the model, *e.g.,* outputs before vs. after a new implementation. Four major diversity metrics are compared: the average prevalence, pairwise type sharing (PTS), and number of strains and genes per replicate. For each diversity metric, the script plots its distributions and perform a [two-sample Kolmogorov-Smirnov test](https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats.kstest.html). It uses the `sampled_hosts`, `gene_strain_counts`, `sampled_infections`, and `sampled_infection_genes` tables from the output database. 
