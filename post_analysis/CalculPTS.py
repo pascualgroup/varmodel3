@@ -16,8 +16,6 @@ import os.path
 import sqlite3
 import pandas as pd
 import argparse
-import sys
-pd.options.mode.chained_assignment = None
 parser = argparse.ArgumentParser()
 parser.add_argument('-i', "--inputfile", required = True, help = 'Path to the input file')
 parser.add_argument('-t', "--time", type = int, required = True, help = 'Time to make the calculations')
@@ -42,6 +40,10 @@ def CalculPTS(inputfile, time):
             df_time = df[df['time'] == time]
             df_time["gene_id"] = df_time["allele_id_1"].astype(str) + '_' + df_time["allele_id_2"].astype(str)
 
+            # Subsample the strains (to allow calculations for runs with very high diversity)
+            if len(df_time['strain_id'].unique()) > 1000:
+                df_time = df_time.sample(n = 1000)
+            
             # Convert data between wide and long forms (matrix output; i.e. 0 or 1 for absent or present gene in that strain).
             g = df_time.groupby('strain_id')['gene_id'].apply(list).reset_index()
             genemat_time = g.join(pd.get_dummies(g['gene_id'].apply(pd.Series).stack()).sum(level = 0)).drop('gene_id', 1)
@@ -62,9 +64,9 @@ def CalculPTS(inputfile, time):
             out.to_csv(outputfile, index = True, header = True)
         
         else:
-            sys.exit('Error: provide a valid time')
+            print('Error: provide a valid time')
     else:
-       sys.exit('Error: provide a valid path to the input file')
+       print('Error: provide a valid path to the input file')
 
 if __name__ == '__main__':
      CalculPTS(args.inputfile, args.time)

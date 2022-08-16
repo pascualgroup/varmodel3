@@ -166,7 +166,9 @@ def Prevalence(df1, df2):
     preval = nbhost / nbpart
     return preval
    
-def PTS(df):    
+def PTS(df):
+    if len(df['strain_id'].unique()) > 1000:
+        df = df.sample(n = 1000)
     g = df.groupby('strain_id')['gene_id'].apply(list).reset_index()
     genemat = g.join(pd.get_dummies(g['gene_id'].apply(pd.Series).stack()).sum(level = 0)).drop('gene_id', 1)
     genemat = genemat.iloc[: , 1:]
