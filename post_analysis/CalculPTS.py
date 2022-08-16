@@ -16,6 +16,7 @@ import os.path
 import sqlite3
 import pandas as pd
 import argparse
+import sys
 parser = argparse.ArgumentParser()
 parser.add_argument('-i', "--inputfile", required = True, help = 'Path to the input file')
 parser.add_argument('-t', "--time", type = int, required = True, help = 'Time to make the calculations')
@@ -64,9 +65,9 @@ def CalculPTS(inputfile, time):
             out.to_csv(outputfile, index = True, header = True)
         
         else:
-            print('Error: provide a valid time')
+            sys.exit('Error: provide a valid time')
     else:
-       print('Error: provide a valid path to the input file')
+       sys.exit('Error: provide a valid path to the input file')
 
 if __name__ == '__main__':
      CalculPTS(args.inputfile, args.time)
