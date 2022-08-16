@@ -17,6 +17,7 @@ import sqlite3
 import pandas as pd
 import argparse
 import sys
+pd.options.mode.chained_assignment = None
 parser = argparse.ArgumentParser()
 parser.add_argument('-i', "--inputfile", required = True, help = 'Path to the input file')
 parser.add_argument('-t', "--time", type = int, required = True, help = 'Time to make the calculations')
