@@ -1,0 +1,9 @@
+parameter_name,dist_base_name,density_fn,min,max,a,b,mean,sd
+"biting_rate","unif",NA,5e-05,0.0001,NA,NA,NA,NA
+"ectopic_recombination_rate","unif",NA,1.8e-07,1.8e-06,NA,NA,NA,NA
+"immigration_rate_fraction","unif",NA,0.0013,0.0052,NA,NA,NA,NA
+"immunity_loss_rate","unif",NA,0.0005,0.002,NA,NA,NA,NA
+"mutation_rate","unif",NA,7.1e-09,2.84e-08,NA,NA,NA,NA
+"n_genes_initial","unif",NA,10000.0,35000.0,NA,NA,NA,NA
+"switching_rate","unif",NA,0.17,0.2,NA,NA,NA,NA
+"transmissibility","unif",NA,0.1,1.0,NA,NA,NA,NA
