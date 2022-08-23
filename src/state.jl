@@ -50,7 +50,7 @@ Struct storing the information of a sampled duration, with its host's
     id::InfectionId
     host_id::HostId
     n_cleared_infections::UInt32
-    n_immuned_alleles::UInt32
+    n_immune_alleles::UInt32
     t_infection::Float64
     t_expression::Float64
     duration::Float64

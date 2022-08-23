@@ -16,6 +16,8 @@ import os.path
 import sqlite3
 import pandas as pd
 import argparse
+import sys
+pd.options.mode.chained_assignment = None
 parser = argparse.ArgumentParser()
 parser.add_argument('-i', "--inputfile", required = True, help = 'Path to the input file')
 parser.add_argument('-t', "--time", type = int, required = True, help = 'Time to make the calculations')
@@ -40,10 +42,14 @@ def CalculPTS(inputfile, time):
             df_time = df[df['time'] == time]
             df_time["gene_id"] = df_time["allele_id_1"].astype(str) + '_' + df_time["allele_id_2"].astype(str)
 
+            # Subsample the strains (to allow calculations for runs with very high diversity)
+            if len(df_time['strain_id'].unique()) > 1000:
+                df_time = df_time.sample(n = 1000)
+            
             # Convert data between wide and long forms (matrix output; i.e. 0 or 1 for absent or present gene in that strain).
-            g = df_time.groupby('infection_id')['gene_id'].apply(list).reset_index()
+            g = df_time.groupby('strain_id')['gene_id'].apply(list).reset_index()
             genemat_time = g.join(pd.get_dummies(g['gene_id'].apply(pd.Series).stack()).sum(level = 0)).drop('gene_id', 1)
-            infection_id = genemat_time['infection_id']
+            strain_id = genemat_time['strain_id']
             genemat_time = genemat_time.iloc[: , 1:]
             genemat_time = genemat_time.to_numpy()
 
@@ -55,14 +61,14 @@ def CalculPTS(inputfile, time):
             # Export the results:
             outputfile = inputfile.split("/")[-1].split(".")[0] + "_PTS_" + str(time) + "days.csv"
             out = pd.DataFrame(networkSim_time)
-            out = out.rename(columns = infection_id)
-            out.index = infection_id
+            out = out.rename(columns = strain_id)
+            out.index = strain_id
             out.to_csv(outputfile, index = True, header = True)
         
         else:
-            print('Error: provide a valid time')
+            sys.exit('Error: provide a valid time')
     else:
-       print('Error: provide a valid path to the input file')
+       sys.exit('Error: provide a valid path to the input file')
 
 if __name__ == '__main__':
      CalculPTS(args.inputfile, args.time)

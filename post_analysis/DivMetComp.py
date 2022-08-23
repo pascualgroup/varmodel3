@@ -19,6 +19,7 @@ import argparse
 from scipy import stats
 import matplotlib.pyplot as plt
 import numpy as np
+import sys
 pd.options.mode.chained_assignment = None
 parser = argparse.ArgumentParser()
 parser.add_argument('-d1', "--directory1", required = True, help = 'Path to the directory containing the 1st set of varmodel3 output files')
@@ -45,7 +46,7 @@ def ModelComparison(directory1, directory2, replicates):
                 ls1.append(np.array(d1).mean())
                 ls2.append(np.array(d2).mean())
             else:
-                print('Error: the prevalences are not comparable')
+                sys.exit('Error: the prevalences are not comparable')
                 
             # Extract/calcul average gene and strain counts per replicate
             gs1 = ExtractGeneStrains(directory1, replicate)
@@ -56,7 +57,7 @@ def ModelComparison(directory1, directory2, replicates):
                 ls5.append(gs1['n_circulating_strains_blood'].mean())
                 ls6.append(gs2['n_circulating_strains_blood'].mean())
             else:
-                print('Error: the prevalences are not comparable')
+                sys.exit('Error: the prevalences are not comparable')
                 
             # Extract/calcul average PTS per replicate
             d3 = []; d4 = []
@@ -71,7 +72,7 @@ def ModelComparison(directory1, directory2, replicates):
                 ls7.append(np.array(d3).mean())
                 ls8.append(np.array(d4).mean())
             else:
-                print('Error: the prevalences are not comparable')
+                sys.exit('Error: the prevalences are not comparable')
                 
         # Plot histograms and perform two-sample Kolmogorov-Smirnov tests
         f = open('Kolmogorov_Smirnov_test.txt', 'w')
@@ -101,7 +102,7 @@ def ExtractPrevalence(directory, replicate):
         con.close()
         return df
     else:
-       print('Error: provide a valid path to the output files')
+       sys.exit('Error: provide a valid path to the output files')
 
 def ExtractGeneStrains(directory, replicate):
     if os.path.exists("{}/r{}/output.sqlite".format(directory, replicate)):
@@ -110,7 +111,7 @@ def ExtractGeneStrains(directory, replicate):
         con.close()
         return df
     else:
-       print('Error: provide a valid path to the output files')
+       sys.exit('Error: provide a valid path to the output files')
 
 def ExtractPTS(directory, replicate):
     if os.path.exists("{}/r{}/output.sqlite".format(directory, replicate)):
@@ -124,7 +125,7 @@ def ExtractPTS(directory, replicate):
         con.close()
         return df
     else:
-       print('Error: provide a valid path to the output files')
+       sys.exit('Error: provide a valid path to the output files')
 
 def Times(df1, df2):
     times1 = df1.time.unique(); times1.sort()
@@ -148,7 +149,7 @@ def PTS(df, time):
         df_time = df[df['time'] == time]
         df_time["gene_id"] = df_time["allele_id_1"].astype(str) + '_' + df_time["allele_id_2"].astype(str)
         # Convert data between wide and long forms (matrix output; i.e. 0 or 1 for absent or present gene in that strain).
-        g = df_time.groupby('infection_id')['gene_id'].apply(list).reset_index()
+        g = df_time.groupby('strain_id')['gene_id'].apply(list).reset_index()
         genemat_time = g.join(pd.get_dummies(g['gene_id'].apply(pd.Series).stack()).sum(level = 0)).drop('gene_id', 1)
         genemat_time = genemat_time.iloc[: , 1:]
         genemat_time = genemat_time.to_numpy()
