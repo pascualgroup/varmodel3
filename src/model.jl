@@ -20,9 +20,9 @@ include("util.jl")
 include("state.jl")
 include("output.jl")
 
-const N_EVENTS = 6
+const N_EVENTS = 7
 const EVENTS = collect(1:N_EVENTS)
-const (BITING, IMMIGRATION, SWITCHING, MUTATION, ECTOPIC_RECOMBINATION, IMMUNITY_LOSS) = EVENTS
+const (BITING, IMMIGRATION, LIVER_STEP, SWITCHING, MUTATION, ECTOPIC_RECOMBINATION, IMMUNITY_LOSS) = EVENTS
 
 function run()
     db = initialize_database()
@@ -288,7 +288,7 @@ function create_empty_infection()
         strain_id = StrainId(0),
         genes = fill(AlleleId(0), (P.n_loci, P.n_genes_per_strain)),
         snps = fill(SnpId(0), P.n_snps_per_strain),
-        expression_index = ExpressionIndex(0),
+        expression_index = ExpressionIndex(-(P.gamma_shape_liver_stage - 1)),
         expression_index_locus = ExpressionIndexLocus(0)
     )
 end
@@ -316,6 +316,8 @@ function get_rate(t, s, event)
         get_rate_biting(t, s)
     elseif event == IMMIGRATION
         get_rate_immigration(t, s)
+    elseif event == LIVER_STEP
+        get_rate_liver_step(t, s)
     elseif event == SWITCHING
         get_rate_switching(t, s)
     elseif event == MUTATION
@@ -332,6 +334,8 @@ function do_event!(t, s, stats, event, db)
         do_biting!(t, s, stats)
     elseif event == IMMIGRATION
         do_immigration!(t, s, stats)
+    elseif event == LIVER_STEP
+        do_liver_step!(t, s, stats)
     elseif event == SWITCHING
         do_switching!(t, s, stats)
     elseif event == MUTATION
@@ -415,7 +419,7 @@ function do_biting!(t, s, stats)
         dst_inf.id = next_infection_id!(s)
         dst_inf.t_infection = t
         dst_inf.t_expression = NaN
-        dst_inf.expression_index = 0
+        dst_inf.expression_index = -(P.gamma_shape_liver_stage - 1)
         dst_inf.expression_index_locus = 0
         dst_inf.duration = NaN
 
@@ -499,38 +503,6 @@ function advance_host!(t, s, host)
     if t > host.t_death
         # If the host is past its death time.
         do_rebirth!(t, s, host)
-    else
-        i = 1
-        while i <= length(host.liver_infections)
-            infection = host.liver_infections[i]
-            if infection.t_infection + P.t_liver_stage < t
-
-                # If the infection is past the liver stage, remove it from the liver.
-                delete_and_swap_with_end!(host.liver_infections, i)
-                # If there's room, move it into the active infections array.
-                # Otherwise, just put it into the recycle bin.
-                if isnothing(P.n_infections_active_max) || length(host.active_infections) < P.n_infections_active_max
-                    infection.expression_index = 1
-                    if P.whole_gene_immune
-                        infection.expression_index_locus = P.n_loci
-                    else
-                        infection.expression_index_locus = 1
-                    end
-                    push!(host.active_infections, infection)
-                    infection.t_expression = t
-
-                    advance_immune_genes!(t,s,host,length(host.active_infections))
-
-                    if length(host.active_infections) > s.n_active_infections_per_host_max
-                        s.n_active_infections_per_host_max = length(host.active_infections)
-                    end
-                else
-                    push!(s.old_infections, infection)
-                end
-            else
-                i += 1
-            end
-        end
     end
     nothing
 end
@@ -592,20 +564,67 @@ function do_immigration!(t, s, stats)
 end
 
 
+### LIVER STEP EVENT ###
+
+function get_rate_liver_step(t, s)
+    P.gamma_shape_liver_stage / P.t_liver_stage * P.n_hosts * s.n_liver_infections_per_host_max
+end
+
+function do_liver_step!(t, s, stats)
+    index = rand(CartesianIndices((P.n_hosts, (s.n_liver_infections_per_host_max))))
+    host = s.hosts[index[1]]
+    inf_index = index[2]
+
+    # If the infection index is out of range, this is a rejected sample.
+    if inf_index > length(host.liver_infections)
+        return false
+    end
+    infection = host.liver_infections[inf_index]
+
+    @assert infection.expression_index < 1
+    infection.expression_index += 1
+
+    # If the expression index became 1, then we're past the liver stage.
+    if infection.expression_index == 1
+        delete_and_swap_with_end!(host.liver_infections, inf_index)
+        # If there's room, move it into the active infections array.
+        # Otherwise, clear the infection.
+        if isnothing(P.n_infections_active_max) || length(host.active_infections) < P.n_infections_active_max
+            if P.whole_gene_immune
+                infection.expression_index_locus = P.n_loci
+            else
+                infection.expression_index_locus = 1
+            end
+            push!(host.active_infections, infection)
+            infection.t_expression = t
+
+            advance_immune_genes!(t, s, host, length(host.active_infections))
+
+            if length(host.active_infections) > s.n_active_infections_per_host_max
+                s.n_active_infections_per_host_max = length(host.active_infections)
+            end
+        else
+            push!(s.old_infections, infection)
+        end
+    end
+
+    true
+end
+
+
 ### SWITCHING EVENT ###
 
 function get_rate_switching(t, s)
     if !P.whole_gene_immune
         # Switching rate set by total number of alleles.
-        (P.switching_rate * P.n_loci) * P.n_hosts * (s.n_active_infections_per_host_max+s.n_liver_infections_per_host_max)
+        (P.switching_rate * P.n_loci) * P.n_hosts * s.n_active_infections_per_host_max
     else
-        P.switching_rate * P.n_hosts * (s.n_active_infections_per_host_max+s.n_liver_infections_per_host_max)
+        P.switching_rate * P.n_hosts * s.n_active_infections_per_host_max
     end
 end
 
 function do_switching!(t, s, stats)
-    # Change to total number of infections instead of active infections alone.
-    index = rand(CartesianIndices((P.n_hosts, (s.n_active_infections_per_host_max+s.n_liver_infections_per_host_max))))
+    index = rand(CartesianIndices((P.n_hosts, s.n_active_infections_per_host_max)))
     host = s.hosts[index[1]]
 
     # Advance host (rebirth or infection activation).
@@ -718,11 +737,11 @@ end
 ### MUTATION EVENT ###
 # Update mutation and recombination rates towards all infections.
 function get_rate_mutation(t, s)
-    P.mutation_rate * P.n_hosts * (s.n_active_infections_per_host_max+s.n_liver_infections_per_host_max) * P.n_genes_per_strain * P.n_loci
+    P.mutation_rate * P.n_hosts * s.n_active_infections_per_host_max * P.n_genes_per_strain * P.n_loci
 end
 
 function do_mutation!(t, s, stats)
-    index = rand(CartesianIndices((P.n_hosts, (s.n_active_infections_per_host_max+s.n_liver_infections_per_host_max), P.n_genes_per_strain, P.n_loci)))
+    index = rand(CartesianIndices((P.n_hosts, s.n_active_infections_per_host_max, P.n_genes_per_strain, P.n_loci)))
     host = s.hosts[index[1]]
     inf_index = index[2]
     expression_index = index[3]
@@ -755,7 +774,7 @@ end
 
 function get_rate_ectopic_recombination(t, s)
     P.ectopic_recombination_rate *
-        P.n_hosts * (s.n_active_infections_per_host_max+s.n_liver_infections_per_host_max) *
+        P.n_hosts * s.n_active_infections_per_host_max *
         P.n_genes_per_strain * (P.n_genes_per_strain - 1) / 2.0
 end
 
@@ -763,7 +782,7 @@ end
 
 function do_ectopic_recombination!(t, s, stats)
     # Index based on the total number of infections.
-    index = rand(CartesianIndices((P.n_hosts, (s.n_active_infections_per_host_max + s.n_liver_infections_per_host_max))))
+    index = rand(CartesianIndices((P.n_hosts, s.n_active_infections_per_host_max)))
     host = s.hosts[index[1]]
     inf_index = index[2]
 

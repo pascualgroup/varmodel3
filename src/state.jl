@@ -21,7 +21,7 @@ else
 end
 
 const StrainId = UInt32
-const ExpressionIndex = UInt8
+const ExpressionIndex = Int8
 const ExpressionIndexLocus = UInt8
 const ImmunityLevel = UInt16 # UInt8
 const Gene = SVector{P.n_loci, AlleleId}  # Immutable fixed-size vector
@@ -101,9 +101,13 @@ matrix of allele IDs), and the currently expressed index.
     genes::MMatrix{P.n_loci, P.n_genes_per_strain, AlleleId}
 
     """
-    Index in `genes` matrix of currently expressed gene.
+    Advancement index within stage: gamma-distribution step in liver stage;
+    index in `genes` matrix of currently expressed gene in blood stage.
 
-    Set to `0` (and ignored) for liver-stage infections.
+    Liver-stage gamma distribution steps start at
+    `-(gamma_shape_liver_stage - 1)` and end at `0`.
+
+    Blood-stage steps start at 1.
     """
     expression_index::ExpressionIndex
 
@@ -326,7 +330,7 @@ function verify(t, s::State)
         end
 
         for infection in host.liver_infections
-            @assert infection.expression_index == 0
+            @assert -(P.gamma_shape_liver_stage - 1) <= infection.expression_index <= 0
         end
 
         for infection in host.active_infections

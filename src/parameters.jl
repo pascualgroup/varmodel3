@@ -231,11 +231,19 @@ keyword constructor for the class.
     mutation_rate::Union{Float64, Nothing} = nothing
 
     """
-    Duration of the liver stage.
+    Mean duration of the liver stage.
 
     Infections become active after `t_liver_stage` units of time.
     """
     t_liver_stage::Union{Float64, Nothing} = nothing
+
+    """
+    Shape parameter of the gamma (Erlang) distribution for liver stage duration.
+
+    The shape must be an integer, since the delay is implemented via a series
+    of exponential draws (`gamma_shape_liver_stage` of them).
+    """
+    gamma_shape_liver_stage::Union{Int, Nothing} = nothing
 
     """
     Switching rate for genes the host is not immune to.
@@ -408,7 +416,7 @@ function validate(p::Params)
     @assert p.n_genes_initial > 0
 
     @assert p.n_genes_per_strain !== nothing
-    @assert p.n_genes_per_strain > 0
+    @assert 0 < p.n_genes_per_strain <= 127
 
     @assert p.n_loci !== nothing
     @assert p.n_loci > 0
@@ -450,6 +458,9 @@ function validate(p::Params)
 
     @assert p.t_liver_stage !== nothing
     @assert p.t_liver_stage >= 0.0
+
+    @assert p.gamma_shape_liver_stage !== nothing
+    @assert 0 < p.gamma_shape_liver_stage <= 127
 
     @assert p.switching_rate !== nothing
     @assert p.switching_rate >= 0.0
