@@ -79,6 +79,7 @@ const P = let
         mutation_rate = 1.42e-8,
 
         t_liver_stage = 14.0,
+        gamma_shape_liver_stage = 14,
 
         switching_rate = 1.0/6.0,
 
