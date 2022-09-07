@@ -15,3 +15,4 @@ scratch
 !*.json
 lhs_8K.a*
 lhs_test.txt
+db_env_vars_*.txt

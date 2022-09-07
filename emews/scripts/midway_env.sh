@@ -1,1 +1,2 @@
-module load julia/1.7.2 
+# module list
+# module load julia/1.7.2 
