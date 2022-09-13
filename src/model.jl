@@ -24,6 +24,8 @@ const N_EVENTS = 6
 const EVENTS = collect(1:N_EVENTS)
 const (BITING, IMMIGRATION, SWITCHING, MUTATION, ECTOPIC_RECOMBINATION, IMMUNITY_LOSS) = EVENTS
 
+const BITING_RATE_IS_PERIODIC = length(P.biting_rate) == P.t_year
+
 function run()
     db = initialize_database()
 
@@ -347,7 +349,13 @@ end
 ### BITING EVENT ###
 
 function get_rate_biting(t, s)
-    biting_rate = P.biting_rate[1 + Int(floor(t)) % P.t_year]
+    biting_rate = if BITING_RATE_IS_PERIODIC
+        println("BITING_RATE_IS_PERIODIC")
+        P.biting_rate[1 + Int(floor(t)) % P.t_year]
+    else
+        println("!BITING_RATE_IS_PERIODIC")
+        P.biting_rate[1 + Int(floor(t))]
+    end
     biting_rate * P.n_hosts
 end
 

@@ -80,8 +80,6 @@ keyword constructor for the class.
 
     """
     Number of time units in a year.
-
-    Currently used only to constrain size of `biting_rate_multiplier`.
     """
     t_year::Union{Int, Nothing} = nothing
 
@@ -112,9 +110,17 @@ keyword constructor for the class.
     n_initial_infections::Union{Int, Nothing} = nothing
 
     """
-    Biting rate for each day of the year.
+    Biting rate for each day of the year, or for each day of the simulation.
 
-    Dimensions: (t_year,)
+    Dimensions: either (t_year,) or (t_end,)
+
+    If the array has length `t_year`, then the biting rate sequence is repeated
+    each year.
+
+    If the array has length `t_end`, then each entry corresponds to a single
+    day in the simulation.
+
+    Otherwise,
     """
     biting_rate::Union{Nothing, Array{Float64}} = nothing
 
@@ -402,7 +408,7 @@ function validate(p::Params)
     @assert p.n_initial_infections >= 0
 
     @assert p.biting_rate !== nothing
-    @assert length(p.biting_rate) == p.t_year
+    @assert length(p.biting_rate) == p.t_year || length(p.biting_rate) == p.t_end
 
     @assert p.n_genes_initial !== nothing
     @assert p.n_genes_initial > 0
