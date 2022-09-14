@@ -25,18 +25,29 @@ const P = let
     daily_biting_rate_multiplier = readdlm("../mosquito_population.txt", Float64)[:,1]
     #snp_ld_matrix = readdlm("../pairwise_ld_coefficient_24snps.txt", Float64)
 
+    t_end_years = 111
+    t_end = t_end_years * t_year
+
+    # Uncomment this, and argument to Params() below, to enable an intervention
+    # for some subset of years.
+#     biting_rate_multiplier_by_year = repeat([1.0], t_end_years)
+#     biting_rate_multiplier_by_year[61:62] .= 0.5
+
+    t_burnin_years = 61
+    t_burnin = t_burnin_years * t_year
+
     Params(
         upper_bound_recomputation_period = 30,
 
         output_db_filename = "output.sqlite",
 
         summary_period = 30,
-        gene_strain_count_period = 360,
+        gene_strain_count_period = t_year,
 
         host_sampling_period = 30,
         host_sample_size = 100,
 
-        verification_period = 360,
+        verification_period = t_year,
 
         sample_infection_duration_every = 1000,
 
@@ -45,9 +56,9 @@ const P = let
         whole_gene_immune = false,
 
         t_year = t_year,
-        t_end = (111) * t_year,
+        t_end = t_end,
 
-        t_burnin = 61 * t_year,
+        t_burnin = t_end,
 
         n_hosts = 10000,
         n_initial_infections = 20,
@@ -91,6 +102,8 @@ const P = let
         n_infections_active_max = 10,
 
         biting_rate = 0.0005 * daily_biting_rate_multiplier,
+
+#         biting_rate_multiplier_by_year = biting_rate_multiplier_by_year,
 
         migrants_match_local_prevalence = true,
         migration_rate_update_period = 30,

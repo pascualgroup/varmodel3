@@ -119,6 +119,18 @@ keyword constructor for the class.
     biting_rate::Union{Nothing, Array{Float64}} = nothing
 
     """
+    Biting rate multiplier for each year (optional).
+    Used to apply yearlong interventions that reduce the biting rate.
+
+    `biting_rate_multiplier_by_year[1]` corresponds to the time interval
+    `[0, t_year)`, and so on.
+
+    Dimensions: (t_end / t_year, )
+    """
+    biting_rate_multiplier_by_year::Union{Array{Float64}, Nothing} = nothing
+
+
+    """
     Number of genes in strain.
 
     During an infection, each gene is expressed once, unless the host
@@ -403,6 +415,11 @@ function validate(p::Params)
 
     @assert p.biting_rate !== nothing
     @assert length(p.biting_rate) == p.t_year
+
+    if p.biting_rate_multiplier_by_year !== nothing
+        @assert length(p.biting_rate_multiplier_by_year) == Int(p.t_end / p.t_year)
+        @assert all(0.0 .<= p.biting_rate_multiplier_by_year .<= 1.0)
+    end
 
     @assert p.n_genes_initial !== nothing
     @assert p.n_genes_initial > 0
