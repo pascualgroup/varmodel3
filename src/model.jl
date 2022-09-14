@@ -350,10 +350,8 @@ end
 
 function get_rate_biting(t, s)
     biting_rate = if BITING_RATE_IS_PERIODIC
-        println("BITING_RATE_IS_PERIODIC")
         P.biting_rate[1 + Int(floor(t)) % P.t_year]
     else
-        println("!BITING_RATE_IS_PERIODIC")
         P.biting_rate[1 + Int(floor(t))]
     end
     biting_rate * P.n_hosts
