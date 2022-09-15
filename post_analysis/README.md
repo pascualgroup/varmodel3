@@ -11,6 +11,7 @@ This is a collection of scripts to analyze the sqlite output. Below are notes ab
 * [Calculate SNP call proportions](#Calculate-SNP-call-proportions)
 * [Calculate targets](#Calculate-targets)
 * [Compare diversity metrics](#Compare-diversity-metrics)
+* [Convert SNPs in THE REAL McCOIL format](#Convert-SNPs-in-THE-REAL-McCOIL-format)
 
 ## Calculate MOIvar
 This script calculates the multiplicity of infection (MOI) per hosts using the *var*coding approach. The *var*coding approach (also termed *var* genotyping or *var* fingerprinting), employs the highly polymorphic sequences encoding the immunogenic DBLα domain of PfEMP1 (*Plasmodium falciparum* erythrocyte membrane protein 1), the major surface antigen of the blood stage of infection ([Rask *et al.* 2010](https://journals.plos.org/ploscompbiol/article?id=10.1371/journal.pcbi.1000933)). The multigene family known as *var* encodes variants of this surface antigen which can reach tens of thousands of variants in endemic populations ([Tonkin-Hill *et al.* 2021](https://journals.plos.org/plosgenetics/article?id=10.1371/journal.pgen.1009269)). The extensive diversity of the *var* gene family together with the very low percentage of *var* genes shared between parasites facilitate measuring MOI by amplifying, pooling, sequencing, and counting the number of DBLα types in a host.
@@ -91,7 +92,7 @@ This script calculates the proportions of single nucleotide polymorphism (SNP) c
 The input file name should not contain a `.` except before the extension (*e.g.,* `input_file_name.txt`). To run it, ensure that you are using Python v.3.7, and have installed the following dependencies: [os](https://docs.python.org/3/library/os.html), [argparse](https://docs.python.org/3/library/argparse.html), and [sys](https://docs.python.org/3/library/sys.html).
 
 ## Calculate targets
-This script calculates the targets for the model fitting. These targets correspond to five diversity metrics: the prevalence, multiplicty of infection (MOI), pairwise type sharing (PTS), and number of strains and genes. It uses the "sampled_host", "sampled_infections", and "sampled_infection_genes" tables from the varmodel3 output database (in [SQLite3 format](https://www.sqlite.org/fileformat.html)). When the `varmodel3` simulations involved very high diversity (*e.g.,* `n_genes_initial > 20000)`, the PTS is only calculated for a subsample of 1,000 strains to avoid potential memory issues. To account for measurement error, calculations can be done with a measurement model using `--measurement`. If so, it is required to provide an additional file describing the distribution of the number of gene per monoclonal infection ([Labbe *et al.* 2022](https://www.biorxiv.org/content/10.1101/2022.06.27.497801v1)). The later should contains two columns: 1) the number of genes per monoclonal infection, and 2) the weight reflecting the gene counts density function). If `--measurement` is used, it is also required to provide the proportion of host to keep for the calculations (e.g. proportion of infections that can be detected by microscopy).
+This script calculates the targets for the model fitting. These targets correspond to five diversity metrics: the prevalence, multiplicty of infection (MOI), pairwise type sharing (PTS), and number of strains and genes. It uses the 'sampled_host', 'sampled_infections', and 'sampled_infection_genes' tables from the varmodel3 output database (in [SQLite3 format](https://www.sqlite.org/fileformat.html)). When the `varmodel3` simulations involved very high diversity (*e.g.,* `n_genes_initial > 20000)`, the PTS is only calculated for a subsample of 1,000 strains to avoid potential memory issues. To account for measurement error, calculations can be done with a measurement model using `--measurement`. If so, it is required to provide an additional file describing the distribution of the number of gene per monoclonal infection ([Labbe *et al.* 2022](https://www.biorxiv.org/content/10.1101/2022.06.27.497801v1)). The later should contains two columns: 1) the number of genes per monoclonal infection, and 2) the weight reflecting the gene counts density function). If `--measurement` is used, it is also required to provide the proportion of host to keep for the calculations (e.g. proportion of infections that can be detected by microscopy).
 
 #### Example command
 `python Targets.py --inputfile '/path/to/file.txt' --time 300 --measurement --distribution '/path/to/distribution.txt' --prop 0.57`
@@ -108,9 +109,6 @@ This script calculates the targets for the model fitting. These targets correspo
 #### Notes
 The input file name should not contain a `.` except before the extension (*e.g.,* `input_file_name.txt`). To run it, ensure that you are using Python v.3.7, and have installed the following dependencies: [os](https://docs.python.org/3/library/os.html), [sqlite3](https://docs.python.org/3/library/sqlite3.html), [pandas](https://pandas.pydata.org/), [numpy](https://numpy.org/), [random](https://docs.python.org/3/library/random.html), [argparse](https://docs.python.org/3/library/argparse.html), and [sys](https://docs.python.org/3/library/sys.html).
 
-
-
-
 ## Compare diversity metrics
 This script compares the varmodel3 output databases (in [SQLite3 format](https://www.sqlite.org/fileformat.html)) located in two distinct directories. It could be used to evaluate new versions of the model, *e.g.,* outputs before vs. after a new implementation. Four major diversity metrics are compared: the average prevalence, pairwise type sharing (PTS), and number of strains and genes per replicate. For each diversity metric, the script plots its distributions and perform a [two-sample Kolmogorov-Smirnov test](https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats.kstest.html). It uses the `sampled_hosts`, `gene_strain_counts`, `sampled_infections`, and `sampled_infection_genes` tables from the output database. 
 #### Example command
@@ -125,3 +123,18 @@ This script compares the varmodel3 output databases (in [SQLite3 format](https:/
 | `replicates`  | Number of replicates per run (required) |
 #### Notes
 A minimum of 2 replicates is required, but we recommend using at least 10 replicates. To run it, ensure that you are using Python v.3.7, and have installed the following dependencies: [os](https://docs.python.org/3/library/os.html), [sqlite3](https://docs.python.org/3/library/sqlite3.html), [pandas](https://pandas.pydata.org/), [numpy](https://numpy.org/), [scipy](https://scipy.org/), [matplotlib](https://matplotlib.org/), [argparse](https://docs.python.org/3/library/argparse.html), and [sys](https://docs.python.org/3/library/sys.html).
+
+## Convert SNPs in THE REAL McCOIL format
+Based on the SNP allele frequencies, this script converts the SNP data into THE REAL McCOIL input format. See the 'README.docx' file of [THE REAL McCOIL github](https://github.com/EPPIcenter/THEREALMcCOIL) for more details. SNP calling information is stored in a matrix, where each element Sij represents SNP information at locus j of individual i, and can be 0 [homozygous minor allele], 0.5 [heterozygous], 1 [homozygous major allele] or -1 [missing data]. The script also exports the SNP minor allele frequencies (MAF) in another output file. It uses the 'sampled_infections' and 'sampled_infection_snps' tables from the varmodel3 output database (in SQLite3 format).
+#### Example command
+`python TheRealMcCoilFormat.py --inputfile '/path/to/file.txt' --time 300 --minfreq 0.1`
+
+`python TheRealMcCoilFormat.py -h` Will print a full list of command arguments.
+#### Command arguments
+| Name | Description |
+| :--: | :---------: | 
+| `inputfile` | Path to the input file (required) |
+| `time` | Time to make the calculations (required) |
+| `minfreq`  | Minor allele frequency (MAF) for a SNP to be considered (required) |
+#### Notes
+The input file name should not contain a `.` except before the extension (*e.g.,* `input_file_name.txt`). To run it, ensure that you are using Python v.3.7, and have installed the following dependencies: [os](https://docs.python.org/3/library/os.html), [sqlite3](https://docs.python.org/3/library/sqlite3.html), [pandas](https://pandas.pydata.org/), [argparse](https://docs.python.org/3/library/argparse.html), and [sys](https://docs.python.org/3/library/sys.html).
