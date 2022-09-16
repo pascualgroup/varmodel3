@@ -12,6 +12,7 @@ This is a collection of scripts to analyze the sqlite output. Below are notes ab
 * [Calculate targets](#Calculate-targets)
 * [Compare diversity metrics](#Compare-diversity-metrics)
 * [Convert SNPs in THE REAL McCOIL format](#Convert-SNPs-in-THE-REAL-McCOIL-format)
+* [SNP measurement model](#SNP-measurement-model)
 
 ## Calculate MOIvar
 This script calculates the multiplicity of infection (MOI) per hosts using the *var*coding approach. The *var*coding approach (also termed *var* genotyping or *var* fingerprinting), employs the highly polymorphic sequences encoding the immunogenic DBLα domain of PfEMP1 (*Plasmodium falciparum* erythrocyte membrane protein 1), the major surface antigen of the blood stage of infection ([Rask *et al.* 2010](https://journals.plos.org/ploscompbiol/article?id=10.1371/journal.pcbi.1000933)). The multigene family known as *var* encodes variants of this surface antigen which can reach tens of thousands of variants in endemic populations ([Tonkin-Hill *et al.* 2021](https://journals.plos.org/plosgenetics/article?id=10.1371/journal.pgen.1009269)). The extensive diversity of the *var* gene family together with the very low percentage of *var* genes shared between parasites facilitate measuring MOI by amplifying, pooling, sequencing, and counting the number of DBLα types in a host.
@@ -125,7 +126,7 @@ This script compares the varmodel3 output databases (in [SQLite3 format](https:/
 A minimum of 2 replicates is required, but we recommend using at least 10 replicates. To run it, ensure that you are using Python v.3.7, and have installed the following dependencies: [os](https://docs.python.org/3/library/os.html), [sqlite3](https://docs.python.org/3/library/sqlite3.html), [pandas](https://pandas.pydata.org/), [numpy](https://numpy.org/), [scipy](https://scipy.org/), [matplotlib](https://matplotlib.org/), [argparse](https://docs.python.org/3/library/argparse.html), and [sys](https://docs.python.org/3/library/sys.html).
 
 ## Convert SNPs in THE REAL McCOIL format
-Based on the SNP allele frequencies, this script converts the SNP data into THE REAL McCOIL input format. See the 'README.docx' file of [THE REAL McCOIL github](https://github.com/EPPIcenter/THEREALMcCOIL) for more details. SNP calling information is stored in a matrix, where each element Sij represents SNP information at locus j of individual i, and can be 0 [homozygous minor allele], 0.5 [heterozygous], 1 [homozygous major allele] or -1 [missing data]. The script also exports the SNP minor allele frequencies (MAF) in another output file. It uses the 'sampled_infections' and 'sampled_infection_snps' tables from the varmodel3 output database (in SQLite3 format).
+Based on the SNP allele frequencies, this script converts the SNP data into THE REAL McCOIL input format. See the `README.docx` file of [THE REAL McCOIL github](https://github.com/EPPIcenter/THEREALMcCOIL) for more details. SNP calling information is stored in a matrix, where each element Sij represents SNP information at locus j of individual i, and can be 0 [homozygous minor allele], 0.5 [heterozygous], 1 [homozygous major allele] or -1 [missing data]. The script also exports the SNP minor allele frequencies (MAF) in another output file. It uses the `sampled_infections` and `sampled_infection_snps` tables from the varmodel3 output database (in SQLite3 format).
 #### Example command
 `python TheRealMcCoilFormat.py --inputfile '/path/to/file.txt' --time 300 --minfreq 0.1`
 
@@ -138,3 +139,17 @@ Based on the SNP allele frequencies, this script converts the SNP data into THE 
 | `minfreq`  | Minor allele frequency (MAF) for a SNP to be considered (required) |
 #### Notes
 The input file name should not contain a `.` except before the extension (*e.g.,* `input_file_name.txt`). To run it, ensure that you are using Python v.3.7, and have installed the following dependencies: [os](https://docs.python.org/3/library/os.html), [sqlite3](https://docs.python.org/3/library/sqlite3.html), [pandas](https://pandas.pydata.org/), [argparse](https://docs.python.org/3/library/argparse.html), and [sys](https://docs.python.org/3/library/sys.html).
+
+## SNP measurement model
+This script sample a number of missing loci and randomly replace them with missing data in an input file in [THE REAL McCOIL format](https://github.com/EPPIcenter/THEREALMcCOIL). It uses a distribution of the proportion of missing SNP loci per host based on Taq-Man assay empirical data. The distribution file should only contains two columns, i.e. the proportion and the weigths of missing SNP loci per host.
+#### Example command
+`python SnpErrMod.py --inputfile '/path/to/file.txt' --missdist '/path/to/file.txt'`
+
+`python SnpErrMod.py -h` Will print a full list of command arguments.
+#### Command arguments
+| Name | Description |
+| :--: | :---------: | 
+| `inputfile` | Path to the input file in THE REAL McCOIL format (required) |
+| `missdist` | Path to the file providing the distribution of the proportion of missing loci per host (required) |
+#### Notes
+The input file name should not contain a `.` except before the extension (*e.g.,* `input_file_name.txt`). To run it, ensure that you are using Python v.3.7, and have installed the following dependencies: [os](https://docs.python.org/3/library/os.html), [argparse](https://docs.python.org/3/library/argparse.html), [random](https://docs.python.org/3/library/random.html), and [numpy](https://numpy.org/).
