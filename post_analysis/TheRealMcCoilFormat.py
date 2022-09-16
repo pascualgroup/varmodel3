@@ -60,7 +60,7 @@ def TheRealMcCoilFormat(inputfile, time, minfreq):
                     else:
                         major = 2
                     maf_dict[index] = maf, major
-                    header = header + '\tsite' + str(index)
+                    header = header + '\tsite' + str(int(index))
                     
                     # Export the allele frequencies
                     f.write("{}\t{}\t{}\t{}\t{}\t{}\t{}\n".format(index, all1, all2, host, freqall1, freqall2, maf))
