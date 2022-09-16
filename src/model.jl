@@ -603,7 +603,7 @@ function get_rate_background_clearance(t, s)
 end
 
 function do_background_clearance(t, s, stats)
-    index = rand(CartesianIndices((P.n_hosts, (s.n_active_infections_per_host_max+s.n_liver_infections_per_host_max))))
+    index = rand(CartesianIndices((P.n_hosts, (s.n_active_infections_per_host_max + s.n_liver_infections_per_host_max))))
     host = s.hosts[index[1]]
 
     # Advance host (rebirth or infection activation).
@@ -616,7 +616,7 @@ function do_background_clearance(t, s, stats)
         false
     else
         infection = host.active_infections[inf_index]
-        println("do_background_clearance actually happening")
+        #println("do_background_clearance actually happening")
         clear_active_infection!(t, s, host, inf_index)
 
         true
