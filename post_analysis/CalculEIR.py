@@ -39,7 +39,7 @@ def CalculEIR(inputfile, time, n_hosts, summary_period, t_year):
             # Export results
             outputfile = inputfile.split("/")[-1].split(".")[0] + "_EIR_" + str(time) + "days.txt"
             f = open(outputfile, 'w')
-            f.write("time\teir\tnb_allele_1\tn_bites_host_year\n")
+            f.write("time\teir\tn_bites_host_year\n")
             f.write("{}\t{}\t{}\n".format(time, eir, n_bites_host_year))
             f.close()            
         else:
