@@ -16,6 +16,11 @@ the model share a parameters format, run script, and other bits of code.
 @assert typeof(P) === Params
 validate(P)
 
+# Parameters that need (vector-of-vector)-to-matrix conversion
+if P.snp_linkage_disequilibrium
+    const P_snp_pairwise_ld = reduce(hcat, P.snp_pairwise_ld)
+end
+
 include("util.jl")
 include("state.jl")
 include("output.jl")
@@ -986,7 +991,7 @@ function find_linked_snps(i)
     linked_snps = [i]
     j = i + 1
     while j <= P.n_snps_per_strain
-        append!(linked_snps, sample([j, i], Weights([P.snp_pairwise_ld[j, i], 1 - P.snp_pairwise_ld[j, i]])))
+        append!(linked_snps, sample([j, i], Weights([P_snp_pairwise_ld[j, i], 1 - P_snp_pairwise_ld[j, i]])))
         j += 1
     end
     unique!(linked_snps)

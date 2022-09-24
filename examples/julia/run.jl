@@ -103,7 +103,7 @@ const P = let
 
         snp_linkage_disequilibrium = false,
 #         snp_linkage_disequilibrium = true,
-#         snp_pairwise_ld = snp_ld_matrix,
+#         snp_pairwise_ld = [snp_ld_matrix[:,i] for i in 1:size(snp_ld_matrix)[2]],
     )
 end
 
