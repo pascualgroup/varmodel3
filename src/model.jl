@@ -17,7 +17,9 @@ the model share a parameters format, run script, and other bits of code.
 validate(P)
 
 # Parameters that need (vector-of-vector)-to-matrix conversion
-const P_snp_pairwise_ld = reduce(hcat, P.snp_pairwise_ld)
+if P.snp_linkage_disequilibrium
+    const P_snp_pairwise_ld = reduce(hcat, P.snp_pairwise_ld)
+end
 
 include("util.jl")
 include("state.jl")
