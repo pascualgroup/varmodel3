@@ -15,8 +15,8 @@ import emews;
 string emews_root = getenv("EMEWS_PROJECT_ROOT");
 string turbine_output = getenv("TURBINE_OUTPUT");
 
-string jobid = getenv("SLURM_JOB_ID");
-printf("JOB ID: %s", jobid);
+int job_id = string2int(getenv("SLURM_JOB_ID"));
+printf("JOB ID: %d", job_id);
 
 file upf = input(argv("f"));
 file model_sh = input(emews_root+"/scripts/run_model.sh");
@@ -106,8 +106,8 @@ app (void o) rm(string filename) {
 }
 
 (int num_runs) get_num_runs() {
-  message msg = eq_task_querier(0);
-  eq_task_reporter(msg.eq_task_id, 0, "OK") =>
+  message msg = eq_task_querier(job_id);
+  eq_task_reporter(msg.eq_task_id, job_id, "OK") =>
   num_runs = string2int(msg.payload);
   printf("NUM RUNS: %d", num_runs);
 }
@@ -116,17 +116,17 @@ app (void o) rm(string filename) {
   int num_runs = get_num_runs();
   string results[];
   foreach i in [0:num_runs-1:1] {
-    message msg = eq_task_querier(1);
+    message msg = eq_task_querier(job_id);
     int eq_task_id = msg.eq_task_id;
     // printf("loop.swift payload %s: ", msg.payload);
     string output_file = run_model(msg.payload);
     results[i] = output_file;
-    eq_task_reporter(eq_task_id, 1, output_file);
+    eq_task_reporter(eq_task_id, job_id, output_file);
     // eq_task_reporter(eq_task_id, 1, "OK");
   }
   // query the stop message
   printf("num runs: %d, result size: %d", num_runs, size(results)) =>
-  eq_task_querier(0) =>
+  eq_task_querier(job_id) =>
   v = propagate();
 }
 

@@ -56,7 +56,11 @@ def run(exp_id, upf, measurement, result_at):
         num_runs = sum(1 for _ in f_in)
     print(f'NUM RUNS: {num_runs}', flush=True)
 
-    status, task_id = eq.submit_task(exp_id, 0, f'{num_runs}')
+    job_id = int(os.environ['SLURM_JOB_ID'])
+    # use the job_id as the work type to match with the
+    # worker pool running as part of the same job
+    # higher priority so worker pool grabs it first
+    status, task_id = eq.submit_task(exp_id, job_id, f'{num_runs}', priority=10)
     # Get the 'OK' back
     status, result_str = eq.query_result(task_id, timeout=120.0)
     print(f'Init num runs: {status}, {result_str}', flush=True)
@@ -65,7 +69,7 @@ def run(exp_id, upf, measurement, result_at):
     with open(upf) as f_in:
         for line in f_in.readlines():
             line = line.strip()
-            status, task_id = eq.submit_task(exp_id, 1, line)
+            status, task_id = eq.submit_task(exp_id, job_id, line)
             if status != eq.ResultStatus.SUCCESS:
                 print(f'Error submitting task {status}', flush=True)
             task_ids.append(task_id)
@@ -101,7 +105,7 @@ def run(exp_id, upf, measurement, result_at):
             print(f'Aborting: Worker Pool Down')
         time.sleep(60)
     
-    eq.stop_worker_pool(0)
+    eq.stop_worker_pool(job_id)
     eq.close()
 
     with open('full_results.csv', 'w', newline='') as fout:

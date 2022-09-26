@@ -111,7 +111,7 @@ VARMODEL_X=$EMEWS_PROJECT_ROOT/../run.jl
 CMD_LINE_ARGS="$* -algo_file=$AR_FILE -algo_params_file=$AP_FILE -varmodel_x=$VARMODEL_X "
 CMD_LINE_ARGS+="-replicates=$CFG_REPLICATES -default_params_file=$DST_DEFAULT_PARAMS "
 CMD_LINE_ARGS+="-biting_rate_multiplier_file=$DST_BRMS_FILE -measurement_file=$MEAS_FILE "
-CMD_LINE_ARGS+="-result_at=$CFG_RESULT_AT"
+CMD_LINE_ARGS+="-result_at=$CFG_RESULT_AT -prev_result_file=$CFG_PREV_RESULT_FILE"
 
 # Add any script variables that you want to log as
 # part of the experiment meta data to the USER_VARS array,
