@@ -72,13 +72,17 @@ def CalculMOIvar(inputfile, time, measurement):
                 if args.measurement is not None:
                     err = pd.read_csv(measurement, sep = '\t').values.tolist()
                     err = pd.DataFrame(err)
+                    err_min = min(err[err[1] != 0][0])
                     subsamp = []
                     for strain in var['strain_id'].unique():
                         var_strain = df_time[df_time['strain_id'] == strain]
                         nb_var_strain = len(var_strain['gene_id'].unique())
-                        samp = int(random.choices(population = np.array(err.iloc[:, 0]), weights = np.array(err.iloc[:, 1]), k = 1)[0])
-                        while (samp > nb_var_strain):
-                             samp = int(random.choices(population = np.array(err.iloc[:, 0]), weights = np.array(err.iloc[:, 1]), k = 1)[0])
+                        if nb_var_strain >= err_min:
+                            samp = int(random.choices(population = np.array(err.iloc[:, 0]), weights = np.array(err.iloc[:, 1]), k = 1)[0])
+                            while (samp > nb_var_strain):
+                                samp = int(random.choices(population = np.array(err.iloc[:, 0]), weights = np.array(err.iloc[:, 1]), k = 1)[0])
+                        else:
+                            samp = nb_var_strain
                         var_samp = random.sample(list(var_strain.gene_id), samp)
                         subsamp.extend(var_samp)
                     nb_var_err = len(set(subsamp))
