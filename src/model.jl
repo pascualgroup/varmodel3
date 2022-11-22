@@ -29,6 +29,8 @@ const N_EVENTS = 7
 const EVENTS = collect(1:N_EVENTS)
 const (BITING, IMMIGRATION, BACKGROUND_CLEARANCE, SWITCHING, MUTATION, ECTOPIC_RECOMBINATION, IMMUNITY_LOSS) = EVENTS
 
+const USE_BITING_RATE_MULTIPLIER_BY_YEAR = P.biting_rate_multiplier_by_year !== nothing
+
 function run()
     db = initialize_database()
 
@@ -352,7 +354,13 @@ end
 ### BITING EVENT ###
 
 function get_rate_biting(t, s)
-    biting_rate = P.biting_rate[1 + Int(floor(t)) % P.t_year]
+    day_index = 1 + Int(floor(t)) % P.t_year
+    biting_rate = if USE_BITING_RATE_MULTIPLIER_BY_YEAR
+        year_index = 1 + Int(floor(t / P.t_year))
+        P.biting_rate_multiplier_by_year[year_index] * P.biting_rate[day_index]
+    else
+        P.biting_rate[day_index]
+    end
     biting_rate * P.n_hosts
 end
 
