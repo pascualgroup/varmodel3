@@ -57,6 +57,10 @@ function run()
     stats = SummaryStats()
     write_output!(db, 0, s, stats)
 
+    if P.n_snps_per_strain > 0
+        write_initial_snp_allele_frequencies(db, s)
+    end
+
     # Initialize event rates.
     rates = [get_rate(t, s, event) for event in EVENTS]
     total_rate = sum(rates)
@@ -118,9 +122,6 @@ function run()
     total_num_genes_generated_recomb = s.next_gene_id_recomb - 1
     println("total number of new genes generated out of recombination? $(total_num_genes_generated_recomb)")
     execute(db.meta, ("total_num_genes_generated_recomb", Int64(total_num_genes_generated_recomb)))
-    if P.n_snps_per_strain > 0
-        write_initial_snp_allele_frequencies(db, s)
-    end
 end
 
 function recompute_rejection_upper_bounds!(s)
@@ -175,21 +176,20 @@ function initialize_state()
     end
 
     # Define the initial allele frequencies at each SNP.
-    snp_all_freq = fill(0.5, P.n_snps_per_strain)
+    snp_allele_freq = fill(0.5, P.n_snps_per_strain)
     if P.n_snps_per_strain > 0
         if P.distinct_initial_snp_allele_frequencies
             if !P.snp_linkage_disequilibrium
                 # As unlinked SNPs are independent, their initial allele frequencies
                 # are independently defined.
                 for snp in 1:P.n_snps_per_strain
-                    snp_all_freq[snp] = rand(P.initial_snp_allele_frequency[1]:0.01:P.initial_snp_allele_frequency[2])
-                    snp_all_freq[snp] = rand([snp_all_freq[snp], 1 - snp_all_freq[snp]])
+                    snp_allele_freq[snp] = rand(Uniform(P.initial_snp_allele_frequency[1], P.initial_snp_allele_frequency[2]))
+                    snp_allele_freq[snp] = rand([snp_allele_freq[snp], 1 - snp_allele_freq[snp]])
                 end
             else
                 unlinked_snps = collect(1:P.n_snps_per_strain)
                 i = 1
                 while i in unlinked_snps
-
                     # Define the linked SNPs:
                     linked_snps = find_linked_snps(i)
 
@@ -197,11 +197,11 @@ function initialize_state()
                     # are co-defined.
                     if size(linked_snps)[1] > 1
                         unlinked_snps = setdiff(unlinked_snps, linked_snps)
-                        snp_all_freq[linked_snps[1]] = rand(P.initial_snp_allele_frequency[1]:0.01:P.initial_snp_allele_frequency[2])
-                        snp_all_freq[linked_snps[1]] = rand([snp_all_freq[linked_snps[1]], 1 - snp_all_freq[linked_snps[1]]])
+                        snp_allele_freq[linked_snps[1]] = rand(Uniform(P.initial_snp_allele_frequency[1], P.initial_snp_allele_frequency[2]))
+                        snp_allele_freq[linked_snps[1]] = rand([snp_allele_freq[linked_snps[1]], 1 - snp_allele_freq[linked_snps[1]]])
                         for linked_snp in linked_snps[2:size(linked_snps)[1]]
-                            snp_all_freq[linked_snp] = snp_all_freq[linked_snps[1]]
-                            snp_all_freq[linked_snp] = rand([snp_all_freq[linked_snp], 1 - snp_all_freq[linked_snp]])
+                            snp_allele_freq[linked_snp] = snp_allele_freq[linked_snps[1]]
+                            snp_allele_freq[linked_snp] = rand([snp_allele_freq[linked_snp], 1 - snp_allele_freq[linked_snp]])
                         end
                     end
                     i += 1
@@ -213,8 +213,8 @@ function initialize_state()
                 # As unlinked SNPs are independent, their initial allele frequencies
                 # are independently defined.
                 for unlinked_snp in unlinked_snps
-                    snp_all_freq[unlinked_snp] = rand(P.initial_snp_allele_frequency[1]:0.01:P.initial_snp_allele_frequency[2])
-                    snp_all_freq[unlinked_snp] = rand([snp_all_freq[unlinked_snp], 1 - snp_all_freq[unlinked_snp]])
+                    snp_allele_freq[unlinked_snp] = rand(Uniform(P.initial_snp_allele_frequency[1], P.initial_snp_allele_frequency[2]))
+                    snp_allele_freq[unlinked_snp] = rand([snp_allele_freq[unlinked_snp], 1 - snp_allele_freq[unlinked_snp]])
                 end
             end
         end
@@ -236,7 +236,7 @@ function initialize_state()
         if P.n_snps_per_strain > 0
             for snp in 1:P.n_snps_per_strain
                 infection.snps[snp] = sample([1, 2],
-                Weights([snp_all_freq[snp], 1 - snp_all_freq[snp]]))
+                Weights([snp_allele_freq[snp], 1 - snp_allele_freq[snp]]))
             end
         end
         push!(hosts[host_index].liver_infections, infection)
@@ -260,7 +260,7 @@ function initialize_state()
         n_transmitting_bites_for_migration_rate = 0,
         n_bites_for_migration_rate = 0,
         infected_ratio = 1.0,
-        initial_snp_allele_frequencies = snp_all_freq
+        initial_snp_allele_frequencies = snp_allele_freq
     )
 end
 
@@ -455,13 +455,9 @@ function do_biting!(t, s, stats)
                         # one source infection.
                         if size(linked_snps)[1] > 1
                             unlinked_snps = setdiff(unlinked_snps, linked_snps)
-                            parent = rand(["src_inf_1", "src_inf_2"])
+                            parent_inf = rand((src_inf_1, src_inf_2))
                             for linked_snp in linked_snps
-                                if parent == "src_inf_1"
-                                    dst_inf.snps[linked_snp] = src_inf_1.snps[linked_snp]
-                                elseif parent == "src_inf_2"
-                                    dst_inf.snps[linked_snp] = src_inf_2.snps[linked_snp]
-                                end
+                                dst_inf.snps[linked_snp] = parent_inf.snps[linked_snp]
                             end
                         end
                         i += 1
@@ -985,14 +981,13 @@ end
 """
 function find_linked_snps(i)
     linked_snps = [i]
-    j = i + 1
-    while j <= P.n_snps_per_strain
-        append!(linked_snps, sample([j, i], Weights([P_snp_pairwise_ld[j, i], 1 - P_snp_pairwise_ld[j, i]])))
-        j += 1
+    for j = (i+1):P.n_snps_per_strain
+        if rand() < P.snp_pairwise_ld[j, i]
+            append!(linked_snps, j)
+        end
     end
-    unique!(linked_snps)
+    linked_snps
 end
-
 
 ### IMMUNITY FUNCTIONS ###
 

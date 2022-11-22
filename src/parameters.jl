@@ -468,7 +468,7 @@ function validate(p::Params)
         @assert p.n_infections_liver_max >= 0
     end
 
-    if p.distinct_initial_snp_allele_frequencies !== nothing
+    if p.n_infections_active_max !== nothing
         @assert p.n_infections_active_max >= 0
     end
 
