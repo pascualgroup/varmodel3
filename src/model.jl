@@ -25,9 +25,9 @@ include("util.jl")
 include("state.jl")
 include("output.jl")
 
-const N_EVENTS = 6
+const N_EVENTS = 7
 const EVENTS = collect(1:N_EVENTS)
-const (BITING, IMMIGRATION, SWITCHING, MUTATION, ECTOPIC_RECOMBINATION, IMMUNITY_LOSS) = EVENTS
+const (BITING, IMMIGRATION, BACKGROUND_CLEARANCE, SWITCHING, MUTATION, ECTOPIC_RECOMBINATION, IMMUNITY_LOSS) = EVENTS
 
 function run()
     db = initialize_database()
@@ -317,6 +317,8 @@ function get_rate(t, s, event)
         get_rate_biting(t, s)
     elseif event == IMMIGRATION
         get_rate_immigration(t, s)
+    elseif event == BACKGROUND_CLEARANCE
+        get_rate_background_clearance(t, s)
     elseif event == SWITCHING
         get_rate_switching(t, s)
     elseif event == MUTATION
@@ -333,6 +335,8 @@ function do_event!(t, s, stats, event, db)
         do_biting!(t, s, stats)
     elseif event == IMMIGRATION
         do_immigration!(t, s, stats)
+    elseif event == BACKGROUND_CLEARANCE
+        do_background_clearance(t, s, stats)
     elseif event == SWITCHING
         do_switching!(t, s, stats)
     elseif event == MUTATION
@@ -589,6 +593,34 @@ function do_immigration!(t, s, stats)
 end
 
 
+### RANDOM BACKGROUND CLEARANCE EVENT ###
+
+function get_rate_background_clearance(t, s)
+    P.background_clearance_rate * P.n_hosts * (s.n_active_infections_per_host_max + s.n_liver_infections_per_host_max)
+end
+
+function do_background_clearance(t, s, stats)
+    index = rand(CartesianIndices((P.n_hosts, (s.n_active_infections_per_host_max + s.n_liver_infections_per_host_max))))
+    host = s.hosts[index[1]]
+
+    # Advance host (rebirth or infection activation).
+    advance_host!(t, s, host)
+    inf_index = index[2]
+
+    # If the infection index is out of range, this is a rejected sample.
+    # Otherwise we'll proceed.
+    if inf_index > length(host.active_infections)
+        false
+    else
+        infection = host.active_infections[inf_index]
+        #println("do_background_clearance actually happening")
+        clear_active_infection!(t, s, host, inf_index)
+
+        true
+    end
+end
+
+
 ### SWITCHING EVENT ###
 
 function get_rate_switching(t, s)
@@ -601,7 +633,6 @@ function get_rate_switching(t, s)
 end
 
 function do_switching!(t, s, stats)
-    # Change to total number of infections instead of active infections alone.
     index = rand(CartesianIndices((P.n_hosts, (s.n_active_infections_per_host_max+s.n_liver_infections_per_host_max))))
     host = s.hosts[index[1]]
 
@@ -627,13 +658,7 @@ function do_switching!(t, s, stats)
 
     # If we're at the end, clear the infection and return.
     if infection.expression_index == P.n_genes_per_strain && infection.expression_index_locus == P.n_loci
-        if s.n_cleared_infections % P.sample_infection_duration_every == 0
-            # Calculate and write the infection duration.
-            add_infection_duration!(t, s, host, inf_index)
-        end
-        s.n_cleared_infections += 1
-        host.n_cleared_infections += 1
-        delete_and_swap_with_end!(host.active_infections, inf_index)
+        clear_active_infection!(t, s, host, inf_index)
     else
         # Otherwise, advance gene and/or locus expression(s).
         if !P.whole_gene_immune
@@ -665,13 +690,11 @@ function do_switching!(t, s, stats)
 end
 
 # This function moves the expression index of an infection to its first non-immune allele/gene.
-function advance_immune_genes!(t, s, host, i)
-
+function advance_immune_genes!(t, s, host, inf_index)
     # Advance expression until a non-immune gene or allele is reached.
-    infection = host.active_infections[i]
+    infection = host.active_infections[inf_index]
     # If the host not immune, stop advancing.
     to_advance = is_immune(host.immunity, infection.genes[:, infection.expression_index],infection.expression_index_locus)
-
 
     while to_advance
         # Increment immunity level to currently expressed gene or allele.
@@ -681,13 +704,8 @@ function advance_immune_genes!(t, s, host, i)
 
         # If we're at the end, clear the infection and return.
         if infection.expression_index == P.n_genes_per_strain && infection.expression_index_locus == P.n_loci
-            if s.n_cleared_infections % P.sample_infection_duration_every == 0
-                # Calculate and write the infection duration.
-                add_infection_duration!(t, s, host, i)
-            end
-            s.n_cleared_infections += 1
-            host.n_cleared_infections += 1
-            delete_and_swap_with_end!(host.active_infections, i)
+            clear_active_infection!(t, s, host, inf_index)
+
             # Here if deleting an infection, and the indexing changed, then tell the calling function
             # it doesn't advancing its index.
             return false
@@ -840,6 +858,26 @@ function do_ectopic_recombination!(t, s, stats)
     else
         false
     end
+end
+
+"""
+    Clear active infection
+
+    This function is used by all code where active infections can be cleared:
+
+    * Clearance at end of expression sequence during a switching event
+    * Clearance
+    * Random background clearance events
+"""
+function clear_active_infection!(t, s, host, inf_index)
+    if s.n_cleared_infections % P.sample_infection_duration_every == 0
+        # Calculate and write the infection duration.
+        add_infection_duration!(t, s, host, inf_index)
+    end
+    s.n_cleared_infections += 1
+    host.n_cleared_infections += 1
+    push!(s.old_infections, host.active_infections[inf_index])
+    delete_and_swap_with_end!(host.active_infections, inf_index)
 end
 
 """

@@ -261,6 +261,13 @@ keyword constructor for the class.
     max_host_lifetime::Union{Float32, Nothing} = nothing
 
     """
+        Background clearance rate due to processes not explicitly modeled.
+
+        Per active infection, per unit time (day).
+    """
+    background_clearance_rate::Union{Float64, Nothing} = nothing
+
+    """
         Immigration rate, as a fraction of the non-immigration biting rate.
     """
     immigration_rate_fraction::Union{Float64, Nothing} = nothing
@@ -460,6 +467,9 @@ function validate(p::Params)
 
     @assert p.max_host_lifetime !== nothing
     @assert p.max_host_lifetime >= p.mean_host_lifetime
+
+    @assert p.background_clearance_rate !== nothing
+    @assert p.background_clearance_rate >= 0.0
 
     @assert p.immigration_rate_fraction !== nothing
     @assert p.immigration_rate_fraction >= 0.0

@@ -302,6 +302,8 @@ function init_base_params()
         mean_host_lifetime = 30 * t_year,
         max_host_lifetime = 80 * t_year,
 
+        background_clearance_rate = 0.0,
+
         immigration_rate_fraction = 0.0026,
 
         n_infections_liver_max = 10,
