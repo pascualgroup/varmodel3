@@ -1,0 +1,17 @@
+experiments
+
+turbine-directory.txt
+*.tic
+
+*.pyc
+__pycache__
+.ipynb_checkpoints
+
+*~
+turbine-output
+scratch
+*.so
+
+!*.json
+lhs_8K.a*
+lhs_test.txt

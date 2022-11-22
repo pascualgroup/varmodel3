@@ -357,7 +357,8 @@ keyword constructor for the class.
         The R script "Rscript_Create_LDPairwiseMatrix.R" could be used to
         create a pairwise LD matrix.
     """
-    snp_pairwise_ld::Union{Array{Float32, 2}, Nothing} = nothing
+#     snp_pairwise_ld::Union{Array{Float32, 2}, Nothing} = nothing
+    snp_pairwise_ld::Union{Vector{Vector{Float64}}, Nothing} = nothing
 end
 
 """
@@ -494,8 +495,10 @@ function validate(p::Params)
         @assert p.snp_linkage_disequilibrium !== nothing
         if p.snp_linkage_disequilibrium
             @assert p.n_snps_per_strain >= 2
-            @assert size(p.snp_pairwise_ld)[1] == p.n_snps_per_strain
-            @assert size(p.snp_pairwise_ld)[2] == p.n_snps_per_strain
+            @assert length(p.snp_pairwise_ld) == p.n_snps_per_strain
+            for i in 1:p.n_snps_per_strain
+                @assert length(p.snp_pairwise_ld[i]) == p.n_snps_per_strain
+            end
         end
     end
 end

@@ -13,6 +13,7 @@ usage: python CalculPropCalls.py --inputfile '/path/to/file.txt'
 
 import os.path
 import argparse
+import sys
 parser = argparse.ArgumentParser()
 parser.add_argument('-i', "--inputfile", required = True, help = 'Path to the input file in THE REAL McCOIL format.')
 args = parser.parse_args()
@@ -52,7 +53,7 @@ def PropCalls(inputfile):
                 f2.write("{}\t{}\t{}\t{}\t{}\n".format(locus + 1, miss, homo_min, het, homo_maj))
         f2.close()
     else:
-       print('Error: provide a valid path to the input file')
+       sys.exit('Error: provide a valid path to the input file')
 
 if __name__ == '__main__':
      PropCalls(args.inputfile)

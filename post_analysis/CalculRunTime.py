@@ -15,6 +15,7 @@ import sqlite3
 import pandas as pd
 import statistics
 import argparse
+import sys
 parser = argparse.ArgumentParser()
 parser.add_argument('-d', "--directory", required = True, help = 'Path to the directory containing the input file(s)')
 parser.add_argument('-n', "--runs", type = int, required = True, help = 'Number of runs')
@@ -51,7 +52,7 @@ def CalculRunTime(directory, runs, replicates):
                         meta_run_dict[run][1].append(time_max)
                         summ_run_dict[run].extend(summary.exec_time.values)
                     else:
-                        print('Error: provide a valid number of runs and/or replicates')
+                        sys.exit('Error: provide a valid number of runs and/or replicates')
             
             # Running time per run:
             f1 = open("output_runningtime_run.txt", 'w')
@@ -85,9 +86,9 @@ def CalculRunTime(directory, runs, replicates):
                     f2.write("{}\t{}\t{}\t{}\t{}\t{}\t{}\n".format(run, replicate, elapsed_time, time_max, exec_time_avg, exec_time_med, exec_time_sd))
             f2.close()
         else:
-            print('Error: provide a valid number of runs and/or replicates')
+            sys.exit('Error: provide a valid number of runs and/or replicates')
     else:
-        print('Error: provide a valid path to the directory containing the input file(s)')
+        sys.exit('Error: provide a valid path to the directory containing the input file(s)')
         
 if __name__ == '__main__':
      CalculRunTime(args.directory, args.runs, args.replicates)
