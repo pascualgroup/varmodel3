@@ -86,10 +86,6 @@ function run()
                 end
             end
 
-            if t_next_integer % P.upper_bound_recomputation_period == 0
-                recompute_rejection_upper_bounds!(s)
-            end
-
             t_next_integer += 1
         end
 
