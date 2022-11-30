@@ -604,6 +604,9 @@ end
 ### RANDOM BACKGROUND CLEARANCE EVENT ###
 
 function get_rate_background_clearance(t, s)
+    # The total rate includes both active and liver infections because host state may not be fully up to date,
+    # and a liver infection may be activated when host state is updated to the current time.
+    # Rejection sampling is used to effect the correct rate.
     P.background_clearance_rate * P.n_hosts * (s.n_active_infections_per_host_max + s.n_liver_infections_per_host_max)
 end
 
@@ -632,6 +635,9 @@ end
 ### SWITCHING EVENT ###
 
 function get_rate_switching(t, s)
+    # The total rate includes both active and liver infections because host state may not be fully up to date,
+    # and a liver infection may be activated when host state is updated to the current time.
+    # Rejection sampling is used to effect the correct rate.
     if !P.whole_gene_immune
         # Switching rate set by total number of alleles.
         (P.switching_rate * P.n_loci) * P.n_hosts * (s.n_active_infections_per_host_max+s.n_liver_infections_per_host_max)
@@ -741,6 +747,9 @@ end
 ### MUTATION EVENT ###
 # Update mutation and recombination rates towards all infections.
 function get_rate_mutation(t, s)
+    # The total rate includes both active and liver infections because host state may not be fully up to date,
+    # and a liver infection may be activated when host state is updated to the current time.
+    # Rejection sampling is used to effect the correct rate.
     P.mutation_rate * P.n_hosts * (s.n_active_infections_per_host_max+s.n_liver_infections_per_host_max) * P.n_genes_per_strain * P.n_loci
 end
 
@@ -777,6 +786,9 @@ end
 ### ECTOPIC RECOMBINATION EVENT ###
 
 function get_rate_ectopic_recombination(t, s)
+    # The total rate includes both active and liver infections because host state may not be fully up to date,
+    # and a liver infection may be activated when host state is updated to the current time.
+    # Rejection sampling is used to effect the correct rate.
     P.ectopic_recombination_rate *
         P.n_hosts * (s.n_active_infections_per_host_max+s.n_liver_infections_per_host_max) *
         P.n_genes_per_strain * (P.n_genes_per_strain - 1) / 2.0
