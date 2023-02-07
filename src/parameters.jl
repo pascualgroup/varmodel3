@@ -376,8 +376,23 @@ keyword constructor for the class.
         The R script "Rscript_Create_LDPairwiseMatrix.R" could be used to
         create a pairwise LD matrix.
     """
-#     snp_pairwise_ld::Union{Array{Float32, 2}, Nothing} = nothing
     snp_pairwise_ld::Union{Vector{Vector{Float64}}, Nothing} = nothing
+
+    ###
+    """
+        Whether the source infections contribute differently to the
+        construction of a new infection during the meiotic recombination. 
+    """
+    distinct_recombination::Union{Bool, Nothing} = nothing
+
+    """
+        If `distinct_recombination` is `true`, then this is the proportion of genes from one of the source
+        infections that is taken to construct the new infection. A random sample of the
+        remaining genes from the two source infections are taken to complete the
+        construction of the new infection.
+    """
+    recombination::Union{Float64, Nothing} = nothing
+    ###
 end
 
 """
@@ -528,4 +543,11 @@ function validate(p::Params)
             end
         end
     end
+    ###
+    @assert p.distinct_recombination !== nothing
+    if p.distinct_recombination
+        @assert p.recombination !== nothing
+        @assert 0.0 <= p.recombination <= 1.0
+    end
+    ###
 end

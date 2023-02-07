@@ -437,16 +437,94 @@ function do_biting!(t, s, stats)
             # If both infections have the same strain, then the new infection
             # is given infection 1's genes with expression order shuffled.
             dst_inf.strain_id = src_inf_1.strain_id
-            shuffle_columns_to!(dst_inf.genes, src_inf_1.genes)
-            # The new infection is given infection 1's SNP alleles.
+            ###
+            if P.distinct_recombination
+                # The new strain is constructed by keeping the infection 1's genes and expression orders
+                # for a certain proportion of the genes. However, infection 1's remaining genes and expression
+                # orders are shuffled to complete the construction of the new infection.
+                #println("Meiotic recombination; Source infections have the same strain")
+                m = size(src_inf_1.genes)[2]
+                #println("Number of genes in the 1st source infection ($(src_inf_1.id)): $(m)")
+                src_indices = collect(1:m)
+                #println("Gene indexes before shuffling (i.e. in source infection $(src_inf_1.id)): $(src_indices)")                
+                src_indices_keep = sort(sample(src_indices, replace = false, Int(round(length(src_indices) * P.recombination))))
+                #println("1st source infection: List of gene indexes to keep: $(src_indices_keep)")
+                #println("1st source infection: Number of genes to keep: $(length(src_indices_keep))")                
+                src_indices_shuf = deleteat!(deepcopy(src_indices), src_indices_keep)
+                #println("List of gene indexes to shuffle: $(src_indices_shuf)")
+                #println("Number of genes to shuffle: $(length(src_indices_shuf))")
+                shuffle!(src_indices_shuf)
+                #println("List of shuffled gene indexes: $(src_indices_shuf)")
+                for id in src_indices_keep
+                    insert!(src_indices_shuf, id, id)
+                end
+                #println("Full list of gene indexes (i.e. kept and shuffled): $(src_indices_shuf)")
+                for i_dst in 1:m
+                    i_src = src_indices_shuf[i_dst]
+                    dst_inf.genes[:, i_dst] = src_inf_1.genes[:, i_src]
+                end
+                #println("Alleles in the 1st source infection $(src_inf_1.id): $(src_inf_1.genes)")
+                #println("Alleles in the destination infection $(dst_inf.id): $(dst_inf.genes)")
+            else
+                shuffle_columns_to!(dst_inf.genes, src_inf_1.genes)
+            end
             if P.n_snps_per_strain > 0
+                # The new infection is given infection 1's SNP alleles.
                 dst_inf.snps = src_inf_1.snps
             end
+            ###
         else
             # Otherwise, the new infection is given a new strain constructed by
             # taking a random sample of the genes in the two source infections.
             dst_inf.strain_id = next_strain_id!(s)
-            sample_columns_from_two_matrices_to!(dst_inf.genes, src_inf_1.genes, src_inf_2.genes)
+
+            ###
+            if P.distinct_recombination
+                # The new strain is constructed by taking the infection 1's genes and expression orders
+                # for a certain proportion of the genes. However, the remaining genes and expression orders
+                # are randomly sampled from the two source infections to complete the construction of the new infection.
+                #println("Meiotic recombination; Source infections have different strains")
+                m_dst = size(dst_inf.genes)[2]
+                m_src_1 = size(src_inf_1.genes)[2]
+                m_src_2 = size(src_inf_2.genes)[2]
+                m_src = m_src_1 + m_src_2
+                src_indices = collect(1:m_src)
+                #println("List of gene indexes of the 2 source infections ($(src_inf_1.id) and $(src_inf_2.id)) before shuffling: $(src_indices)")
+                src_1_indices = collect(1:m_src_1)                
+                #println("List of gene indexes of the 1st source infection ($(src_inf_1.id)) before shuffling: $(src_1_indices)")
+                src_1_indices_excl = sort(sample(src_1_indices, replace = false, Int(round(length(src_1_indices) * P.recombination))))
+                #println("1st source infection: List of gene indexes to exclude from the shuffling: $(src_1_indices_excl)")
+                #println("1st source infection: Number of genes to exclude from the shuffling: $(length(src_1_indices_excl))")
+                src_2_indices_excl = src_1_indices_excl .+ P.n_genes_per_strain
+                #println("2nd source infection: List of gene indexes to exclude from the shuffling: $(src_2_indices_excl)")
+                #println("2nd source infection: Number of genes to exclude from the shuffling: $(length(src_2_indices_excl))")
+                src_indices_excl = sort(append!(deepcopy(src_1_indices_excl), deepcopy(src_2_indices_excl)))
+                #println("Full list of gene indexes to exclude from the shuffling: $(src_indices_excl)")
+                #println("Total number of genes to exclude from the shuffling: $(length(src_indices_excl))")
+                src_indices_shuf = deleteat!(deepcopy(src_indices), src_indices_excl)
+                #println("List of gene indexes to shuffle: $(src_indices_shuf)")
+                #println("Number of genes to shuffle: $(length(src_indices_shuf))")
+                shuffle!(src_indices_shuf)
+                #println("List of shuffled gene indexes: $(src_indices_shuf)")
+                for id in src_1_indices_excl
+                    insert!(src_indices_shuf, id, id)
+                end
+                #println("Full list of gene indexes (i.e. kept and shuffled): $(src_indices_shuf)")
+                for i_dst in 1:m_dst
+                    i_src = src_indices_shuf[i_dst]
+                    if i_src <= m_src_1
+                        dst_inf.genes[:, i_dst] = src_inf_1.genes[:, i_src]
+                    else
+                        dst_inf.genes[:, i_dst] = src_inf_2.genes[:, i_src - m_src_1]
+                    end
+                end
+                #println("Alleles in the 1st source infection $(src_inf_1.id): $(src_inf_1.genes)")
+                #println("Alleles in the 2nd source infection $(src_inf_2.id): $(src_inf_2.genes)")
+                #println("Alleles in the destination infection $(dst_inf.id): $(dst_inf.genes)")
+            else
+                sample_columns_from_two_matrices_to!(dst_inf.genes, src_inf_1.genes, src_inf_2.genes)
+            end
+            ###
             # The new infection is given a new set of SNP alleles constructed by
             # taking a random allele per SNP in the two source infections.
             if P.n_snps_per_strain > 0
