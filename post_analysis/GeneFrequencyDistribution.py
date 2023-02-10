@@ -41,7 +41,6 @@ def GeneFrequencyDistribution(inputfile, time):
             df_time["gene_id"] = df_time["allele_id_1"].astype(str) + '_' + df_time["allele_id_2"].astype(str)
             
             # Calculate the gene frequency distribution
-            frequency = df_time['gene_id'].value_counts()    
             frequency = df_time["gene_id"] .value_counts().rename_axis('gene_id').reset_index(name = 'frequency')
             outputfile = inputfile.split("/")[-1].split(".")[0] + "_GenfreqDist_" + str(time) + "days.csv"
             frequency.to_csv(outputfile, index = False, header = True)    
