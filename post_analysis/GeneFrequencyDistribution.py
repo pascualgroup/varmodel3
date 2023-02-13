@@ -3,10 +3,10 @@
 """
 Created on Fri Feb 10 14:23:08 2023
 @author: Frederic Labbe
-This script calculates the genes frequency distribution.
+This script calculates the gene frequency distribution.
 It uses the "sampled_infections"  and "sampled_infection_genes" tables from the varmodel3 output database (in SQLite3 format).
 Note: the input file name should not contains a "." except before the extension (e.g. "input_file_name.sqlite").
-Note: the MOI calculations only take into account the active infection(s).
+Note: the calculations only take into account the active infection(s).
 usage: python GeneFrequencyDistribution.py --inputfile '/path/to/file.txt' --time 300
 """
 
