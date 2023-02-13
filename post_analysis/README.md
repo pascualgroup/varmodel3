@@ -13,6 +13,7 @@ This is a collection of scripts to analyze the sqlite output. Below are notes ab
 * [Compare diversity metrics](#Compare-diversity-metrics)
 * [Convert SNPs in THE REAL McCOIL format](#Convert-SNPs-in-THE-REAL-McCOIL-format)
 * [SNP measurement model](#SNP-measurement-model)
+* [Calculate gene frequency distribution](#Calculate-gene-frequency-distribution)
 
 ## Calculate MOIvar
 This script calculates the multiplicity of infection (MOI) per hosts using the *var*coding approach. The *var*coding approach (also termed *var* genotyping or *var* fingerprinting), employs the highly polymorphic sequences encoding the immunogenic DBLα domain of PfEMP1 (*Plasmodium falciparum* erythrocyte membrane protein 1), the major surface antigen of the blood stage of infection ([Rask *et al.* 2010](https://journals.plos.org/ploscompbiol/article?id=10.1371/journal.pcbi.1000933)). The multigene family known as *var* encodes variants of this surface antigen which can reach tens of thousands of variants in endemic populations ([Tonkin-Hill *et al.* 2021](https://journals.plos.org/plosgenetics/article?id=10.1371/journal.pgen.1009269)). The extensive diversity of the *var* gene family together with the very low percentage of *var* genes shared between parasites facilitate measuring MOI by amplifying, pooling, sequencing, and counting the number of DBLα types in a host.
@@ -153,3 +154,18 @@ This script sample a number of missing loci and randomly replace them with missi
 | `missdist` | Path to the file providing the distribution of the proportion of missing loci per host (required) |
 #### Notes
 The input file name should not contain a `.` except before the extension (*e.g.,* `input_file_name.txt`). To run it, ensure that you are using Python v.3.7, and have installed the following dependencies: [os](https://docs.python.org/3/library/os.html), [argparse](https://docs.python.org/3/library/argparse.html), [random](https://docs.python.org/3/library/random.html), and [numpy](https://numpy.org/).
+
+## Calculate gene frequency distribution
+This script calculates the gene frequency distribution. It uses the `sampled_infections`  and `sampled_infection_genes` tables from the output database.
+
+#### Example command
+`python GeneFrequencyDistribution.py --inputfile '/path/to/file.txt' --time 300`
+
+`python GeneFrequencyDistribution.py -h` Will print a full list of command arguments.
+#### Command arguments
+| Name | Description |
+| :--: | :---------: | 
+| `inputfile` | Path to the input file (required) |
+| `time` | Time to make the calculations (required) |
+#### Notes
+The calculations only take into account the active infection(s). The input file name should not contain a `.` except before the extension (*e.g.,* `input_file_name.txt`). To run it, ensure that you are using Python v.3.7, and have installed the following dependencies: [os](https://docs.python.org/3/library/os.html), [sqlite3](https://docs.python.org/3/library/sqlite3.html), [pandas](https://pandas.pydata.org/), [argparse](https://docs.python.org/3/library/argparse.html), and [sys](https://docs.python.org/3/library/sys.html).
