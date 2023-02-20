@@ -25,9 +25,15 @@ include("util.jl")
 include("state.jl")
 include("output.jl")
 
-const N_EVENTS = 7
-const EVENTS = collect(1:N_EVENTS)
-const (BITING, IMMIGRATION, BACKGROUND_CLEARANCE, SWITCHING, MUTATION, ECTOPIC_RECOMBINATION, IMMUNITY_LOSS) = EVENTS
+if P.generalized_immunity
+    const N_EVENTS = 8
+    const EVENTS = collect(1:N_EVENTS)
+    const (BITING, IMMIGRATION, BACKGROUND_CLEARANCE, SWITCHING, MUTATION, ECTOPIC_RECOMBINATION, IMMUNITY_LOSS, GENERALIZED_IMMUNITY_LOSS) = EVENTS
+else
+    const N_EVENTS = 7
+    const EVENTS = collect(1:N_EVENTS)
+    const (BITING, IMMIGRATION, BACKGROUND_CLEARANCE, SWITCHING, MUTATION, ECTOPIC_RECOMBINATION, IMMUNITY_LOSS) = EVENTS
+end
 
 const USE_BITING_RATE_MULTIPLIER_BY_YEAR = P.biting_rate_multiplier_by_year !== nothing
 
@@ -130,6 +136,8 @@ function recompute_rejection_upper_bounds!(s)
     s.n_immunities_per_host_max = maximum(immunity_count(host.immunity) for host in s.hosts)
     s.n_active_infections_per_host_max = maximum(length(host.active_infections) for host in s.hosts)
     s.n_liver_infections_per_host_max = maximum(length(host.liver_infections) for host in s.hosts)
+    println("recompute_rejection_upper_bounds!: s.n_active_infections_per_host_max $(s.n_active_infections_per_host_max)")
+    println("recompute_rejection_upper_bounds!: s.n_liver_infections_per_host_max $(s.n_liver_infections_per_host_max)")
 end
 
 function recompute_infected_ratio!(s)
@@ -166,8 +174,8 @@ function initialize_state()
         Host(
             id = id,
             t_birth = 0, t_death = draw_host_lifetime(),
-            liver_infections = [], active_infections = [],
-            immunity = ImmuneHistory(),
+            liver_infections = [], active_infections = [], active_infections_detectable = [],
+            immunity = ImmuneHistory(), generalized_immunity = 0,
             n_cleared_infections = 0
         )
         for id in 1:P.n_hosts
@@ -230,6 +238,9 @@ function initialize_state()
         infection.t_infection = 0.0
         infection.t_expression = NaN
         infection.duration = NaN
+        if P.drug_treatment
+            infection.p_symptoms = P.pathogenicity
+        end
         infection.strain_id = infection_id
         infection.genes[:,:] = reshape(
             gene_pool[:, rand(1:P.n_genes_initial, P.n_genes_per_strain)],
@@ -288,6 +299,9 @@ function create_empty_infection()
         t_infection = NaN,
         t_expression = NaN,
         duration = NaN,
+        p_detect = P.detectability,
+        p_transmit = P.transmissibility,
+        p_symptoms = NaN,
         strain_id = StrainId(0),
         genes = fill(AlleleId(0), (P.n_loci, P.n_genes_per_strain)),
         snps = fill(SnpId(0), P.n_snps_per_strain),
@@ -329,6 +343,8 @@ function get_rate(t, s, event)
         get_rate_ectopic_recombination(t, s)
     elseif event == IMMUNITY_LOSS
         get_rate_immunity_loss(t, s)
+    elseif event == GENERALIZED_IMMUNITY_LOSS
+        get_rate_generalized_immunity_loss(t, s)
     end
 end
 
@@ -347,6 +363,8 @@ function do_event!(t, s, stats, event, db)
         do_ectopic_recombination!(t, s, stats)
     elseif event == IMMUNITY_LOSS
         do_immunity_loss!(t, s, stats)
+    elseif event == GENERALIZED_IMMUNITY_LOSS
+        do_generalized_immunity_loss!(t, s, stats)
     end
 end
 
@@ -397,17 +415,52 @@ function do_biting!(t, s, stats)
     stats.n_infected_bites_with_space += 1
 
     # Compute probability of each transmission.
-    p_transmit = if P.coinfection_reduces_transmission
-        P.transmissibility / src_active_count
-    else
-        P.transmissibility
-    end
+    # Probability based on the generalized immunity level of the source host
+    # and on a parameter which control how fast the GI impact the transmission.
+    println("do_biting!: Compute probability of each transmission")
+    transmitted_strains = []
+    for active_infection in src_host.active_infections
+        if P.generalized_immunity && src_host.generalized_immunity > 0
+            if P.coinfection_reduces_transmission
+                active_infection.p_transmit = P.transmissibility * exp(-1 * src_host.generalized_immunity * P.generalized_immunity_transmissibility) / src_active_count
+            else
+                active_infection.p_transmit = P.transmissibility * exp(-1 * src_host.generalized_immunity * P.generalized_immunity_transmissibility)
+            end
+            # Cost of carrying a resistance allele on the strain transmissibility.
+            if P.drug_treatment
+                if P.resistant_snp && active_infection.snps[1] == 2
+                    active_infection.p_transmit = active_infection.p_transmit * P.resistant_cost
+                end
+            end
+            println("The source host $(src_host.id) has $(src_active_count) active infections.")
+            println("The source host $(src_host.id) has $(src_host.n_cleared_infections) cleared infections.")
+            println("The source host $(src_host.id) has a GI level of $(src_host.generalized_immunity).")
+            println("Its active infection $(active_infection.id) has a probability of transmission of $(active_infection.p_transmit).")
+        else
+            if P.coinfection_reduces_transmission
+                active_infection.p_transmit = P.transmissibility / src_active_count
+            else
+                active_infection.p_transmit = P.transmissibility
+            end
+            # Cost of carrying a resistance allele on the strain transmissibility.
+            if P.drug_treatment
+                if P.resistant_snp && active_infection.snps[1] == 2
+                    active_infection.p_transmit = active_infection.p_transmit * P.resistant_cost
+                end
+            end
+            println("The source host $(src_host.id) has $(src_active_count) active infections.")
+            println("The source host $(src_host.id) has $(src_host.n_cleared_infections) cleared infections.")
+            println("Its active infection $(active_infection.id) has a probability of transmission of $(active_infection.p_transmit).")
+        end
 
-    # First choose the active strains from the host that will be transmitted to mosquito.
-    # This is determined by the transmissibility.
-    choose_transmit = rand(Float64, src_active_count)
-    transmitted_strains = src_host.active_infections[choose_transmit.<p_transmit]
-    #println("t = $(t): originalSize $(src_active_count), newSize $(length(transmitted_strains))")
+        # Choose if this active strain from the host will be transmitted to the mosquito.
+        # This is determined by its transmissibility.
+        if rand() < active_infection.p_transmit
+            println("Its active infection $(active_infection.id) will be transmitted to the mosquito.")
+            push!(transmitted_strains, active_infection)
+        end
+    end
+    println("Total of $(length(transmitted_strains)) transmitted strains.")
 
     # The number of transmissions is bounded by the number of source infections
     # and the number of available slots in the destination.
@@ -488,11 +541,53 @@ function do_biting!(t, s, stats)
             end
         end
 
-        # Add this infection to the destination host.
-        push!(dst_host.liver_infections, dst_inf)
+        # For the new infection, calculate its detectability and pathogenicity.
+        # Probabilities based on the generalized immunity level of its destination host
+        # and on parameters controlling how fast the GI impact the detectability and pathogenicity.
+        if P.generalized_immunity
+            if dst_host.generalized_immunity > 0
+                dst_inf.p_detect = P.detectability * exp(-1 * dst_host.generalized_immunity * P.generalized_immunity_detectability)
+                println("The destination infection $(dst_inf.id) has a probability of detection of ($(dst_inf.p_detect)).")
+                if P.drug_treatment
+                    dst_inf.p_symptoms = P.pathogenicity * exp(-1 * dst_host.generalized_immunity * P.generalized_immunity_pathogenicity)
+                    println("The destination infection $(dst_inf.id) has a probability of symptoms of ($(dst_inf.p_symptoms)).")
+                    # Cost of carrying a resistance allele on detectability and pathogenicity.
+                    if P.resistant_snp && dst_inf.snps[1] == 2
+                        println("The destination infection $(dst_inf.id) carries the resistant allele ($(dst_inf.snps[1])).")
+                        dst_inf.p_detect = dst_inf.p_detect * P.resistant_cost
+                        dst_inf.p_symptoms = dst_inf.p_symptoms * P.resistant_cost
+                        println("Its updated probability of detection is $(dst_inf.p_detect) and its probability of symptoms is $(dst_inf.p_symptoms).")
+                    end
+                end
+            else
+                # Note: make a function as same code used twice (see below).
+                dst_inf.p_detect = P.detectability
+                if P.drug_treatment
+                    dst_inf.p_symptoms = P.pathogenicity
+                    # Cost of carrying a resistance allele on detectability and pathogenicity.
+                    if P.resistant_snp && dst_inf.snps[1] == 2
+                        dst_inf.p_detect = dst_inf.p_detect * P.resistant_cost
+                        dst_inf.p_symptoms = dst_inf.p_symptoms * P.resistant_cost
+                    end
+                end
+            end
+        else
+            dst_inf.p_detect = P.detectability
+            println("The destination infection $(dst_inf.id) has a probability of detection of ($(dst_inf.p_detect)).")
+            if P.drug_treatment
+                dst_inf.p_symptoms = P.pathogenicity
+                println("The destination infection $(dst_inf.id) has a probability of symptoms of ($(dst_inf.p_symptoms)).")
+                # Cost of carrying a resistance allele on detectability and pathogenicity.
+                if P.resistant_snp && dst_inf.snps[1] == 2
+                    println("The destination infection $(dst_inf.id) carries the resistant allele ($(dst_inf.snps[1])).")
+                    dst_inf.p_detect = dst_inf.p_detect * P.resistant_cost
+                    dst_inf.p_symptoms = dst_inf.p_symptoms * P.resistant_cost
+                    println("Its updated probability of detection is $(dst_inf.p_detect) and its probability of symptoms is $(dst_inf.p_symptoms).")
+                end
+            end
+        end
         # Update population wide host liver max.
         s.n_liver_infections_per_host_max = max(s.n_liver_infections_per_host_max, length(dst_host.liver_infections))
-
     end
 
     if transmitted
@@ -528,10 +623,235 @@ function advance_host!(t, s, host)
                     push!(host.active_infections, infection)
                     infection.t_expression = t
 
-                    advance_immune_genes!(t,s,host,length(host.active_infections))
-
-                    if length(host.active_infections) > s.n_active_infections_per_host_max
-                        s.n_active_infections_per_host_max = length(host.active_infections)
+                    if P.generalized_immunity
+                        # If detectability and transmissibility are affected by the generalized immunity (GI) level.
+                        println("advance_host: GI is true")
+                        if P.drug_treatment && rand() < infection.p_symptoms
+                            # If infections are impacted by malaria drug treatments and this active infection is symptomatic.
+                            # This choice is based on the probability that strain generates symptoms in its host, i.e. pathogenicity.
+                            println("Infections are impacted by treatments and this infection $(infection.id), with a probability of generating symptoms of $(infection.p_symptoms), is symptomatic.")
+                            if P.resistant_snp
+                                # If there is one SNP under selection carrying a susceptible (1) or resistant (2) allele.
+                                # Note: as it is used twice (i.e. for w/wo GI), we need to make a function!
+                                if infection.snps[1] == 1
+                                    # If this active infection carries a susceptible allele (1).
+                                    # This active infections, and the other coinfecting strain(s) carrying a susceptible allele (1),
+                                    # will be cleared without increasing the GI level. The coinfecting strain(s) carrying a resistant allele (2) will pursue.
+                                    println("The infection $(infection.id), with allele $(infection.snps[1]) at the selected locus, is susceptible.")
+                                    println("This infection is infecting host $(host.id).")
+                                    println("Before drug treatment, host $(host.id) has $(length(host.active_infections)) active infections.")
+                                    println("Before drug treatment, host $(host.id) has a GI level of $(host.generalized_immunity).")
+                                    if length(host.active_infections) > 1
+                                        j = 1
+                                        for active_infection in host.active_infections
+                                            println("The coinfecting strain $(active_infection.id) has allele $(active_infection.snps[1]) at the selected locus.")
+                                            if active_infection.snps[1] == 1
+                                                println("The coinfecting strain $(active_infection.id) with allele $(active_infection.snps[1]) at the selected locus is susceptible.")
+                                                delete_and_swap_with_end!(host.active_infections, j)
+                                            end
+                                            j += 1
+                                        end
+                                        k = 1
+                                        for active_infection_detectable in host.active_infections_detectable
+                                            if active_infection_detectable.snps[1] == 1
+                                                delete_and_swap_with_end!(host.active_infections_detectable, k)
+                                            end
+                                            k += 1
+                                        end
+                                        println("After drug treatment, host $(host.id) has $(length(host.active_infections)) active infections.")
+                                        println("After drug treatment, host $(host.id) has a GI level of $(host.generalized_immunity).")
+                                    else
+                                        empty!(host.active_infections)
+                                        empty!(host.active_infections_detectable)
+                                        println("After drug treatment, host $(host.id) has $(length(host.active_infections)) active infections.")
+                                        println("After drug treatment, host $(host.id) has a GI level of $(host.generalized_immunity).")
+                                    end
+                                else
+                                    # If this active infection carries a resistant allele (2).
+                                    # Choose if this active strain could be detected.
+                                    # This choice is based on its detectability in its host.
+                                    println("The infection $(infection.id), with allele $(infection.snps[1]) at the selected locus, is resistant.")
+                                    if rand() < infection.p_detect
+                                        println("The infection $(infection.id), with a probability of detection of $(infection.p_detect), is detectable.")
+                                        println("This infection is infecting host $(host.id) which currently has a GI level of $(host.generalized_immunity).")
+                                        push!(host.active_infections_detectable, infection)
+                                    else
+                                        println("The infection $(infection.id), with a probability of detection of $(infection.p_detect), is undetectable.")
+                                        println("This infection is infecting host $(host.id) which currently has a GI level of $(host.generalized_immunity).")
+                                    end
+                                    advance_immune_genes!(t, s, host, length(host.active_infections))
+                                    if length(host.active_infections) > s.n_active_infections_per_host_max
+                                        s.n_active_infections_per_host_max = length(host.active_infections)
+                                        println("nb host.active_infections: $(length(host.active_infections))")
+                                        println("s.n_active_infections_per_host_max: $(s.n_active_infections_per_host_max)")
+                                    end
+                                    # This active infections, and the other coinfecting strain(s) carrying a resistant allele (2) will pursue.
+                                    # However, the coinfecting strain(s) carrying a susceptible allele (1) will be cleared without increasing the GI level.
+                                    if length(host.active_infections) > 1
+                                        j = 1
+                                        for active_infection in host.active_infections
+                                            println("The coinfecting strain $(active_infection.id) has allele $(active_infection.snps[1]) at the selected locus")
+                                            if active_infection.snps[1] == 1
+                                                println("The coinfecting strain $(active_infection.id) with allele $(active_infection.snps[1]) at the selected locus is susceptible")
+                                                delete_and_swap_with_end!(host.active_infections, j)
+                                            end
+                                            j += 1
+                                        end
+                                        k = 1
+                                        for active_infection_detectable in host.active_infections_detectable
+                                            if active_infection_detectable.snps[1] == 1
+                                                delete_and_swap_with_end!(host.active_infections_detectable, k)
+                                            end
+                                            k += 1
+                                        end
+                                    end
+                                end
+                            else
+                                # If all the SNPs are neutral.
+                                # All the active infections will be cleared without increasing the GI level.
+                                println("All SNPs are neutral, i.e. all the active infections will be cleared.")
+                                println("Before drug treatment, host $(host.id) has $(length(host.active_infections)) active infections.")
+                                println("Before drug treatment, host $(host.id) has a GI level of $(host.generalized_immunity).")
+                                empty!(host.active_infections)
+                                empty!(host.active_infections_detectable)
+                                println("After drug treatment, host $(host.id) has $(length(host.active_infections)) active infections.")
+                                println("After drug treatment, host $(host.id) has a GI level of $(host.generalized_immunity).")
+                            end
+                        else
+                            # If infections are not impacted by malaria drug treatments, or if this active infection is asymptomatic.
+                            # Choose if the asymptomatic active strain could be detected.
+                            # This choice is based on its detectability in its host.
+                            println("Infections are not impacted by treatments, or this infection $(infection.id) is asymptomatic.")
+                            println("This infection is infecting host $(host.id) which currently has a GI level of $(host.generalized_immunity).")
+                            if rand() < infection.p_detect
+                                println("This infection $(infection.id), with a probability of detection of $(infection.p_detect), is detectable.")
+                                println("This infection is infecting host $(host.id) which currently has $(host.n_cleared_infections) cleared infections.")
+                                push!(host.active_infections_detectable, infection)
+                            else
+                                println("This infection $(infection.id), with a probability of detection of $(infection.p_detect), is undetectable.")
+                                println("This infection is infecting host $(host.id) which currently has $(host.n_cleared_infections) cleared infections.")
+                            end
+                            advance_immune_genes!(t, s, host, length(host.active_infections))
+                            if length(host.active_infections) > s.n_active_infections_per_host_max
+                                s.n_active_infections_per_host_max = length(host.active_infections)
+                                println("nb host.active_infections: $(length(host.active_infections))")
+                                println("s.n_active_infections_per_host_max: $(s.n_active_infections_per_host_max)")
+                            end
+                        end
+                    else
+                        # If detectability and transmissibility are not affected by the generalized immunity (GI) level.
+                        println("advance_host: GI is false")
+                        if P.drug_treatment && rand() < infection.p_symptoms
+                            # If infections are impacted by malaria drug treatments and this active infection is symptomatic.
+                            # This choice is based on the probability that strain generates symptoms in its host, i.e. pathogenicity.
+                            println("Infections are impacted by treatments and this infection $(infection.id), with a probability of generating symptoms of $(infection.p_symptoms), is symptomatic.")
+                            if P.resistant_snp
+                                # If there is one SNP under selection carrying a susceptible (1) or resistant (2) allele.
+                                # Note: as it is used twice (i.e. for w/wo GI), we need to make a function!
+                                if infection.snps[1] == 1
+                                    # If this active infection carries a susceptible allele (1).
+                                    # This active infections, and the other coinfecting strain(s) carrying a susceptible allele (1),
+                                    # will be cleared without increasing the GI level. The coinfecting strain(s) carrying a resistant allele (2) will pursue.
+                                    println("The infection $(infection.id), with allele $(infection.snps[1]) at the selected locus, is susceptible.")
+                                    println("This infection is infecting host $(host.id).")
+                                    println("Before drug treatment, host $(host.id) has $(length(host.active_infections)) active infections.")
+                                    println("Before drug treatment, host $(host.id) has $(host.n_cleared_infections) cleared infections.")
+                                    if length(host.active_infections) > 1
+                                        j = 1
+                                        for active_infection in host.active_infections
+                                            println("The coinfecting strain $(active_infection.id) has allele $(active_infection.snps[1]) at the selected locus.")
+                                            if active_infection.snps[1] == 1
+                                                println("The coinfecting strain $(active_infection.id) with allele $(active_infection.snps[1]) at the selected locus is susceptible.")
+                                                delete_and_swap_with_end!(host.active_infections, j)
+                                            end
+                                            j += 1
+                                        end
+                                        k = 1
+                                        for active_infection_detectable in host.active_infections_detectable
+                                            if active_infection_detectable.snps[1] == 1
+                                                delete_and_swap_with_end!(host.active_infections_detectable, k)
+                                            end
+                                            k += 1
+                                        end
+                                        println("After drug treatment, host $(host.id) has $(length(host.active_infections)) active infections.")
+                                        println("After drug treatment, host $(host.id) has $(host.n_cleared_infections) cleared infections.")
+                                    else
+                                        empty!(host.active_infections)
+                                        empty!(host.active_infections_detectable)
+                                        println("After drug treatment, host $(host.id) has $(length(host.active_infections)) active infections.")
+                                        println("After drug treatment, host $(host.id) has $(host.n_cleared_infections) cleared infections.")
+                                    end
+                                else
+                                    # If this active infection carries a resistant allele (2).
+                                    # Choose if this active strain could be detected.
+                                    # This choice is based on its detectability in its host.
+                                    println("The infection $(infection.id), with allele $(infection.snps[1]) at the selected locus, is resistant.")
+                                    if rand() < infection.p_detect
+                                        println("The infection $(infection.id), with a probability of detection of $(infection.p_detect), is detectable.")
+                                        println("This infection is infecting host $(host.id) which currently has $(host.n_cleared_infections) cleared infections.")
+                                        push!(host.active_infections_detectable, infection)
+                                    else
+                                        println("The infection $(infection.id), with a probability of detection of $(infection.p_detect), is undetectable.")
+                                        println("This infection is infecting host $(host.id) which currently has $(host.n_cleared_infections) cleared infections.")
+                                    end
+                                    advance_immune_genes!(t, s, host, length(host.active_infections))
+                                    if length(host.active_infections) > s.n_active_infections_per_host_max
+                                        s.n_active_infections_per_host_max = length(host.active_infections)
+                                        println("nb host.active_infections: $(length(host.active_infections))")
+                                        println("s.n_active_infections_per_host_max: $(s.n_active_infections_per_host_max)")
+                                    end
+                                    # This active infections, and the other coinfecting strain(s) carrying a resistant allele (2) will pursue.
+                                    # However, the coinfecting strain(s) carrying a susceptible allele (1) will be cleared without increasing the GI level.
+                                    if length(host.active_infections) > 1
+                                        j = 1
+                                        for active_infection in host.active_infections
+                                            println("The coinfecting strain $(active_infection.id) has allele $(active_infection.snps[1]) at the selected locus.")
+                                            if active_infection.snps[1] == 1
+                                                println("The coinfecting strain $(active_infection.id), with allele $(active_infection.snps[1]) at the selected locus, is susceptible.")
+                                                delete_and_swap_with_end!(host.active_infections, j)
+                                            end
+                                            j += 1
+                                        end
+                                        k = 1
+                                        for active_infection_detectable in host.active_infections_detectable
+                                            if active_infection_detectable.snps[1] == 1
+                                                delete_and_swap_with_end!(host.active_infections_detectable, k)
+                                            end
+                                            k += 1
+                                        end
+                                    end
+                                end
+                            else
+                                # If all the SNPs are neutral.
+                                # All the active infections will be cleared without increasing the GI level.
+                                println("All SNPs are neutral, i.e. all the active infections will be cleared.")
+                                println("Before drug treatment, host $(host.id) has $(length(host.active_infections)) active infections.")
+                                #println("Before drug treatment, host $(host.id) has a GI level of $(host.generalized_immunity).")
+                                empty!(host.active_infections)
+                                empty!(host.active_infections_detectable)
+                                println("After drug treatment, host $(host.id) has $(length(host.active_infections)) active infections.")
+                                #println("After drug treatment, host $(host.id) has a GI level of $(host.generalized_immunity).")
+                            end
+                        else
+                            # If infections are not impacted by malaria drug treatments, or if this active infection is asymptomatic.
+                            # Choose if the asymptomatic active strain could be detected.
+                            # This choice is based on its detectability in its host.
+                            println("Infections are not impacted by treatments, or the infection $(infection.id) is asymptomatic.")
+                            if rand() < infection.p_detect
+                                println("This infection $(infection.id), with a probability of detection of $(infection.p_detect), is detectable.")
+                                println("This infection is infecting host $(host.id) which currently has $(host.n_cleared_infections) cleared infections.")
+                                push!(host.active_infections_detectable, infection)
+                            else
+                                println("This infection $(infection.id), with a probability of detection of $(infection.p_detect), is undetectable.")
+                                println("This infection is infecting host $(host.id) which currently has $(host.n_cleared_infections) cleared infections.")
+                            end
+                            advance_immune_genes!(t, s, host, length(host.active_infections))
+                            if length(host.active_infections) > s.n_active_infections_per_host_max
+                                s.n_active_infections_per_host_max = length(host.active_infections)
+                                println("nb host.active_infections: $(length(host.active_infections))")
+                                println("s.n_active_infections_per_host_max: $(s.n_active_infections_per_host_max)")
+                            end
+                        end
                     end
                 else
                     push!(s.old_infections, infection)
@@ -640,14 +960,17 @@ function get_rate_switching(t, s)
     # Rejection sampling is used to effect the correct rate.
     if !P.whole_gene_immune
         # Switching rate set by total number of alleles.
-        (P.switching_rate * P.n_loci) * P.n_hosts * (s.n_active_infections_per_host_max+s.n_liver_infections_per_host_max)
+        (P.switching_rate * P.n_loci) * P.n_hosts * (s.n_active_infections_per_host_max + s.n_liver_infections_per_host_max)
     else
-        P.switching_rate * P.n_hosts * (s.n_active_infections_per_host_max+s.n_liver_infections_per_host_max)
+        P.switching_rate * P.n_hosts * (s.n_active_infections_per_host_max + s.n_liver_infections_per_host_max)
     end
 end
 
 function do_switching!(t, s, stats)
-    index = rand(CartesianIndices((P.n_hosts, (s.n_active_infections_per_host_max+s.n_liver_infections_per_host_max))))
+    println("do_switching! actually happening, n_hosts: $(P.n_hosts)")
+    println("do_switching! actually happening, n_active_infections_per_host_max: $(s.n_active_infections_per_host_max)")
+    println("do_switching! actually happening, n_liver_infections_per_host_max: $(s.n_liver_infections_per_host_max)")
+    index = rand(CartesianIndices((P.n_hosts, (s.n_active_infections_per_host_max + s.n_liver_infections_per_host_max))))
     host = s.hosts[index[1]]
 
     # Advance host (rebirth or infection activation).
@@ -672,7 +995,34 @@ function do_switching!(t, s, stats)
 
     # If we're at the end, clear the infection and return.
     if infection.expression_index == P.n_genes_per_strain && infection.expression_index_locus == P.n_loci
-        clear_active_infection!(t, s, host, inf_index)
+        #clear_active_infection!(t, s, host, inf_index)
+        ###
+        # Make another "clear_active_infection" function (but with GI).
+        if s.n_cleared_infections % P.sample_infection_duration_every == 0
+            # Calculate and write the infection duration.
+            add_infection_duration!(t, s, host, inf_index)
+        end        
+        s.n_cleared_infections += 1
+        host.n_cleared_infections += 1
+        if P.generalized_immunity
+            host.generalized_immunity += 1
+            println("The GI level of host $(host.id) is $(host.generalized_immunity)")
+        end
+        push!(s.old_infections, host.active_infections[inf_index])
+        delete_and_swap_with_end!(host.active_infections, inf_index)
+        println("Is infection $(infection.id) detectable?")
+        inf_det_index = 1
+        for inf_det in host.active_infections_detectable
+            println("One of the detectable infection: $(inf_det.id)")
+            if infection.id == inf_det.id
+                println("Infection $(inf_det.id) corresponds to the active infection!")
+                act_inf_det = host.active_infections_detectable[inf_det_index]
+                println("Confirmation that infection $(act_inf_det.id) index is $(inf_det_index).")
+                delete_and_swap_with_end!(host.active_infections_detectable, inf_det_index)
+            end
+                inf_det_index += 1
+        end
+        ###
     else
         # Otherwise, advance gene and/or locus expression(s).
         if !P.whole_gene_immune
@@ -750,11 +1100,11 @@ function get_rate_mutation(t, s)
     # The total rate includes both active and liver infections because host state may not be fully up to date,
     # and a liver infection may be activated when host state is updated to the current time.
     # Rejection sampling is used to effect the correct rate.
-    P.mutation_rate * P.n_hosts * (s.n_active_infections_per_host_max+s.n_liver_infections_per_host_max) * P.n_genes_per_strain * P.n_loci
+    P.mutation_rate * P.n_hosts * (s.n_active_infections_per_host_max + s.n_liver_infections_per_host_max) * P.n_genes_per_strain * P.n_loci
 end
 
 function do_mutation!(t, s, stats)
-    index = rand(CartesianIndices((P.n_hosts, (s.n_active_infections_per_host_max+s.n_liver_infections_per_host_max), P.n_genes_per_strain, P.n_loci)))
+    index = rand(CartesianIndices((P.n_hosts, (s.n_active_infections_per_host_max + s.n_liver_infections_per_host_max), P.n_genes_per_strain, P.n_loci)))
     host = s.hosts[index[1]]
     inf_index = index[2]
     expression_index = index[3]
@@ -790,11 +1140,9 @@ function get_rate_ectopic_recombination(t, s)
     # and a liver infection may be activated when host state is updated to the current time.
     # Rejection sampling is used to effect the correct rate.
     P.ectopic_recombination_rate *
-        P.n_hosts * (s.n_active_infections_per_host_max+s.n_liver_infections_per_host_max) *
+        P.n_hosts * (s.n_active_infections_per_host_max + s.n_liver_infections_per_host_max) *
         P.n_genes_per_strain * (P.n_genes_per_strain - 1) / 2.0
 end
-
-
 
 function do_ectopic_recombination!(t, s, stats)
     # Index based on the total number of infections.
@@ -882,9 +1230,7 @@ end
 
 """
     Clear active infection
-
     This function is used by all code where active infections can be cleared:
-
     * Clearance at end of expression sequence during a switching event
     * Clearance
     * Random background clearance events
@@ -902,7 +1248,6 @@ end
 
 """
     Probability that a recombination results in a functional gene.
-
     Version for real-valued breakpoint, used when
     `ectopic_recombination_generates_new_alleles == true`.
 """
@@ -932,7 +1277,6 @@ end
 
 """
     Model for probability that a recombination results in a functional gene.
-
     Version for integer-valued breakpoint, used when
     `ectopic_recombination_generates_new_alleles == false`.
 """
@@ -1012,6 +1356,37 @@ function do_immunity_loss!(t, s, stats)
     false
 end
 
+
+### GENERALIZED IMMUNITY LOSS EVENT ###
+
+function get_rate_generalized_immunity_loss(t, s)
+    P.generalized_immunity_loss_rate * P.n_hosts
+end
+
+function do_generalized_immunity_loss!(t, s, stats)
+    println("Do generalized immunity loss.")
+    index = rand(1:P.n_hosts)
+    host = s.hosts[index]
+    println("Host involved in the generalized immunity loss: $(host.id)")
+
+    # Advance host (rebirth or infection activation).
+    advance_host!(t, s, host)
+
+    # If the host generalized immunity level is null, reject this sample.
+    if host.generalized_immunity < 1
+        println("The host $(host.id) GI level is $(host.generalized_immunity) and cannot be decremented.")
+        return false
+    end
+
+    # Decrement generalized immunity.
+    println("The host $(host.id) GI level is $(host.generalized_immunity) and can be decremented.")
+    println("The host $(host.id) has $(host.n_cleared_infections) cleared infections.")
+    host.generalized_immunity -= 1
+    println("The host $(host.id) GI level after loss is $(host.generalized_immunity).")
+    false
+end
+
+
 ### MISCELLANEOUS FUNCTIONS ###
 
 function next_host_id!(s)
@@ -1046,6 +1421,7 @@ function find_linked_snps(i)
     end
     linked_snps
 end
+
 
 ### IMMUNITY FUNCTIONS ###
 

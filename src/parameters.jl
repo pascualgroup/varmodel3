@@ -376,8 +376,75 @@ keyword constructor for the class.
         The R script "Rscript_Create_LDPairwiseMatrix.R" could be used to
         create a pairwise LD matrix.
     """
-#     snp_pairwise_ld::Union{Array{Float32, 2}, Nothing} = nothing
     snp_pairwise_ld::Union{Vector{Vector{Float64}}, Nothing} = nothing
+
+    """
+        Probability for a naive infection to be detectable.
+    """
+    detectability::Union{Float64, Nothing} = nothing
+
+    """
+        Whether detectability, transmissibility, and pathogenicity are affected
+        by the generalized immunity (GI) level, i.e. the number of cleared
+        infections irrespective of their antigenic diversity. If `true`, the
+        detectability, transmissibility, and pathogenicity (if `drug_treatment`
+        is `true`) of a strain are reduced when the GI level increases. If `false`,
+        the detectability, transmissibility, and pathogenicity are constant.
+    """
+    generalized_immunity::Union{Bool, Nothing} = nothing
+
+    """
+        If `generalized_immunity` is `true`, this is the parameter controlling
+        how fast the generalized immunity level reduces the detectability.
+    """
+    generalized_immunity_detectability::Union{Float32, Nothing} = nothing
+
+    """
+        If `generalized_immunity` is `true`, this is the parameter controlling
+        how fast the generalized immunity level reduces the transmissibility.
+    """
+    generalized_immunity_transmissibility::Union{Float32, Nothing} = nothing
+
+    """
+        If `generalized_immunity` is `true`, this is the rate at which
+        generalized immunity is lost per host.
+    """
+    generalized_immunity_loss_rate::Union{Float64, Nothing} = nothing
+
+    """
+        Whether infections are impacted by malaria drug treatments.
+    """
+    drug_treatment::Union{Bool, Nothing} = nothing
+
+    """
+        If `drug_treatment` is `true`, this is the probability for a naive
+        infection to generate symptoms, i.e. its pathogenicity.
+    """
+    pathogenicity::Union{Float64, Nothing} = nothing
+
+    """
+        If `generalized_immunity` and "`drug_treatment` are `true`, this is the
+        parameter controlling how fast the generalized immunity level reduces
+        the pathogenicity.
+    """
+    generalized_immunity_pathogenicity::Union{Float64, Nothing} = nothing
+
+    """
+        If `drug_treatment` is `true`, whether one of the biallelic SNPs has a
+        susceptible (1) or resistant (2) allele to drug treatments. If `true`,
+        the strains carrying the resistant allele (2) will persist after drug
+        treatments, but the strains carrying the suscetible allele (1) will be
+        purged. If `false`, all the biallelic SNPs are neutral, i.e. susceptible
+        to drug treatment.
+    """
+    resistant_snp::Union{Bool, Nothing} = nothing
+
+    """
+        If `resistant_snp` is `true`, this is the parameter controlling the cost
+        of carrying the resistant allele (2). This cost reduced the detectability,
+        transmissibility, and pathogenicity.
+    """
+    resistant_cost::Union{Float64, Nothing} = nothing
 end
 
 """
@@ -444,6 +511,9 @@ function validate(p::Params)
 
     @assert p.transmissibility !== nothing
     @assert 0.0 <= p.transmissibility  <= 1.0
+
+    @assert p.detectability !== nothing
+    @assert 0.0 < p.detectability  <= 1.0
 
     @assert p.coinfection_reduces_transmission !== nothing
 
@@ -513,10 +583,8 @@ function validate(p::Params)
         if p.distinct_initial_snp_allele_frequencies
             @assert p.initial_snp_allele_frequency !== nothing
             @assert length(p.initial_snp_allele_frequency) == 2
-            @assert p.initial_snp_allele_frequency[1] >= 0.0
-            @assert p.initial_snp_allele_frequency[1] < 1.0
-            @assert p.initial_snp_allele_frequency[2] > 0.0
-            @assert p.initial_snp_allele_frequency[2] <= 1.0
+            @assert 0.0 <= p.initial_snp_allele_frequency[1] < 1.0
+            @assert 0.0 <= p.initial_snp_allele_frequency[2] < 1.0
             @assert p.initial_snp_allele_frequency[1] < p.initial_snp_allele_frequency[2]
         end
         @assert p.snp_linkage_disequilibrium !== nothing
@@ -526,6 +594,30 @@ function validate(p::Params)
             for i in 1:p.n_snps_per_strain
                 @assert length(p.snp_pairwise_ld[i]) == p.n_snps_per_strain
             end
+        end
+    end
+    @assert p.generalized_immunity !== nothing
+    if p.generalized_immunity
+        @assert p.generalized_immunity_loss_rate !== nothing
+        @assert p.generalized_immunity_loss_rate >= 0.0
+        @assert p.generalized_immunity_detectability !== nothing
+        @assert p.generalized_immunity_detectability > 0.0
+        @assert p.generalized_immunity_transmissibility !== nothing
+        @assert p.generalized_immunity_transmissibility > 0.0
+        if p.drug_treatment
+            @assert p.generalized_immunity_pathogenicity !== nothing
+            @assert p.generalized_immunity_pathogenicity > 0.0
+        end
+    end
+    @assert p.drug_treatment !== nothing
+    if p.drug_treatment
+        @assert p.pathogenicity !== nothing
+        @assert 0.0 < p.pathogenicity  <= 1.0
+        @assert p.resistant_snp !== nothing
+        if p.resistant_snp
+            @assert p.n_snps_per_strain > 0
+            @assert p.resistant_cost !== nothing
+            @assert 0.0 < p.resistant_cost <= 1.0
         end
     end
 end
