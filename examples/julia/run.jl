@@ -42,7 +42,7 @@ const P = let
         output_db_filename = "output.sqlite",
 
         summary_period = 30,
-        gene_strain_count_period = t_year,
+        gene_strain_count_period = 30,
 
         host_sampling_period = 30,
         host_sample_size = 100,
@@ -119,6 +119,19 @@ const P = let
         snp_linkage_disequilibrium = false,
 #         snp_linkage_disequilibrium = true,
 #         snp_pairwise_ld = [snp_ld_matrix[:,i] for i in 1:size(snp_ld_matrix)[2]],
+
+        detectability = 0.9,
+        
+		generalized_immunity = false,
+#         generalized_immunity_loss_rate = 0.001,
+#         generalized_immunity_detectability = 0.5,
+#         generalized_immunity_transmissibility = 0.5,
+
+		drug_treatment = false,
+#         pathogenicity = 0.9,
+#         resistant_snp = false,
+#         resistant_cost = 0.9,
+#         generalized_immunity_pathogenicity = 0.75,
     )
 end
 
