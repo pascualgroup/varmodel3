@@ -586,6 +586,8 @@ function do_biting!(t, s, stats)
                 end
             end
         end
+        # Add this infection to the destination host
+        push!(dst_host.liver_infections, dst_inf)
         # Update population wide host liver max.
         s.n_liver_infections_per_host_max = max(s.n_liver_infections_per_host_max, length(dst_host.liver_infections))
     end
