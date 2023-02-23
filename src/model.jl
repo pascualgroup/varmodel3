@@ -874,7 +874,9 @@ function do_rebirth!(t, s, host)
     host.n_cleared_infections = 0
     empty!(host.liver_infections)
     empty!(host.active_infections)
+    empty!(host.active_infections_detectable)
     empty!(host.immunity)
+    host.generalized_immunity = 0
 end
 
 
