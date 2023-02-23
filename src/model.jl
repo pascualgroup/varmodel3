@@ -948,8 +948,18 @@ function do_background_clearance(t, s, stats)
         false
     else
         infection = host.active_infections[inf_index]
-        #println("do_background_clearance actually happening")
         clear_active_infection!(t, s, host, inf_index)
+        inf_det_index = 1
+        for inf_det in host.active_infections_detectable
+            println("One of the detectable infection: $(inf_det.id)")
+            if infection.id == inf_det.id
+                println("Infection $(inf_det.id) corresponds to the active infection!")
+                act_inf_det = host.active_infections_detectable[inf_det_index]
+                println("Confirmation that infection $(act_inf_det.id) index is $(inf_det_index).")
+                delete_and_swap_with_end!(host.active_infections_detectable, inf_det_index)
+            end
+            inf_det_index += 1
+        end
 
         true
     end
@@ -999,22 +1009,9 @@ function do_switching!(t, s, stats)
 
     # If we're at the end, clear the infection and return.
     if infection.expression_index == P.n_genes_per_strain && infection.expression_index_locus == P.n_loci
-        #clear_active_infection!(t, s, host, inf_index)
-        ###
+        clear_active_infection!(t, s, host, inf_index)
         # Make another "clear_active_infection" function (but with GI).
-        if s.n_cleared_infections % P.sample_infection_duration_every == 0
-            # Calculate and write the infection duration.
-            add_infection_duration!(t, s, host, inf_index)
-        end        
-        s.n_cleared_infections += 1
-        host.n_cleared_infections += 1
-        if P.generalized_immunity
-            host.generalized_immunity += 1
-            println("The GI level of host $(host.id) is $(host.generalized_immunity)")
-        end
-        push!(s.old_infections, host.active_infections[inf_index])
-        delete_and_swap_with_end!(host.active_infections, inf_index)
-        println("Is infection $(infection.id) detectable?")
+        host.generalized_immunity += 1
         inf_det_index = 1
         for inf_det in host.active_infections_detectable
             println("One of the detectable infection: $(inf_det.id)")
@@ -1024,9 +1021,8 @@ function do_switching!(t, s, stats)
                 println("Confirmation that infection $(act_inf_det.id) index is $(inf_det_index).")
                 delete_and_swap_with_end!(host.active_infections_detectable, inf_det_index)
             end
-                inf_det_index += 1
+            inf_det_index += 1
         end
-        ###
     else
         # Otherwise, advance gene and/or locus expression(s).
         if !P.whole_gene_immune
@@ -1073,7 +1069,18 @@ function advance_immune_genes!(t, s, host, inf_index)
         # If we're at the end, clear the infection and return.
         if infection.expression_index == P.n_genes_per_strain && infection.expression_index_locus == P.n_loci
             clear_active_infection!(t, s, host, inf_index)
-
+            host.generalized_immunity += 1
+            inf_det_index = 1
+            for inf_det in host.active_infections_detectable
+                println("One of the detectable infection: $(inf_det.id)")
+                if infection.id == inf_det.id
+                    println("Infection $(inf_det.id) corresponds to the active infection!")
+                    act_inf_det = host.active_infections_detectable[inf_det_index]
+                    println("Confirmation that infection $(act_inf_det.id) index is $(inf_det_index).")
+                    delete_and_swap_with_end!(host.active_infections_detectable, inf_det_index)
+                end
+                inf_det_index += 1
+            end
             # Here if deleting an infection, and the indexing changed, then tell the calling function
             # it doesn't advancing its index.
             return false
