@@ -252,6 +252,7 @@ function initialize_state()
                 Weights([snp_allele_freq[snp], 1 - snp_allele_freq[snp]]))
             end
             if P.drug_treatment && P.resistant_snp && infection.snps[1] == 2
+                infection.p_transmit = infection.p_transmit * P.resistant_cost
                 infection.p_detect = infection.p_detect * P.resistant_cost
                 infection.p_symptoms = infection.p_symptoms * P.resistant_cost
             end
