@@ -17,6 +17,8 @@ import pandas as pd
 import argparse
 import random
 import numpy as np
+import warnings
+warnings.simplefilter(action='ignore', category=FutureWarning)
 pd.options.mode.chained_assignment = None
 
 
@@ -74,7 +76,8 @@ def calc_targets(input_file, time, measurement):
                 subsamp.extend(var_samp)
                 genes.extend(var_samp)
                 subset = pd.DataFrame(var_samp, columns = ['gene_id'])
-                subset['strain_id'] = np.repeat(var_strain.strain_id.unique(), len(subset))            
+                subset['strain_id'] = np.repeat(var_strain.strain_id.unique(), len(subset))
+                subset['host_id'] = np.repeat(host, len(subset))
                 dfs.append(subset)
             nb_var_err = len(set(subsamp))
             MOI = 1
@@ -145,9 +148,10 @@ def Prevalence(df1, df2):
     return preval
    
 def PTS(df):
-    if len(df['strain_id'].unique()) > 1000:
-        df = df.sample(n = 1000)
-    g = df.groupby('strain_id')['gene_id'].apply(list).reset_index()
+    if len(df['host_id'].unique()) > 1000:
+        select = np.random.choice(df['host_id'].unique(), size = 1000)
+        df = df[df['host_id'].isin(select)] 
+    g = df.groupby('host_id')['gene_id'].apply(list).reset_index()
     genemat = g.join(pd.get_dummies(g['gene_id'].apply(pd.Series).stack()).sum(level = 0)).drop('gene_id', 1)
     genemat = genemat.iloc[: , 1:]
     genemat = genemat.to_numpy()

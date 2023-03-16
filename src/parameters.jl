@@ -119,6 +119,18 @@ keyword constructor for the class.
     biting_rate::Union{Nothing, Array{Float64}} = nothing
 
     """
+    Biting rate multiplier for each year (optional).
+    Used to apply yearlong interventions that reduce the biting rate.
+
+    `biting_rate_multiplier_by_year[1]` corresponds to the time interval
+    `[0, t_year)`, and so on.
+
+    Dimensions: (t_end / t_year, )
+    """
+    biting_rate_multiplier_by_year::Union{Array{Float64}, Nothing} = nothing
+
+
+    """
     Number of genes in strain.
 
     During an infection, each gene is expressed once, unless the host
@@ -259,6 +271,13 @@ keyword constructor for the class.
         at this value.
     """
     max_host_lifetime::Union{Float32, Nothing} = nothing
+
+    """
+        Background clearance rate due to processes not explicitly modeled.
+
+        Per active infection, per unit time (day).
+    """
+    background_clearance_rate::Union{Float64, Nothing} = nothing
 
     """
         Immigration rate, as a fraction of the non-immigration biting rate.
@@ -405,6 +424,11 @@ function validate(p::Params)
     @assert p.biting_rate !== nothing
     @assert length(p.biting_rate) == p.t_year
 
+    if p.biting_rate_multiplier_by_year !== nothing
+        @assert length(p.biting_rate_multiplier_by_year) == Int(p.t_end / p.t_year)
+        @assert all(0.0 .<= p.biting_rate_multiplier_by_year .<= 1.0)
+    end
+
     @assert p.n_genes_initial !== nothing
     @assert p.n_genes_initial > 0
 
@@ -461,6 +485,9 @@ function validate(p::Params)
     @assert p.max_host_lifetime !== nothing
     @assert p.max_host_lifetime >= p.mean_host_lifetime
 
+    @assert p.background_clearance_rate !== nothing
+    @assert p.background_clearance_rate >= 0.0
+
     @assert p.immigration_rate_fraction !== nothing
     @assert p.immigration_rate_fraction >= 0.0
 
@@ -468,7 +495,7 @@ function validate(p::Params)
         @assert p.n_infections_liver_max >= 0
     end
 
-    if p.distinct_initial_snp_allele_frequencies !== nothing
+    if p.n_infections_active_max !== nothing
         @assert p.n_infections_active_max >= 0
     end
 

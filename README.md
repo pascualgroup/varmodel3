@@ -12,7 +12,6 @@ Based on previous C++ implementations ([varmodel](https://github.com/pascualgrou
 * [Model overview](#Model-overview)
 * [History of changes](#History-of-changes)
 * [Parameters](#Parameters)
-* [Code organization](#Code-organization)
 * [Output database](#Output-database)
 * [Citation](#Citation)
 
@@ -63,7 +62,8 @@ ___
 The parameter names should match the variables defined in `src/parameters.jl`, and the values should match the appropriate [type](https://docs.julialang.org/en/v1/manual/types/).
 
 | Name | Type | Description |
-| :--: | :--: | ----------- | 
+| :--: | :--: | ----------- |
+| `background_clearance_rate` | `Float64` | Background clearance rate due to processes not explicitly modeled |
 | `biting_rate` | `Array{Float64}` | Transmission rate for each day of the year |
 | `coinfection_reduces_transmission` | `Bool` | Whether or not transmissibility is reduced with coinfection |
 | `distinct_initial_snp_allele_frequencies` | `Bool` | Whether the initial allele frequencies of the SNPs are distinct |
@@ -109,11 +109,6 @@ The parameter names should match the variables defined in `src/parameters.jl`, a
 | `whole_gene_immune` | `Bool` | Whether a host gains immunity towards a gene if the host has seen all the alleles |
 
 ___
-## Code organization
-
-TODO
-
-___
 ## Output database
 
 The output database is in [SQLite3 format](https://www.sqlite.org/fileformat.html), which can be easily accessed from [R](https://www.r-project.org/) using the [RSQLite library](https://cran.r-project.org/web/packages/RSQLite/index.html), from [Python](https://www.python.org/) using the built-in [sqlite3 library](https://docs.python.org/3/library/sqlite3.html), or from [Matlab](https://www.mathworks.com/products/matlab.html) using the [mksqlite package](http://mksqlite.sourceforge.net/). We also recommend using [VisiData](https://www.visidata.org/) or the graphical [SQLite browser](https://sqlitebrowser.org/), especially while testing.
@@ -137,4 +132,4 @@ ___
 ## Citation
 
 Please cite this when using the model:
-[Labbé F, He Q, Zhan Q, Tiedje KE, Argyropoulos DC, Tan MH, et al. Neutral vs. non-neutral genetic footprints of *Plasmodium falciparum* multiclonal infections. bioRxiv; 2022. p. 2022.06.27.497801. doi:10.1101/2022.06.27.497801](https://www.biorxiv.org/content/10.1101/2022.06.27.497801v1).
+[Labbé, F., He, Q., Zhan, Q., Tiedje, K.E., Argyropoulos, D.C., Tan, M.H., Ghansah, A., Day, K.P., Pascual, M., 2023. Neutral vs. non-neutral genetic footprints of *Plasmodium falciparum* multiclonal infections. PLOS Computational Biology 19, e1010816. https://doi.org/10.1371/journal.pcbi.1010816](https://journals.plos.org/ploscompbiol/article?id=10.1371/journal.pcbi.1010816)
