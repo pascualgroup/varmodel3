@@ -640,14 +640,17 @@ function get_rate_switching(t, s)
     # Rejection sampling is used to effect the correct rate.
     if !P.whole_gene_immune
         # Switching rate set by total number of alleles.
-        (P.switching_rate * P.n_loci) * P.n_hosts * (s.n_active_infections_per_host_max+s.n_liver_infections_per_host_max)
+        (P.switching_rate * P.n_loci) * P.n_hosts * (s.n_active_infections_per_host_max + s.n_liver_infections_per_host_max)
     else
-        P.switching_rate * P.n_hosts * (s.n_active_infections_per_host_max+s.n_liver_infections_per_host_max)
+        P.switching_rate * P.n_hosts * (s.n_active_infections_per_host_max + s.n_liver_infections_per_host_max)
     end
 end
 
 function do_switching!(t, s, stats)
-    index = rand(CartesianIndices((P.n_hosts, (s.n_active_infections_per_host_max+s.n_liver_infections_per_host_max))))
+    if (s.n_active_infections_per_host_max + s.n_liver_infections_per_host_max < 1)
+        return false
+    end
+    index = rand(CartesianIndices((P.n_hosts, (s.n_active_infections_per_host_max + s.n_liver_infections_per_host_max))))
     host = s.hosts[index[1]]
 
     # Advance host (rebirth or infection activation).
@@ -750,11 +753,14 @@ function get_rate_mutation(t, s)
     # The total rate includes both active and liver infections because host state may not be fully up to date,
     # and a liver infection may be activated when host state is updated to the current time.
     # Rejection sampling is used to effect the correct rate.
-    P.mutation_rate * P.n_hosts * (s.n_active_infections_per_host_max+s.n_liver_infections_per_host_max) * P.n_genes_per_strain * P.n_loci
+    P.mutation_rate * P.n_hosts * (s.n_active_infections_per_host_max + s.n_liver_infections_per_host_max) * P.n_genes_per_strain * P.n_loci
 end
 
 function do_mutation!(t, s, stats)
-    index = rand(CartesianIndices((P.n_hosts, (s.n_active_infections_per_host_max+s.n_liver_infections_per_host_max), P.n_genes_per_strain, P.n_loci)))
+    if (s.n_active_infections_per_host_max + s.n_liver_infections_per_host_max < 1)
+        return false
+    end
+    index = rand(CartesianIndices((P.n_hosts, (s.n_active_infections_per_host_max + s.n_liver_infections_per_host_max), P.n_genes_per_strain, P.n_loci)))
     host = s.hosts[index[1]]
     inf_index = index[2]
     expression_index = index[3]
@@ -790,13 +796,16 @@ function get_rate_ectopic_recombination(t, s)
     # and a liver infection may be activated when host state is updated to the current time.
     # Rejection sampling is used to effect the correct rate.
     P.ectopic_recombination_rate *
-        P.n_hosts * (s.n_active_infections_per_host_max+s.n_liver_infections_per_host_max) *
+        P.n_hosts * (s.n_active_infections_per_host_max + s.n_liver_infections_per_host_max) *
         P.n_genes_per_strain * (P.n_genes_per_strain - 1) / 2.0
 end
 
 
 
 function do_ectopic_recombination!(t, s, stats)
+    if (s.n_active_infections_per_host_max + s.n_liver_infections_per_host_max < 1)
+        return false
+    end
     # Index based on the total number of infections.
     index = rand(CartesianIndices((P.n_hosts, (s.n_active_infections_per_host_max + s.n_liver_infections_per_host_max))))
     host = s.hosts[index[1]]
@@ -995,6 +1004,9 @@ function get_rate_immunity_loss(t, s)
 end
 
 function do_immunity_loss!(t, s, stats)
+    if (s.n_immunities_per_host_max < 1)
+        return false
+    end
     index = rand(CartesianIndices((P.n_hosts, s.n_immunities_per_host_max)))
     host = s.hosts[index[1]]
     immunity_index = index[2]
