@@ -4,7 +4,7 @@ PORT=$(python -c 'import socket; s=socket.socket(); s.bind(("", 0)); print(s.get
 export DB_PORT=${DB_PORT:-$PORT}
 # The user name to use for the DB
 export DB_USER=${DB_USER:-}
-export DB_DATA=${DB_DATA:-/project2/pascualmm/ncollier}
+export DB_DATA=${DB_DATA:-/project2/pascualmm/ncollier/emews-db}
 export DB_MODE=ON
 
 DB_ROOT=/project2/pascualmm/sfw/gcc-10.2.0/postgreql-14.2

@@ -90,8 +90,6 @@ app (void o) rm(string filename) {
     string params = ps[1];
     // submission script should create this directory
     string instance_root = "%s/instances/instance_%s" % (turbine_output, instance);
-    // string dbs[];
-    // string db;
     //foreach i in [0:replicates-1:1] {
     int i = 1;
     stage_code = stage_params % (i, instance_root, params);

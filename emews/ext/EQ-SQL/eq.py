@@ -80,6 +80,7 @@ def init(retry_threshold=0, log_level=logging.WARN):
             DB.connect()
             break
         except db_tools.ConnectionException as e:
+            print("Connection failed", e, flush=True)
             retries += 1
             if retries > retry_threshold:
                 raise(e)

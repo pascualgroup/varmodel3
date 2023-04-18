@@ -43,7 +43,7 @@ EQ_SQL=$( readlink --canonicalize $EMEWS_PROJECT_ROOT/ext/EQ-SQL )
 # PYTHONPATH="/lcrc/project/EMEWS/bebop/repos/probabilistic-sensitivity-analysis:"
 # PYTHONPATH+="/lcrc/project/EMEWS/bebop/repos/panmodel-0.20.0:"
 export PYTHONPATH+="$EMEWS_PROJECT_ROOT/python:$EQ_SQL"
-export PYTHONHOME="/software/python-anaconda-2021.05-el7-x86_64"
+export PYTHONHOME="/software/python-anaconda-2020.11-el8-x86_64"
 # export PYTHONPATH
 # echo "PYTHONPATH: $PYTHONPATH"
 
@@ -56,13 +56,13 @@ export DB_HOST=$CFG_DB_HOST
 export DB_USER=$CFG_DB_USER
 export DB_PORT=$CFG_DB_PORT
 
-export SITE=midway
+export SITE=midway3
 
 export ME_NODES=$CFG_SWEEP_NODES
 export ME_PPN=$CFG_SWEEP_PPN
 export ME_PROCS=$(( ME_NODES * ME_PPN ))
 
-ME_EXPORTS="PYTHONPATH=$EMEWS_PROJECT_ROOT/python:$EMEWS_PROJECT_ROOT/ext/EQ-SQL\n"
+ME_EXPORTS="PYTHONPATH=$EMEWS_PROJECT_ROOT/python:$EMEWS_PROJECT_ROOT/../post_analysis:$EMEWS_PROJECT_ROOT/ext/EQ-SQL\n"
 export ME_EXPORTS
 
 # set machine to your schedule type (e.g. pbs, slurm, cobalt etc.),
@@ -124,14 +124,16 @@ USER_VARS=( )
 # log variables and script to to TURBINE_OUTPUT directory
 
 export TURBINE_LAUNCHER=srun
-export TURBINE_SBATCH_ARGS="--exclusive\n#SBATCH --mail-type=BEGIN"
-export TURBINE_LAUNCH_OPTIONS="--mem-per-cpu=${MEM_PER_CPU} " # \n#SBATCH --exclusive"
-export ME_LAUNCH_OPTIONS="--mem-per-cpu=56000 "
+export TURBINE_SBATCH_ARGS="--exclusive\n#SBATCH --mail-type=BEGIN\n#SBATCH --mem=0"
+# export TURBINE_LAUNCH_OPTIONS="--mem-per-cpu=${MEM_PER_CPU} " # \n#SBATCH --exclusive"
+# export ME_LAUNCH_OPTIONS="--mem-per-cpu=56000 "
 ME_COMMAND="python3 $TARGET_ME -u $UPF_TARGET -m $MEAS_FILE "
 ME_COMMAND+="-t $CFG_RESULT_AT -e $EXPID"
 export ME_COMMAND
 
-PGSQL_LIB=/project2/pascualmm/sfw/gcc-10.2.0/postgreql-14.2/lib
+# PGSQL_LIB=/project2/pascualmm/sfw/gcc-10.2.0/postgreql-14.2/lib
+PGSQL_LIB=/project2/pascualmm/sfw/midway3/gcc-10.2.0/postgreql-14.2/lib
+SLURM_LIB=/software/slurm-current-el8-x86_64/lib/slurm
 
 log_script
 
@@ -152,7 +154,7 @@ swift-t -n $PROCS $MACHINE -p \
     -e DB_PORT \
     -e PYTHONPATH \
     -e PYTHONHOME \
-    -e LD_LIBRARY_PATH=$PGSQL_LIB:$LD_LIBRARY_PATH \
+    -e LD_LIBRARY_PATH=$PGSQL_LIB:$SLURM_LIB:$LD_LIBRARY_PATH \
     $EMEWS_PROJECT_ROOT/swift/sweep_worker_pool.swift $CMD_LINE_ARGS
 
 chmod g+rw $TURBINE_OUTPUT/*.tic

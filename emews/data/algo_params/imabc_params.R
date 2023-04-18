@@ -15,6 +15,6 @@ algo.params <- list(
         sample_inflate = 2,
         verbose = TRUE,
         output_tag = "timestamp",
-        improve_method = "direct"
+        improve_method = "percentile"
     )
 )
