@@ -53,55 +53,62 @@ def CalculTargetsMeas(inputfile, time, distribution, prop):
             df3.columns = ['infection_id', 'expression_index_gene', 'allele_id_1', 'allele_id_2']
             con.close()
             
-            # Filter/reformat data
-            df1 = Times(df1, time)
-            df2 = Times(df2, time)
-            df = df2.merge(df3, left_on = 'infection_id', right_on = 'infection_id')
-            df["gene_id"] = df["allele_id_1"].astype(str) + '_' + df["allele_id_2"].astype(str)
-            
-            # Host subsampling
-            sub = round(prop * len(df['host_id'].unique()))
-            meas = random.sample(list(df['host_id'].unique()), sub)
-            rslt_df = df[df['host_id'].isin(meas)]
-        
-            # Calculate the targets
-            preval = Prevalence(rslt_df, df1)
-            nbstrain = len(set(rslt_df['strain_id']))
-            MOIs = []
-            genes = []
-            subsets = pd.DataFrame(columns = ['strain_id', 'gene_id'])
-            for host in rslt_df['host_id'].unique():
-                var = rslt_df[rslt_df['host_id'] == host]
-                size = max(var['expression_index_gene'])
-                err = pd.read_csv(distribution, sep = '\t').values.tolist()
-                err = pd.DataFrame(err)
-                subsamp = []
-                for strain in var['strain_id'].unique():
-                    var_strain = var[var['strain_id'] == strain]
-                    nb_var_strain = len(var_strain['gene_id'].unique())
-                    samp = int(random.choices(population = np.array(err.iloc[:, 0]), weights = np.array(err.iloc[:, 1]), k = 1)[0])
-                    while (samp > nb_var_strain):
-                         samp = int(random.choices(population = np.array(err.iloc[:, 0]), weights = np.array(err.iloc[:, 1]), k = 1)[0])
-                    var_samp = random.sample(list(var_strain.gene_id), samp)
-                    subsamp.extend(var_samp)
-                    genes.extend(var_samp)
-                    subset = pd.DataFrame(var_samp, columns = ['gene_id'])
-                    subset['strain_id'] = np.repeat(var_strain.strain_id.unique(), len(subset))
-                    subset['host_id'] = np.repeat(host, len(subset))
-                    subsets = subsets.append(subset)
-                nb_var_err = len(set(subsamp))
-                MOI = 1
-                while (nb_var_err > size):
-                    nb_var_err = nb_var_err - size
-                    MOI += 1
-                MOIs.append(MOI)
-            MOIvar = np.asarray(MOIs).mean()
-            pts = PTS(subsets)
-            nbgene = len(np.unique(genes))
-            
-            # Export targets        
-            f.write("{}\t{}\t{}\t{}\t{}\n".format(preval, MOIvar, pts, nbstrain, nbgene))
-            f.close()
+            # If at least one infection was sampled
+            if len(df2) > 0:
+                
+                # Filter/reformat data
+                df1 = Times(df1, time)
+                df2 = Times(df2, time)
+                df = df2.merge(df3, left_on = 'infection_id', right_on = 'infection_id')
+                df["gene_id"] = df["allele_id_1"].astype(str) + '_' + df["allele_id_2"].astype(str)
+
+                # Host subsampling
+                sub = round(prop * len(df['host_id'].unique()))
+                meas = random.sample(list(df['host_id'].unique()), sub)
+                rslt_df = df[df['host_id'].isin(meas)]
+
+                # Calculate the targets
+                preval = Prevalence(rslt_df, df1)
+                nbstrain = len(set(rslt_df['strain_id']))
+                MOIs = []
+                genes = []
+                subsets = pd.DataFrame(columns = ['strain_id', 'gene_id'])
+                for host in rslt_df['host_id'].unique():
+                    var = rslt_df[rslt_df['host_id'] == host]
+                    size = max(var['expression_index_gene'])
+                    err = pd.read_csv(distribution, sep = '\t').values.tolist()
+                    err = pd.DataFrame(err)
+                    subsamp = []
+                    for strain in var['strain_id'].unique():
+                        var_strain = var[var['strain_id'] == strain]
+                        nb_var_strain = len(var_strain['gene_id'].unique())
+                        samp = int(random.choices(population = np.array(err.iloc[:, 0]), weights = np.array(err.iloc[:, 1]), k = 1)[0])
+                        while (samp > nb_var_strain):
+                             samp = int(random.choices(population = np.array(err.iloc[:, 0]), weights = np.array(err.iloc[:, 1]), k = 1)[0])
+                        var_samp = random.sample(list(var_strain.gene_id), samp)
+                        subsamp.extend(var_samp)
+                        genes.extend(var_samp)
+                        subset = pd.DataFrame(var_samp, columns = ['gene_id'])
+                        subset['strain_id'] = np.repeat(var_strain.strain_id.unique(), len(subset))
+                        subset['host_id'] = np.repeat(host, len(subset))
+                        subsets = subsets.append(subset)
+                    nb_var_err = len(set(subsamp))
+                    MOI = 1
+                    while (nb_var_err > size):
+                        nb_var_err = nb_var_err - size
+                        MOI += 1
+                    MOIs.append(MOI)
+                MOIvar = np.asarray(MOIs).mean()
+                pts = PTS(subsets)
+                nbgene = len(np.unique(genes))
+
+                # Export targets        
+                f.write("{}\t{}\t{}\t{}\t{}\n".format(preval, MOIvar, pts, nbstrain, nbgene))
+                f.close()
+            else:
+                # Export targets        
+                f.write("{}\t{}\t{}\t{}\t{}\n".format(0, 0, 0, 0, 0))
+                f.close()
         else:
            sys.exit('Error: provide a valid path to the input file')
     else:
@@ -124,35 +131,42 @@ def CalculTargets(inputfile, time):
         df3.columns = ['infection_id', 'expression_index_gene', 'allele_id_1', 'allele_id_2']
         con.close()
         
-        # Filter/reformat data
-        df1 = Times(df1, time)
-        df2 = Times(df2, time)
-        df = df2.merge(df3, left_on = 'infection_id', right_on = 'infection_id')
-        df["gene_id"] = df["allele_id_1"].astype(str) + '_' + df["allele_id_2"].astype(str)
-        
-        # Calculate the targets
-        preval = Prevalence(df, df1)
-        nbstrain = len(set(df['strain_id']))
-        MOIs = []
-        genes = []
-        for host in df['host_id'].unique():
-            var = df[df['host_id'] == host]
-            size = max(var['expression_index_gene'])
-            nb_var = len(var['gene_id'].unique())
-            var_list = var['gene_id'].unique()
-            genes.extend(var_list)
-            MOI = 1
-            while (nb_var > size):
-                nb_var = nb_var - size
-                MOI += 1
-            MOIs.append(MOI)
-        MOIvar = np.asarray(MOIs).mean()
-        pts = PTS(df)
-        nbgene = len(np.unique(genes))
-        
-        # Export targets        
-        f.write("{}\t{}\t{}\t{}\t{}\n".format(preval, MOIvar, pts, nbstrain, nbgene))
-        f.close()
+        # If at least one infection was sampled
+        if len(df2) > 0:
+            
+            # Filter/reformat data
+            df1 = Times(df1, time)
+            df2 = Times(df2, time)
+            df = df2.merge(df3, left_on = 'infection_id', right_on = 'infection_id')
+            df["gene_id"] = df["allele_id_1"].astype(str) + '_' + df["allele_id_2"].astype(str)
+
+            # Calculate the targets
+            preval = Prevalence(df, df1)
+            nbstrain = len(set(df['strain_id']))
+            MOIs = []
+            genes = []
+            for host in df['host_id'].unique():
+                var = df[df['host_id'] == host]
+                size = max(var['expression_index_gene'])
+                nb_var = len(var['gene_id'].unique())
+                var_list = var['gene_id'].unique()
+                genes.extend(var_list)
+                MOI = 1
+                while (nb_var > size):
+                    nb_var = nb_var - size
+                    MOI += 1
+                MOIs.append(MOI)
+            MOIvar = np.asarray(MOIs).mean()
+            pts = PTS(df)
+            nbgene = len(np.unique(genes))
+
+            # Export targets        
+            f.write("{}\t{}\t{}\t{}\t{}\n".format(preval, MOIvar, pts, nbstrain, nbgene))
+            f.close()
+        else:
+            # Export targets        
+            f.write("{}\t{}\t{}\t{}\t{}\n".format(0, 0, 0, 0, 0))
+            f.close()
     else:
        sys.exit('Error: provide a valid path to the input file')
 
