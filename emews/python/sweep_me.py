@@ -116,7 +116,7 @@ def run(exp_id, upf, measurement, result_at):
                     # props: 0.45, 0.50, 0.57, 0.60, and 0.65
                     # [0.45, 0.50, 0.57, 0.60, 0.65]
                     result = compute_targets(result_str, result_at, measurement, [
-                                             0.45, 0.57, 0.65])
+                                             0.47, 0.57, 0.67])
                     print(f'Deleting {result_str}', flush=True)
                     os.remove(result_str)
                     end_t = datetime.datetime.now()
