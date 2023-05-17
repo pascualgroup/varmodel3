@@ -2,7 +2,7 @@ import argparse
 import eq
 import time
 import csv
-import Targets
+import _targets as targets
 from multiprocessing import Pool, Manager
 import os
 import subprocess
@@ -48,7 +48,7 @@ def compute_targets(input_file, result_at, measurement_file, props):
         inputs = [(input_file, result_at, measurement_file, prop, lock)
                   for prop in props]
         with Pool(3) as p:
-            map_results = p.starmap(Targets.calc_targets_meas, inputs)
+            map_results = p.starmap(targets.calc_targets_meas, inputs)
     # preval, MOIvar, pts, nbstrain, nbgene = Targets.calc_targets_meas(input_file, result_at, measurement_file, prop)
     #  = calc_targets.calc_targets(input_file, result_at, measurement_file)
     # print(map_results)
