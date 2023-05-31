@@ -118,6 +118,21 @@ matrix of allele IDs), and the currently expressed index.
     These SNPs do not contribute to the infection duration or host immune memory.
     """
     snps::Array{SnpId, 1}
+        
+    """
+    Detectability, i.e. probability of detection.
+    """
+    p_detect::Float64
+
+    """
+    Pathogenicity, i.e. probability of generating symptoms.
+    """
+    p_symptoms::Float64
+
+    """
+    Transmmissibility, i.e. probability of transmission.
+    """
+    p_transmit::Float64
 end
 
 """
@@ -145,6 +160,9 @@ Infection arrays are dynamically sized but currently limited to
 
     "Actively expressed infections."
     active_infections::Array{Infection}
+    
+    "Actively expressed infections which are detectable."
+    active_infections_detectable::Array{Infection}
 
     "Counts of finished infections for the host."
     n_cleared_infections::UInt32
@@ -160,6 +178,14 @@ Infection arrays are dynamically sized but currently limited to
     When the level reaches 0, the allele is removed from the dictionary.
     """
     immunity::ImmuneHistory
+    
+    """
+    Generalized immunity.
+    When a host clears an infection it results in an incremented generalized
+    immunity level; generalized immunity loss results in a decremented immunity
+    level.
+    """
+    generalized_immunity::UInt32
 end
 
 """
