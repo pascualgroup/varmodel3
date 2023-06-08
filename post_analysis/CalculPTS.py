@@ -44,9 +44,10 @@ def CalculPTS(inputfile, time):
             df_time = df[df['time'] == time]
             df_time["gene_id"] = df_time["allele_id_1"].astype(str) + '_' + df_time["allele_id_2"].astype(str)
 
-            # Subsample the strains (to allow calculations for runs with very high diversity)
-            if len(df_time['strain_id'].unique()) > 1000:
-                df_time = df_time.sample(n = 1000)
+            # Subsample the hosts (to allow calculations for runs with very high transmission intensity)
+            if len(df['host_id'].unique()) > 1000:
+                select = np.random.choice(df['host_id'].unique(), size = 1000)
+                df = df[df['host_id'].isin(select)]
             
             # Convert data between wide and long forms (matrix output; i.e. 0 or 1 for absent or present gene in that strain).
             g = df_time.groupby('host_id')['gene_id'].apply(list).reset_index()
