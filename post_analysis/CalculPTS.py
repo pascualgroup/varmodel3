@@ -15,6 +15,7 @@ usage: python CalculPTS.py --inputfile '/path/to/file.txt' --time 300
 import os.path
 import sqlite3
 import pandas as pd
+import numpy as np
 import argparse
 import sys
 import warnings
