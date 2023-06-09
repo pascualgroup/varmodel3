@@ -14,6 +14,7 @@ This is a collection of scripts to analyze the sqlite output. Below are notes ab
 * [Convert SNPs in THE REAL McCOIL format](#Convert-SNPs-in-THE-REAL-McCOIL-format)
 * [SNP measurement model](#SNP-measurement-model)
 * [Calculate gene frequency distribution](#Calculate-gene-frequency-distribution)
+* [Calculate diversity indexes](#Calculate-diversity-indexes)
 
 ## Calculate MOIvar
 This script calculates the multiplicity of infection (MOI) per hosts using the *var*coding approach. The *var*coding approach (also termed *var* genotyping or *var* fingerprinting), employs the highly polymorphic sequences encoding the immunogenic DBLα domain of PfEMP1 (*Plasmodium falciparum* erythrocyte membrane protein 1), the major surface antigen of the blood stage of infection ([Rask *et al.* 2010](https://journals.plos.org/ploscompbiol/article?id=10.1371/journal.pcbi.1000933)). The multigene family known as *var* encodes variants of this surface antigen which can reach tens of thousands of variants in endemic populations ([Tonkin-Hill *et al.* 2021](https://journals.plos.org/plosgenetics/article?id=10.1371/journal.pgen.1009269)). The extensive diversity of the *var* gene family together with the very low percentage of *var* genes shared between parasites facilitate measuring MOI by amplifying, pooling, sequencing, and counting the number of DBLα types in a host.
@@ -169,3 +170,20 @@ This script calculates the gene frequency distribution. It uses the `sampled_inf
 | `time` | Time to make the calculations (required) |
 #### Notes
 The calculations only take into account the active infection(s). The input file name should not contain a `.` except before the extension (*e.g.,* `input_file_name.txt`). To run it, ensure that you are using Python v.3.7, and have installed the following dependencies: [os](https://docs.python.org/3/library/os.html), [sqlite3](https://docs.python.org/3/library/sqlite3.html), [pandas](https://pandas.pydata.org/), [argparse](https://docs.python.org/3/library/argparse.html), and [sys](https://docs.python.org/3/library/sys.html).
+
+## Calculate diversity indexes
+This script calculates the Shannon and Simpson diversity indexes of the *var* genes. It uses the `sampled_infections`, `sampled_infection_genes`, and `sampled_hosts` tables from the output database.
+
+#### Example command
+`python CalculDivIndex.py --inputfile '/path/to/file.txt' --time 300 --prop 0.57`
+
+`python CalculDivIndex.py -h` Will print a full list of command arguments.
+#### Command arguments
+| Name | Description |
+| :--: | :---------: | 
+| `inputfile` | Path to the input file (required) |
+| `time` | Time to make the calculations (required) |
+| `prop` | Proportion of host to keep in the calculations (optional) |
+#### Notes
+The input file name should not contain a `.` except before the extension (*e.g.,* `input_file_name.txt`). To run it, ensure that you are using Python v.3.7, and have installed the following dependencies: [os](https://docs.python.org/3/library/os.html), [sqlite3](https://docs.python.org/3/library/sqlite3.html), [pandas](https://pandas.pydata.org/), [argparse](https://docs.python.org/3/library/argparse.html), [sys](https://docs.python.org/3/library/sys.html), [random](https://docs.python.org/3/library/random.html), and [math](https://docs.python.org/3/library/math.html).
+
