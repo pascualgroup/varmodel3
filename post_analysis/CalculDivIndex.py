@@ -68,7 +68,7 @@ def CalculDivIndex(inputfile, time, prop):
             N = df_time["gene_id"].value_counts().sum()            
             sdi = -sum(Shannon(n, N) for n in counts if n != 0)
             
-            # Calculate the Simpson diversity and inverse Simpson diversity indexes:
+            # Calculate the Simpson diversity index and the inverse Simpson index:
             def Simpson(n, N):
                 """ Relative abundance """
                 if n == 0:
@@ -76,20 +76,22 @@ def CalculDivIndex(inputfile, time, prop):
                 else:
                     return float(n)/N
             if prop is not None and (0 < prop <= 1):
-                sidi_err = sum(Simpson(n, N_err)**2 for n in counts_err if n != 0)
-                sidi_err_inv = float(1)/sidi_err 
-            sidi = sum(Simpson(n, N)**2 for n in counts if n != 0)
-            sidi_inv = float(1)/sidi
+                si_err = sum(Simpson(n, N_err)**2 for n in counts_err if n != 0)
+                sid_err = 1 - si_err
+                sii_err = float(1)/si_err 
+            si = sum(Simpson(n, N)**2 for n in counts if n != 0)
+            sid = 1 - si
+            sii = float(1)/si
             
             # Export results:
             outputfile = inputfile.split("/")[-1].split(".")[0] + "_SDI_" + str(time) + "days.txt"
             f = open(outputfile, 'w')
             if prop is not None and (0 < prop <= 1):
-                f.write("Shannon_Diversity_Index\tShannon_Diversity_Index_Err\tSimpson_Diversity_Index\tSimpson_Diversity_Index_Err\tInverse_Simpson_Diversity_Index\tInverse_Simpson_Diversity_Index_Err\n")
-                f.write("{}\t{}\t{}\t{}\t{}\t{}\n".format(sdi, sdi_err, sidi, sidi_err, sidi_inv, sidi_err_inv))
+                f.write("Shannon_Diversity_Index\tShannon_Diversity_Index_Err\tSimpson_Diversity_Index\tSimpson_Diversity_Index_Err\tInverse_Simpson_Index\tInverse_Simpson_Index_Err\n")
+                f.write("{}\t{}\t{}\t{}\t{}\t{}\n".format(sdi, sdi_err, sid, sid_err, sii, sii_err))
             else:
-                f.write("Shannon_Diversity_Index\tSimpson_Diversity_Index\tInverse_Simpson_Diversity_Index\n")
-                f.write("{}\t{}\t{}\n".format(sdi, sidi, sidi_inv))
+                f.write("Shannon_Diversity_Index\tSimpson_Diversity_Index\tInverse_Simpson_Index\n")
+                f.write("{}\t{}\t{}\n".format(sdi, sid, sii))
             f.close()
         else:
              sys.exit('Error: provide a valid time')
