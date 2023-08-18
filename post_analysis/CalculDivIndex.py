@@ -76,7 +76,7 @@ def CalculDivIndex(inputfile, time, prop):
                 else:
                     return float(n)/N
             if prop is not None and (0 < prop <= 1):
-                sidi_err = sum(Simpson(n, N)**2 for n in counts_err if n != 0)
+                sidi_err = sum(Simpson(n, N_err)**2 for n in counts_err if n != 0)
                 sidi_err_inv = float(1)/sidi_err 
             sidi = sum(Simpson(n, N)**2 for n in counts if n != 0)
             sidi_inv = float(1)/sidi
