@@ -50,8 +50,10 @@ Type encapsulating various summary statistics gathered between summary periods.
     n_transmitting_bites::Int = 0
     n_transmissions::Int = 0
     
-    n_switch::Int = 0
+    n_switch_immune::Int = 0
+    n_switch_not_immune::Int = 0
     t_switch_sum::Float64 = 0.0
+    
 end
 
 """
@@ -75,7 +77,8 @@ function reset!(stats::SummaryStats, start_datetime)
     stats.n_transmitting_bites = 0
     stats.n_transmissions = 0
     
-    stats.n_switch = 0
+    stats.n_switch_immune = 0
+    stats.n_switch_not_immune = 0
     stats.t_switch_sum = 0.0
 end
 
@@ -125,7 +128,8 @@ function initialize_database()
     execute(db, """
         CREATE TABLE debug_stats (
             time INTEGER,
-            n_switch INTEGER,
+            n_switch_immune INTEGER,
+            n_switch_not_immune INTEGER,
             t_switch_sum REAL
         );
     """)
@@ -185,7 +189,7 @@ function initialize_database()
         db,
         make_insert_statement(db, "meta", 2),
         make_insert_statement(db, "summary", 13),
-        make_insert_statement(db, "debug_stats", 3),
+        make_insert_statement(db, "debug_stats", 4),
         make_insert_statement(db, "gene_strain_counts", 3),
         make_insert_statement(db, "sampled_hosts", 6),
         make_insert_statement(db, "sampled_infections", 6),
@@ -286,7 +290,8 @@ function write_summary(db, t, s, stats)
     # Write to debug_stats table
     execute(db.debug_stats, (
         t,
-        stats.n_switch,
+        stats.n_switch_immune,
+        stats.n_switch_not_immune,
         stats.t_switch_sum
     ))
 

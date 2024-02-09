@@ -499,7 +499,7 @@ function do_switching!(t, s, stats)
         increment_immunity!(s, host, infection.genes[:, infection.expression_index])
     end
     
-    stats.n_switch += 1
+    stats.n_switch_not_immune += 1
     stats.t_switch_sum += t - infection.t_last_switch
     
     # If we're at the end, clear the infection and return.
@@ -552,7 +552,7 @@ function advance_immuned_genes!(t, s, host, i, stats)
  
     while to_advance
         # Record an instantaneous switching event
-        stats.n_switch += 1
+        stats.n_switch_immune += 1
         
         # Increment immunity level to currently expressed gene or allele.
         if infection.expression_index_locus == P.n_loci
