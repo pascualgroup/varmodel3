@@ -394,7 +394,7 @@ function advance_host!(t, s, host, stats)
                     end
                     push!(host.active_infections, infection)
                     infection.t_expression = t
-                    infection.t_last_switch = t
+                    infection.t_last_switch = infection.t_infection + P.t_liver_stage
 
                     advance_immuned_genes!(t,s,host,length(host.active_infections), stats)
 
@@ -504,6 +504,7 @@ function do_switching!(t, s, stats)
     
     stats.n_switch_not_immune += 1
     stats.t_switch_sum += t - infection.t_last_switch
+    infection.t_last_switch = t
     
     # If we're at the end, clear the infection and return.
     if infection.expression_index == P.n_genes_per_strain && infection.expression_index_locus == P.n_loci
@@ -527,7 +528,6 @@ function do_switching!(t, s, stats)
             infection.expression_index += 1
             infection.expression_index_locus = P.n_loci
         end
-        infection.t_last_switch = t
     end
     
     """
