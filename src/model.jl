@@ -160,6 +160,7 @@ function initialize_state()
         infection.id = infection_id
         infection.t_infection = 0.0
         infection.t_expression = NaN
+        infection.t_last_switch = NaN
         infection.duration = NaN
         infection.strain_id = infection_id
         infection.genes[:,:] = reshape(
@@ -206,6 +207,7 @@ function create_empty_infection()
         id = 0,
         t_infection = NaN,
         t_expression = NaN,
+        t_last_switch = NaN,
         duration = NaN,
         strain_id = StrainId(0),
         genes = fill(AlleleId(0), (P.n_loci, P.n_genes_per_strain)),
@@ -391,6 +393,7 @@ function advance_host!(t, s, host)
                     end
                     push!(host.active_infections, infection)
                     infection.t_expression = t
+                    infection.t_last_switch = t
 
                     advance_immuned_genes!(t,s,host,length(host.active_infections))
 
@@ -496,7 +499,10 @@ function do_switching!(t, s, stats)
     if infection.expression_index_locus == P.n_loci
         increment_immunity!(s, host, infection.genes[:, infection.expression_index])
     end
-
+    
+    stats.n_switch += 1
+    stats.t_switch_sum += t - infection.t_last_switch
+    
     # If we're at the end, clear the infection and return.
     if infection.expression_index == P.n_genes_per_strain && infection.expression_index_locus == P.n_loci
         if s.n_cleared_infections % P.sample_duration == 0
@@ -518,7 +524,8 @@ function do_switching!(t, s, stats)
         else
             infection.expression_index += 1
             infection.expression_index_locus = P.n_loci
-        end 
+        end
+        infection.t_last_switch = t
     end
     
     """

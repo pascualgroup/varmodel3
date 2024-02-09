@@ -30,6 +30,7 @@ struct VarModelDB
     db::DB
     meta::Stmt
     summary::Stmt
+    debug_stats::Stmt
     gene_strain_counts::Stmt
     sampled_hosts::Stmt
     sampled_infections::Stmt
@@ -48,6 +49,9 @@ Type encapsulating various summary statistics gathered between summary periods.
     n_infected_bites_with_space::Int = 0
     n_transmitting_bites::Int = 0
     n_transmissions::Int = 0
+    
+    n_switch::Int = 0
+    t_switch_sum::Float64 = 0.0
 end
 
 """
@@ -70,6 +74,9 @@ function reset!(stats::SummaryStats, start_datetime)
     stats.n_infected_bites_with_space = 0
     stats.n_transmitting_bites = 0
     stats.n_transmissions = 0
+    
+    stats.n_switch = 0
+    stats.t_switch_sum = 0.0
 end
 
 """
@@ -112,6 +119,14 @@ function initialize_database()
             n_transmitting_bites INTEGER,
             n_transmissions INTEGER,
             exec_time INTEGER
+        );
+    """)
+
+    execute(db, """
+        CREATE TABLE debug_stats (
+            time INTEGER,
+            n_switch INTEGER,
+            t_switch_sum REAL
         );
     """)
 
@@ -170,6 +185,7 @@ function initialize_database()
         db,
         make_insert_statement(db, "meta", 2),
         make_insert_statement(db, "summary", 13),
+        make_insert_statement(db, "debug_stats", 3),
         make_insert_statement(db, "gene_strain_counts", 3),
         make_insert_statement(db, "sampled_hosts", 6),
         make_insert_statement(db, "sampled_infections", 6),
@@ -265,6 +281,13 @@ function write_summary(db, t, s, stats)
         stats.n_transmitting_bites,
         stats.n_transmissions,
         exec_time
+    ))
+    
+    # Write to debug_stats table
+    execute(db.debug_stats, (
+        t,
+        stats.n_switch,
+        stats.t_switch_sum
     ))
 
     # Reset counters and elapsed time.

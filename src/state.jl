@@ -80,6 +80,9 @@ matrix of allele IDs), and the currently expressed index.
 
     "Time at which expression starts (enters the asexual cycle)."
     t_expression::Float64
+    
+    "Time of last expression switch"
+    t_last_switch::Float64
 
     """
     Strain identifier, unique across the simulation.
