@@ -367,7 +367,7 @@ function validate(p::Params)
 
     @assert p.n_loci !== nothing
     @assert p.n_loci > 0
-    @assert p.n_loci == 2 # If different, need to revisit ectopic recombination model
+    @assert (p.n_loci == 2) || (p.n_loci == 1) # If different, need to revisit ectopic recombination model
 
     @assert p.n_alleles_per_locus_initial !== nothing
     @assert p.n_alleles_per_locus_initial > 0

@@ -284,8 +284,8 @@ function do_biting!(t, s, stats)
     dst_host = rand(s.hosts)
 
     # Advance host (rebirth or infection activation)
-    advance_host!(t, s, src_host)
-    advance_host!(t, s, dst_host)
+    advance_host!(t, s, src_host, stats)
+    advance_host!(t, s, dst_host, stats)
 
     # The source host must be infected in order to transmit.
     src_active_count = length(src_host.active_infections)
@@ -369,7 +369,7 @@ function do_biting!(t, s, stats)
     end
 end
 
-function advance_host!(t, s, host)
+function advance_host!(t, s, host, stats)
     if t > host.t_death
         # If the host is past its death time
         do_rebirth!(t, s, host)
@@ -395,7 +395,7 @@ function advance_host!(t, s, host)
                     infection.t_expression = t
                     infection.t_last_switch = t
 
-                    advance_immuned_genes!(t,s,host,length(host.active_infections))
+                    advance_immuned_genes!(t,s,host,length(host.active_infections), stats)
 
                     if length(host.active_infections) > s.n_active_infections_per_host_max
                         s.n_active_infections_per_host_max = length(host.active_infections)
@@ -410,7 +410,6 @@ function advance_host!(t, s, host)
     end
     nothing
 end
-
 
 function do_rebirth!(t, s, host)
     host.id = next_host_id!(s)
@@ -433,7 +432,7 @@ function do_immigration!(t, s, stats)
 
     # Sample a random host and advance it (rebirth or infection activation)
     host = rand(s.hosts)
-    advance_host!(t, s, host)
+    advance_host!(t, s, host, stats)
 
     # If host doesn't have an available infection slot, reject this sample.
     if isnothing(P.n_infections_liver_max)
@@ -481,7 +480,7 @@ function do_switching!(t, s, stats)
     host = s.hosts[index[1]]
  
     # Advance host (rebirth or infection activation)
-    advance_host!(t, s, host)
+    advance_host!(t, s, host, stats)
     inf_index = index[2]
 
     # If the infection index is out of range, this is a rejected sample.
@@ -534,7 +533,7 @@ function do_switching!(t, s, stats)
     """
     i = 1
     while i <= length(host.active_infections)
-        if advance_immuned_genes!(t,s,host,i)
+        if advance_immuned_genes!(t, s, host, i, stats)
             # if there is no end of expression and reordering of infections, then index plus 1
             i += 1
         end
@@ -544,46 +543,48 @@ function do_switching!(t, s, stats)
 end
 
 # This function moves the expression index of an infection to its first non-immune allele/gene.
-function advance_immuned_genes!(t, s, host, i)
+function advance_immuned_genes!(t, s, host, i, stats)
 
     # Advance expression until a non-immune gene or allele is reached.
     infection = host.active_infections[i]
     # If the host not immune, stop advancing.
     to_advance = is_immune(host.immunity, infection.genes[:, infection.expression_index],infection.expression_index_locus)
  
- 
     while to_advance
+        # Record an instantaneous switching event
+        stats.n_switch += 1
+        
         # Increment immunity level to currently expressed gene or allele.
         if infection.expression_index_locus == P.n_loci
             increment_immunity!(s, host, infection.genes[:, infection.expression_index])
         end
  
-     # If we're at the end, clear the infection and return.
-     if infection.expression_index == P.n_genes_per_strain && infection.expression_index_locus == P.n_loci
-         if s.n_cleared_infections % P.sample_duration == 0 
-             # Calculate and write the infection duration.
-             add_infectionDuration!(t, s, host, i)
-         end
-         s.n_cleared_infections += 1
-         host.n_cleared_infections += 1
-         delete_and_swap_with_end!(host.active_infections, i)
-         #here if deleting an infection, and the indexing changed, then tell the calling function 
-         #it doesn't advancing its index
-         return false
-     else
-         # Otherwise, advance gene and/or locus expression(s).
-         if P.use_immunity_by_allele  && !P.whole_gene_immune
-             if infection.expression_index_locus == P.n_loci
-                 infection.expression_index += 1
-                 infection.expression_index_locus = 1
-             else
-                 infection.expression_index_locus += 1
-             end
-         else
-             infection.expression_index += 1
-             infection.expression_index_locus = P.n_loci
-         end 
-     end
+        # If we're at the end, clear the infection and return.
+        if infection.expression_index == P.n_genes_per_strain && infection.expression_index_locus == P.n_loci
+            if s.n_cleared_infections % P.sample_duration == 0 
+                # Calculate and write the infection duration.
+                add_infectionDuration!(t, s, host, i)
+            end
+            s.n_cleared_infections += 1
+            host.n_cleared_infections += 1
+            delete_and_swap_with_end!(host.active_infections, i)
+            #here if deleting an infection, and the indexing changed, then tell the calling function 
+            #it doesn't advancing its index
+            return false
+        else
+            # Otherwise, advance gene and/or locus expression(s).
+            if P.use_immunity_by_allele  && !P.whole_gene_immune
+                if infection.expression_index_locus == P.n_loci
+                    infection.expression_index += 1
+                    infection.expression_index_locus = 1
+                else
+                    infection.expression_index_locus += 1
+                end
+            else
+                infection.expression_index += 1
+                infection.expression_index_locus = P.n_loci
+            end 
+        end
         # If the host not immune, stop advancing.
         to_advance = is_immune(host.immunity, infection.genes[:, infection.expression_index],infection.expression_index_locus)
      end
@@ -605,7 +606,7 @@ function do_mutation!(t, s, stats)
     locus = index[4]
 
     # Advance host (rebirth or infection activation)
-    advance_host!(t, s, host)
+    advance_host!(t, s, host, stats)
 
     # If there's no active infection at the drawn index, reject this sample.
     if inf_index > length(host.active_infections)
@@ -640,7 +641,7 @@ function do_ectopic_recombination!(t, s, stats)
     inf_index = index[2]
 
     # Advance host (rebirth or infection activation)
-    advance_host!(t, s, host)
+    advance_host!(t, s, host, stats)
 
     # If there's no active infection at the drawn index, reject this sample.
     if inf_index > length(host.active_infections)
@@ -807,7 +808,7 @@ function do_immunity_loss!(t, s, stats)
     immunity_index = index[2]
 
     # Advance host (rebirth or infection activation)
-    advance_host!(t, s, host)
+    advance_host!(t, s, host, stats)
 
     # If the immunity index is beyond this host's immunity count, reject this sample.
     if immunity_index >  immuneLength(host.immunity)
