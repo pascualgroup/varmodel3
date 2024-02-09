@@ -179,8 +179,8 @@ function initialize_state()
         hosts = hosts,
         old_infections = [],
         n_immunities_per_host_max = 0,
-        n_active_infections_per_host_max = 0,
-        n_liver_infections_per_host_max = 0,
+        n_active_infections_per_host_max = (P.n_infections_active_max === nothing ? 0 : P.n_infections_active_max),
+        n_liver_infections_per_host_max = (P.n_infections_liver_max === nothing ? 0 : P.n_infections_liver_max),
         n_cleared_infections = 0,
         durations = []
     )
@@ -230,6 +230,7 @@ end
 function update_rates!(rates, t, s)
     for event in 1:N_EVENTS
         rates[event] = get_rate(t, s, event)
+#         println("event: $(event), rate: $(rates[event])")
     end
     sum(rates)
 end
@@ -475,6 +476,8 @@ function get_rate_switching(t, s)
 end
 
 function do_switching!(t, s, stats)
+    stats.n_switch_before_rejection += 1
+
     # change to total number of infections instead of active infections alone
     index = rand(CartesianIndices((P.n_hosts, s.n_active_infections_per_host_max)))
     host = s.hosts[index[1]]
