@@ -161,6 +161,8 @@ function initialize_state()
         infection.t_infection = 0.0
         infection.t_expression = NaN
         infection.t_last_switch = NaN
+        infection.n_switches_recorded_not_immune = 0
+        infection.n_switches_recorded_immune = 0
         infection.duration = NaN
         infection.strain_id = infection_id
         infection.genes[:,:] = reshape(
@@ -208,6 +210,8 @@ function create_empty_infection()
         t_infection = NaN,
         t_expression = NaN,
         t_last_switch = NaN,
+        n_switches_recorded_not_immune = 0,
+        n_switches_recorded_immune = 0,
         duration = NaN,
         strain_id = StrainId(0),
         genes = fill(AlleleId(0), (P.n_loci, P.n_genes_per_strain)),
@@ -393,7 +397,7 @@ function advance_host!(t, s, host, stats)
                         infection.expression_index_locus = 1
                     end
                     push!(host.active_infections, infection)
-                    infection.t_expression = t
+                    infection.t_expression = infection.t_infection + P.t_liver_stage
                     infection.t_last_switch = infection.t_infection + P.t_liver_stage
 
                     advance_immuned_genes!(t,s,host,length(host.active_infections), stats)
@@ -493,6 +497,11 @@ function do_switching!(t, s, stats)
     end
     infection = host.active_infections[inf_index]
 
+    @assert !is_immune(
+        host.immunity,
+        infection.genes[:, infection.expression_index], infection.expression_index_locus
+    )
+
     """
     Increment immunity level to currently expressed gene.
     For the partial allele model, expression advance by alleles, but
@@ -502,8 +511,10 @@ function do_switching!(t, s, stats)
         increment_immunity!(s, host, infection.genes[:, infection.expression_index])
     end
     
+    @assert t - infection.t_last_switch > 0.0
     stats.n_switch_not_immune += 1
     stats.t_switch_sum += t - infection.t_last_switch
+    infection.n_switches_recorded_not_immune += 1
     infection.t_last_switch = t
     
     # If we're at the end, clear the infection and return.
@@ -556,6 +567,7 @@ function advance_immuned_genes!(t, s, host, i, stats)
     while to_advance
         # Record an instantaneous switching event
         stats.n_switch_immune += 1
+        infection.n_switches_recorded_immune += 1
         
         # Increment immunity level to currently expressed gene or allele.
         if infection.expression_index_locus == P.n_loci

@@ -84,6 +84,12 @@ matrix of allele IDs), and the currently expressed index.
     "Time of last expression switch"
     t_last_switch::Float64
 
+    "Number of switches recorded not immune"
+    n_switches_recorded_not_immune::UInt64
+
+    "Number of switches recorded immune"
+    n_switches_recorded_immune::UInt64
+
     """
     Strain identifier, unique across the simulation.
 
