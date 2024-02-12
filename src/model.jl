@@ -397,10 +397,11 @@ function advance_host!(t, s, host, stats)
                         infection.expression_index_locus = 1
                     end
                     push!(host.active_infections, infection)
-                    infection.t_expression = infection.t_infection + P.t_liver_stage
-                    infection.t_last_switch = infection.t_infection + P.t_liver_stage
 
-                    advance_immuned_genes!(t,s,host,length(host.active_infections), stats)
+                    infection.t_expression = infection.t_infection + P.t_liver_stage
+                    infection.t_last_switch = infection.t_expression
+
+                    advance_immuned_genes!(infection.t_expression,s,host,length(host.active_infections), stats)
 
                     if length(host.active_infections) > s.n_active_infections_per_host_max
                         s.n_active_infections_per_host_max = length(host.active_infections)
@@ -516,9 +517,13 @@ function do_switching!(t, s, stats)
     stats.t_switch_sum += t - infection.t_last_switch
     infection.n_switches_recorded_not_immune += 1
     infection.t_last_switch = t
+
+    n_switches_so_far = infection.n_switches_recorded_immune + infection.n_switches_recorded_not_immune
+    @assert n_switches_so_far == infection.expression_index
     
     # If we're at the end, clear the infection and return.
     if infection.expression_index == P.n_genes_per_strain && infection.expression_index_locus == P.n_loci
+#         println("Cleared infection. n_switches_so_far = $(n_switches_so_far)")
         if s.n_cleared_infections % P.sample_duration == 0
             # Calculate and write the infection duration.
             add_infectionDuration!(t, s, host, inf_index)
@@ -568,6 +573,7 @@ function advance_immuned_genes!(t, s, host, i, stats)
         # Record an instantaneous switching event
         stats.n_switch_immune += 1
         infection.n_switches_recorded_immune += 1
+        infection.t_last_switch = t # ???
         
         # Increment immunity level to currently expressed gene or allele.
         if infection.expression_index_locus == P.n_loci
