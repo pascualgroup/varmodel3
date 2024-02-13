@@ -113,23 +113,36 @@ end
 function initialize_state()
     println("initialize_state()")
 
+
+
+    # Initialize gene pool as an (n_loci, n_genes_initial) matrix whose columns
+    # are unique randomly generated genes.
+    gene_pool_set = Set()
+    while length(gene_pool_set) < P.n_genes_initial
+        push!(gene_pool_set, rand(1:P.n_alleles_per_locus_initial, P.n_loci))
+    end
+    gene_pool = zeros(AlleleId, P.n_loci, P.n_genes_initial)
+    for (i, gene) in enumerate(gene_pool_set)
+        gene_pool[:,i] = gene
+    end
+
     # Initialize gene pool as an (n_loci, n_genes_initial) matrix filled with
     # allele IDs drawn uniformly randomly in 1:n_alleles_per_locus_initial.
     # and to avoid duplications, 10 times of random numbers are draw and then reduced to a set
-    gene_pool = reshape(
-        rand(1:P.n_alleles_per_locus_initial, P.n_loci * P.n_genes_initial*10),
-        (P.n_loci, P.n_genes_initial*10)
-    )
-    gene_pool_set = Set()
-    i = 1
-    while length(gene_pool_set)<P.n_genes_initial
-        push!(gene_pool_set, gene_pool[:,i])
-        i+=1
-    end
-    gene_pool = Array{Int}(undef, P.n_loci, 0)
-    for gene in gene_pool_set
-        gene_pool = hcat(gene_pool, gene)
-    end
+#     gene_pool = reshape(
+#         rand(1:P.n_alleles_per_locus_initial, P.n_loci * P.n_genes_initial*10),
+#         (P.n_loci, P.n_genes_initial*10)
+#     )
+#     gene_pool_set = Set()
+#     i = 1
+#     while length(gene_pool_set)<P.n_genes_initial
+#         push!(gene_pool_set, gene_pool[:,i])
+#         i+=1
+#     end
+#     gene_pool = Array{Int}(undef, P.n_loci, 0)
+#     for gene in gene_pool_set
+#         gene_pool = hcat(gene_pool, gene)
+#     end
 
     # Initialize n_hosts hosts, all born at t = 0, with lifetime drawn from a
     # distribution, and no initial infections or immunity.
@@ -400,7 +413,7 @@ function advance_host!(t, s, host, stats)
                     infection.t_expression = infection.t_infection + P.t_liver_stage
                     infection.t_last_switch = infection.t_expression
 
-                    advance_immuned_genes!(infection.t_expression,s,host,length(host.active_infections), stats)
+                    advance_immuned_genes!(infection.t_expression,s,host,length(host.active_infections), stats, false)
 
                     if length(host.active_infections) > s.n_active_infections_per_host_max
                         s.n_active_infections_per_host_max = length(host.active_infections)
@@ -551,7 +564,7 @@ function do_switching!(t, s, stats)
     """
     i = 1
     while i <= length(host.active_infections)
-        if advance_immuned_genes!(t, s, host, i, stats)
+        if advance_immuned_genes!(t, s, host, i, stats, true)
             # if there is no end of expression and reordering of infections, then index plus 1
             i += 1
         end
@@ -561,7 +574,7 @@ function do_switching!(t, s, stats)
 end
 
 # This function moves the expression index of an infection to its first non-immune allele/gene.
-function advance_immuned_genes!(t, s, host, i, stats)
+function advance_immuned_genes!(t, s, host, i, stats, because_of_other_infection)
 
     # Advance expression until a non-immune gene or allele is reached.
     infection = host.active_infections[i]
@@ -571,8 +584,11 @@ function advance_immuned_genes!(t, s, host, i, stats)
     while to_advance
         # Record an instantaneous switching event
         stats.n_switch_immune += 1
+        if because_of_other_infection
+            stats.n_switch_immune_because_of_other_infection += 1
+        end
         infection.n_switches_recorded_immune += 1
-        infection.t_last_switch = t
+#         infection.t_last_switch = t
         
         # Increment immunity level to currently expressed gene or allele.
         if infection.expression_index_locus == P.n_loci
