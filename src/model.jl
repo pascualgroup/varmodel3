@@ -280,7 +280,6 @@ function get_rate_biting(t, s)
 end
 
 function do_biting!(t, s, stats)
-
     stats.n_bites += 1
 
     # Uniformly randomly sample infecting host (source) and host being infected
@@ -486,7 +485,7 @@ function do_switching!(t, s, stats)
     # change to total number of infections instead of active infections alone
     index = rand(CartesianIndices((P.n_hosts, s.n_active_infections_per_host_max)))
     host = s.hosts[index[1]]
- 
+
     # Advance host (rebirth or infection activation)
     advance_host!(t, s, host, stats)
     inf_index = index[2]
@@ -573,7 +572,7 @@ function advance_immuned_genes!(t, s, host, i, stats)
         # Record an instantaneous switching event
         stats.n_switch_immune += 1
         infection.n_switches_recorded_immune += 1
-        infection.t_last_switch = t # ???
+        infection.t_last_switch = t
         
         # Increment immunity level to currently expressed gene or allele.
         if infection.expression_index_locus == P.n_loci
