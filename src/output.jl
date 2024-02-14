@@ -233,6 +233,11 @@ function write_output!(db, t, s, stats)
 
 #         println("write_output!($(t))")
 
+        # Get host state up to date
+        for host in s.hosts
+            advance_host!(t, s, host, stats)
+        end
+
         execute(db, "BEGIN TRANSACTION")
 
         if t % P.summary_period == 0
@@ -393,7 +398,7 @@ function write_gene_strain_counts(db, t, s)
     strains::BitSet = BitSet()
 
     for host in s.hosts
-        #count_genes_and_strains!(genes, strains, host.liver_infections)
+        count_genes_and_strains!(genes, strains, host.liver_infections)
         count_genes_and_strains!(genes, strains, host.active_infections)
     end
 

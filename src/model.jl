@@ -254,7 +254,8 @@ end
 
 function get_rate(t, s, event)
     if event == BITING
-        get_rate_biting(t, s)
+        rate = get_rate_biting(t, s)
+        @assert rate == P.n_hosts * P.biting_rate
     elseif event == IMMIGRATION
         get_rate_immigration(t, s)
     elseif event == SWITCHING
@@ -353,9 +354,15 @@ function do_biting!(t, s, stats)
         dst_inf = recycle_or_create_infection(s)
         dst_inf.id = next_infection_id!(s)
         dst_inf.t_infection = t
-        dst_inf.t_expression = NaN
-        dst_inf.expression_index = 0
-        dst_inf.expression_index_locus = 0
+        if P.t_liver_stage == 0.0
+            dst_inf.t_expression = t
+            dst_inf.expression_index = 1
+            dst_inf.expression_index_locus = 1
+        else
+            dst_inf.t_expression = NaN
+            dst_inf.expression_index = 0
+            dst_inf.expression_index_locus = 0
+        end
         dst_inf.duration = NaN
 
         # Construct strain for new infection
@@ -394,7 +401,7 @@ function advance_host!(t, s, host, stats)
         i = 1
         while i <= length(host.liver_infections)
             infection = host.liver_infections[i]
-            if infection.t_infection + P.t_liver_stage < t
+            if infection.t_infection + P.t_liver_stage <= t
                 # println("t = $(t): activating host $(host.id), inf $(infection.id)")
 
                 # If the infection is past the liver stage, remove it from the liver.
