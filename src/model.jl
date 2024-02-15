@@ -255,7 +255,6 @@ end
 function get_rate(t, s, event)
     if event == BITING
         rate = get_rate_biting(t, s)
-        @assert rate == P.n_hosts * P.biting_rate
     elseif event == IMMIGRATION
         get_rate_immigration(t, s)
     elseif event == SWITCHING

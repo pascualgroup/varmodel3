@@ -136,7 +136,9 @@ function initialize_database()
             n_switch_immune INTEGER,
             n_switch_immune_because_of_other_infection INTEGER,
             n_switch_not_immune INTEGER,
-            t_switch_sum REAL
+            t_switch_sum REAL,
+            mean_age REAL,
+            sd_age REAL
         );
     """)
 
@@ -195,7 +197,7 @@ function initialize_database()
         db,
         make_insert_statement(db, "meta", 2),
         make_insert_statement(db, "summary", 13),
-        make_insert_statement(db, "debug_stats", 6),
+        make_insert_statement(db, "debug_stats", 8),
         make_insert_statement(db, "gene_strain_counts", 3),
         make_insert_statement(db, "sampled_hosts", 6),
         make_insert_statement(db, "sampled_infections", 6),
@@ -305,7 +307,9 @@ function write_summary(db, t, s, stats)
         stats.n_switch_immune,
         stats.n_switch_immune_because_of_other_infection,
         stats.n_switch_not_immune,
-        stats.t_switch_sum
+        stats.t_switch_sum,
+        mean((host.t_death - t) for host in s.hosts),
+        std((host.t_death - t) for host in s.hosts)
     ))
 
     # Reset counters and elapsed time.
