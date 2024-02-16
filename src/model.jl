@@ -595,7 +595,7 @@ function advance_immuned_genes!(t, s, host, i, stats, because_of_other_infection
             stats.n_switch_immune_because_of_other_infection += 1
         end
         infection.n_switches_recorded_immune += 1
-#         infection.t_last_switch = t
+        infection.t_last_switch = t
         
         # Increment immunity level to currently expressed gene or allele.
         if infection.expression_index_locus == P.n_loci
