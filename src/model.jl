@@ -208,13 +208,14 @@ end
     `mean_host_lifetime`, truncated at `max_host_lifetime`.
 """
 function draw_host_lifetime()
-    dist = Exponential(P.mean_host_lifetime)
-    while true
-        lifetime = rand(dist)
-        if lifetime < P.max_host_lifetime
-            return lifetime
-        end
-    end
+#     dist = Exponential(P.mean_host_lifetime)
+#     while true
+#         lifetime = rand(dist)
+#         if lifetime < P.max_host_lifetime
+#             return lifetime
+#         end
+#     end
+    min(rand(Exponential(P.mean_host_lifetime)), P.max_host_lifetime)
 end
 
 function create_empty_infection()
