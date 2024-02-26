@@ -24,8 +24,12 @@ const N_EVENTS = 6
 const EVENTS = collect(1:N_EVENTS)
 const (BITING, IMMIGRATION, SWITCHING, MUTATION, ECTOPIC_RECOMBINATION, IMMUNITY_LOSS) = EVENTS
 
-function run()
-    db = initialize_database()
+function run(; t_end = P.t_end, suppress_output = false)
+    db = if suppress_output
+        nothing
+    else
+        initialize_database()
+    end
 
     # Seed the random number generator using the provided seed,
     # or, if absent, by generating one from the OS's source of entropy.
@@ -35,7 +39,10 @@ function run()
         P.rng_seed
     end
     Random.seed!(rng_seed)
-    execute(db.meta, ("rng_seed", rng_seed))
+
+    if db !== nothing
+        execute(db.meta, ("rng_seed", rng_seed))
+    end
 
     # Start recording elapsed time
     start_datetime = now()
@@ -57,7 +64,7 @@ function run()
     total_rate = sum(rates)
 
     # Loop events until end of simulation
-    while total_rate > 0.0 && t < P.t_end
+    while total_rate > 0.0 && t < t_end
         # Draw next time with rate equal to the sum of all event rates
         dt = rand(Exponential(1.0 / total_rate))
         @assert dt > 0.0 && !isinf(dt)
@@ -94,11 +101,15 @@ function run()
 
     elapsed_time = Dates.value(now() - start_datetime) / 1000.0
     println("elapsed time (s): $(elapsed_time)")
-    execute(db.meta, ("elapsed_time", elapsed_time))
+    if db !== nothing
+        execute(db.meta, ("elapsed_time", elapsed_time))
+    end
 
     went_extinct = total_rate == 0.0
     println("went extinct? $(went_extinct)")
-    execute(db.meta, ("went_extinct", Int64(went_extinct)))
+    if db !== nothing
+        execute(db.meta, ("went_extinct", Int64(went_extinct)))
+    end
 end
 
 function recompute_rejection_upper_bounds!(s)

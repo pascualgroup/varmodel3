@@ -224,6 +224,10 @@ end
 ### OUTPUT FUNCTIONS ###
 
 function write_output!(db, t, s, stats)
+    if db === nothing
+        return
+    end
+
     if P.t_burnin !== missing && t < P.t_burnin
         return
     end
@@ -254,7 +258,7 @@ function write_output!(db, t, s, stats)
         if t % P.gene_strain_count_period == 0
             write_gene_strain_counts(db, t, s)
         end
-
+        
         execute(db, "COMMIT")
         flush(stdout)
     end
