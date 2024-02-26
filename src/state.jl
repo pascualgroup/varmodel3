@@ -275,6 +275,21 @@ management auxiliaries.
     n_cleared_infections::Int
 
     durations::Array{infectionDuration}
+
+    """
+        Exponential distribution
+    """
+    exp_dist::Exponential
+
+    """
+        Batched exponential draws.
+    """
+    exp_draws::MVector{P.rng_batch_size, Float64}
+
+    """
+        Index of next exponential draw.
+    """
+    next_exp_draw_index::Int
 end
 
 """

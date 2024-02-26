@@ -66,7 +66,7 @@ function run(; t_end = P.t_end, suppress_output = false)
     # Loop events until end of simulation
     while total_rate > 0.0 && t < t_end
         # Draw next time with rate equal to the sum of all event rates
-        dt = rand(Exponential(1.0 / total_rate))
+        dt = draw_exponential(s) / total_rate
         @assert dt > 0.0 && !isinf(dt)
 
         # At each integer time, write output/state verification (if necessary),
@@ -208,8 +208,20 @@ function initialize_state()
         n_active_infections_per_host_max = (P.n_infections_active_max === nothing ? 0 : P.n_infections_active_max),
         n_liver_infections_per_host_max = (P.n_infections_liver_max === nothing ? 0 : P.n_infections_liver_max),
         n_cleared_infections = 0,
-        durations = []
+        durations = [],
+        exp_dist = Exponential(1.0),
+        exp_draws = MVector{P.rng_batch_size, Float64}(undef),
+        next_exp_draw_index = 1
     )
+end
+
+function draw_exponential(s)
+    if s.next_exp_draw_index == 1
+        rand!(s.exp_dist, s.exp_draws)
+    end
+    draw = s.exp_draws[s.next_exp_draw_index]
+    s.next_exp_draw_index = 1 + mod(s.next_exp_draw_index, P.rng_batch_size)
+    draw
 end
 
 """

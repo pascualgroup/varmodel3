@@ -311,6 +311,13 @@ keyword constructor for the class.
     """
     whole_gene_immune::Union{Bool, Nothing} = nothing
 
+    """
+        Batch size for batched exponential draws.
+        Exponential draws are a significant percent of simulation time;
+        drawing them in large batches enables the use of vector (SIMD) instructions
+        for a ~ 4x RNG speedup in isolated tests.
+    """
+    rng_batch_size::Int = 10000000
 end
 
 """
