@@ -13,6 +13,10 @@ const HostId = UInt32
 const InfectionId = UInt32
 const GeneId = UInt32
 const SnpId = UInt8
+const GeneGroupId = UInt8
+
+
+
 
 const AlleleId = if P.ectopic_recombination_generates_new_alleles
     UInt32
@@ -23,9 +27,11 @@ end
 const StrainId = UInt32
 const ExpressionIndex = UInt8
 const ExpressionIndexLocus = UInt8
+# const ExpressionIndexLocus = Float32
 const ImmunityLevel = UInt16 # UInt8
 const Gene = SVector{P.n_loci, AlleleId}  # Immutable fixed-size vector
 const MGene = MVector{P.n_loci, AlleleId} # Mutable fixed-size vector
+
 
 struct ImmuneHistory
     vd::Vector{Dict{AlleleId, ImmunityLevel}}
@@ -300,6 +306,12 @@ management auxiliaries.
     Used to pick an allele at each SNP during the initialization and immigration.
     """
     initial_snp_allele_frequencies::Array{Float64, 1}
+
+    """
+    Dictionary storing the map between gene (based on its two alleles) and its group id. 
+    Properties are defined at the group level, instead of individual level.
+    """
+    association_genes_to_var_groups::Dict{Gene, GeneGroupId}
 end
 
 

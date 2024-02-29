@@ -166,6 +166,7 @@ function initialize_database()
         CREATE TABLE sampled_infection_genes(
             infection_id INTEGER,
             expression_index INTEGER,
+            group_id INTEGER,
             $(allele_columns),
             UNIQUE(infection_id, expression_index) ON CONFLICT IGNORE
         );
@@ -205,7 +206,7 @@ function initialize_database()
         make_insert_statement(db, "sampled_hosts", 6),
         make_insert_statement(db, "sampled_infections", 6),
         make_insert_statement(db, "sampled_durations", 6),
-        make_insert_statement(db, "sampled_infection_genes", 2 + P.n_loci),
+        make_insert_statement(db, "sampled_infection_genes", 2 + 1 + P.n_loci),
         make_insert_statement(db, "sampled_immunity", 5),
         make_insert_statement(db, "sampled_infection_snps", 3),
         make_insert_statement(db, "initial_snp_allele_frequencies", 2)
@@ -234,9 +235,7 @@ function write_output!(db, t, s, stats)
         return
     end
 
-    if t % minimum(
-        (P.summary_period, P.host_sampling_period, P.gene_strain_count_period,)
-    ) == 0
+    if t % P.summary_period == 0 || t % P.gene_strain_count_period == 0 || (((P.t_host_sampling_start !== missing && t >= P.t_host_sampling_start) || P.t_host_sampling_start === missing) && t % P.t_year in P.host_sampling_period)
         println("t = $(t)")
 
         execute(db, "BEGIN TRANSACTION")
@@ -246,13 +245,13 @@ function write_output!(db, t, s, stats)
             write_duration!(db, t, s)
         end
 
-        if t % P.host_sampling_period == 0
-            write_host_samples(db, t, s)
-        end
-
-        if t % P.gene_strain_count_period == 0
+        if t % P.gene_strain_count_period  == 0 
             write_gene_strain_counts(db, t, s)
-        end
+        end    
+        
+        if ((P.t_host_sampling_start !== missing && t >= P.t_host_sampling_start) || P.t_host_sampling_start === missing) && t % P.t_year in P.host_sampling_period
+            write_host_samples(db, t, s)
+        end        
 
         execute(db, "COMMIT")
     end
@@ -322,11 +321,11 @@ function write_host_samples(db, t, s)
         )
 
         for infection in host.liver_infections
-            write_infection(db, t, host, infection)
+            write_infection(db, t, host, infection, s)
         end
 
         for infection in host.active_infections
-            write_infection(db, t, host, infection)
+            write_infection(db, t, host, infection, s)
         end
 
     end
@@ -346,7 +345,7 @@ For each infection, the `sampled_infection_genes` table contains one row for
 each expression index, with the final columns containing the allele IDs for each
 locus.
 """
-function write_infection(db, t, host, infection)
+function write_infection(db, t, host, infection, s)
     execute(
         db.sampled_infections,
         (
@@ -355,7 +354,10 @@ function write_infection(db, t, host, infection)
         )
     )
     for i in 1:P.n_genes_per_strain
-        execute(db.sampled_infection_genes, vcat([infection.id, i], infection.genes[:,i]))
+        gene_id = Gene(infection.genes[:,i])
+        @assert haskey(s.association_genes_to_var_groups, gene_id)
+        gene_group_id = s.association_genes_to_var_groups[gene_id]
+        execute(db.sampled_infection_genes, vcat([infection.id, i], gene_group_id, infection.genes[:,i]))
     end
     if P.n_snps_per_strain > 0
         for i in 1:P.n_snps_per_strain

@@ -14,7 +14,7 @@ keyword constructor for the class.
     Runs should be reproducible with the same seed
     on the same version of Julia, on the same operating system,
     on the same processor architecture.
-    (It it is possible that some of those could vary while preserving reproducibility.)
+    (It is possible that some of those could vary while preserving reproducibility.)
     """
     rng_seed::Union{Int, Nothing} = nothing
 
@@ -50,8 +50,8 @@ keyword constructor for the class.
 
     To turn off host sampling, set this to `nothing` (`null` in JSON).
     """
-    host_sampling_period::Union{Int, Nothing} = nothing
-
+    host_sampling_period::Union{Vector{Int}, Nothing} = nothing
+    
     """
     Number of hosts to sample at each sampling period.
     """
@@ -187,7 +187,8 @@ keyword constructor for the class.
     ectopic_recombination_rate * n_genes_per_strain * (n_genes_per_strain - 1) / 2
     ```
     """
-    ectopic_recombination_rate::Union{Float64, Nothing} = nothing
+    # ectopic_recombination_rate::Union{Float64, Nothing} = nothing
+    ectopic_recombination_rate::Union{Vector{Float64}, Nothing} = nothing
 
     """
     Probability that an ectopic recombination is a conversion.
@@ -254,7 +255,8 @@ keyword constructor for the class.
 
     If the host is immune to the gene, then switching is instantaneous.
     """
-    switching_rate::Union{Float64, Nothing} = nothing
+    switching_rate::Union{Vector{Float64}, Nothing} = nothing
+    # switching_rate::Union{Float64, Nothing} = nothing
 
     """
     Mean of exponential distribution used to draw host lifetime.
@@ -378,6 +380,29 @@ keyword constructor for the class.
     """
 #     snp_pairwise_ld::Union{Array{Float32, 2}, Nothing} = nothing
     snp_pairwise_ld::Union{Vector{Vector{Float64}}, Nothing} = nothing
+
+    """
+        below is the parameters added for implementing different var groups 
+        in this Julia code; also modified switching_rate paremeter above from 
+        a single value to a vector with elements corresponding to different
+        groups.
+    """
+    var_groups_functionality::Union{Vector{Float32}, Nothing} = nothing
+    var_groups_ratio::Union{Vector{Float32}, Nothing} = nothing
+    var_groups_fix_ratio::Union{Bool, Nothing} = nothing
+    var_groups_do_not_share_alleles::Union{Bool, Nothing} = nothing
+    var_groups_high_functionality_express_earlier::Union{Bool, Nothing} = nothing
+    gene_group_id_association_recomputation_period::Union{Int, Nothing} = nothing
+    
+    """
+        below is the additional parameters. 
+    """
+    irs_start_year::Union{Int, Nothing} = nothing
+    irs_duration::Union{Int, Nothing} = nothing
+    biting_rate_factor::Union{Float64, Nothing} = nothing
+    t_host_sampling_start::Union{Int, Nothing} = nothing 
+    biting_rate_mean::Union{Float64, Nothing} = nothing
+    # t_decimal_advance::Union{Float64, Nothing} = nothing
 end
 
 """
@@ -392,8 +417,9 @@ function validate(p::Params)
     output_dir = dirname(p.output_db_filename)
     @assert output_dir == "" || isdir(output_dir)
 
-    @assert p.host_sampling_period !== nothing
-    @assert p.host_sampling_period > 0
+    @assert all(p.host_sampling_period.!==nothing)
+    @assert all(p.host_sampling_period.>=0)
+
     @assert p.host_sample_size !== nothing
     @assert p.host_sample_size >= 0
 
@@ -437,18 +463,20 @@ function validate(p::Params)
 
     @assert p.n_loci !== nothing
     @assert p.n_loci > 0
-    @assert p.n_loci == 2 # If different, need to revisit ectopic recombination model
+    # @assert p.n_loci == 2 # If different, need to revisit ectopic recombination model
+    @assert p.n_loci >= 1
 
     @assert p.n_alleles_per_locus_initial !== nothing
     @assert p.n_alleles_per_locus_initial > 0
 
     @assert p.transmissibility !== nothing
-    @assert 0.0 <= p.transmissibility  <= 1.0
+    @assert 0.0 <= p.transmissibility <= 1.0
 
     @assert p.coinfection_reduces_transmission !== nothing
 
     @assert p.ectopic_recombination_rate !== nothing
-    @assert p.ectopic_recombination_rate >= 0.0
+    # @assert p.ectopic_recombination_rate >= 0.0
+    @assert all(p.ectopic_recombination_rate .>= 0.0)
 
     @assert !isnothing(p.p_ectopic_recombination_is_conversion)
     @assert 0.0 <= p.p_ectopic_recombination_is_conversion <= 1.0
@@ -477,7 +505,8 @@ function validate(p::Params)
     @assert p.t_liver_stage >= 0.0
 
     @assert p.switching_rate !== nothing
-    @assert p.switching_rate >= 0.0
+    @assert all(p.switching_rate .>= 0.0)
+    # @assert p.switching_rate >= 0.0
 
     @assert p.mean_host_lifetime !== nothing
     @assert p.mean_host_lifetime >= 0.0
@@ -528,4 +557,29 @@ function validate(p::Params)
             end
         end
     end
+
+    """
+    check the parameters for different var groups implementation.
+    """
+    @assert p.var_groups_functionality !== nothing
+    @assert all(p.var_groups_functionality .>= 0) && all(p.var_groups_functionality .<= 1)
+    @assert p.var_groups_ratio !== nothing
+    @assert all(p.var_groups_ratio .>= 0) && all(p.var_groups_ratio .<= 1)
+    @assert p.var_groups_fix_ratio !== nothing
+    @assert p.var_groups_do_not_share_alleles !== nothing
+    @assert p.var_groups_high_functionality_express_earlier !== nothing
+    @assert all(round.(p.var_groups_ratio * p.n_genes_initial) .== p.var_groups_ratio * p.n_genes_initial) # check the number of genes in each group is an integer number
+    @assert all(round.(p.var_groups_ratio * p.n_alleles_per_locus_initial) .== p.var_groups_ratio * p.n_alleles_per_locus_initial)
+    @assert p.gene_group_id_association_recomputation_period !== nothing
+    @assert p.gene_group_id_association_recomputation_period > 0
+    
+    """
+    check additional params
+    """
+    @assert p.irs_start_year === nothing || p.irs_start_year >= 0 
+    @assert p.irs_duration === nothing || p.irs_duration >= 0 
+    @assert p.biting_rate_factor === nothing || p.biting_rate_factor >= 0.0
+    @assert p.t_host_sampling_start === nothing || p.t_host_sampling_start >= 0
+    @assert p.biting_rate_mean !== nothing && p.biting_rate_mean > 0.0
+    # @assert p.t_decimal_advance !== nothing && p.t_decimal_advance > 0.0
 end

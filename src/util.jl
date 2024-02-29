@@ -57,7 +57,8 @@ end
 """
 Copies a random sample of the columns of `src1` and `src2` to `dst`.
 """
-function sample_columns_from_two_matrices_to!(dst, src1, src2)
+
+function sample_columns_from_two_matrices_to_util!(dst, src1, src2)
     m_dst = size(dst)[2]
     m_src_1 = size(src1)[2]
     m_src_2 = size(src2)[2]
@@ -70,6 +71,55 @@ function sample_columns_from_two_matrices_to!(dst, src1, src2)
             dst[:, i_dst] = src1[:, i_src]
         else
             dst[:, i_dst] = src2[:, i_src - m_src_1]
+        end
+    end
+    nothing
+end
+
+
+
+function sample_columns_from_two_matrices_to_util2!(dst, src1, src2, P, s, infection_genes_index_var_groups)
+    if !P.var_groups_fix_ratio
+        sample_columns_from_two_matrices_to_util!(dst, src1, src2)
+    else
+        # extract genes of the specific group from two source strains.
+        src1_genes_all_groups = []
+        src2_genes_all_groups = []
+        for group_id in 1:length(P.var_groups_ratio)
+            push!(src1_genes_all_groups, [])
+            push!(src2_genes_all_groups, [])
+        end
+        
+        for i in 1:size(src1)[2]
+            src1_gene = Gene(src1[:, i])
+            # @assert haskey(s.association_genes_to_var_groups, src1_gene)
+            src1_gene_group_id = s.association_genes_to_var_groups[src1_gene]
+            push!(src1_genes_all_groups[src1_gene_group_id], src1[:, i])
+        end
+        for i in 1:size(src2)[2]    
+            src2_gene = Gene(src2[:, i])
+            # @assert haskey(s.association_genes_to_var_groups, src2_gene)
+            src2_gene_group_id = s.association_genes_to_var_groups[src2_gene]
+            push!(src2_genes_all_groups[src2_gene_group_id], src2[:, i])
+        end
+        
+        for group_id in 1:length(P.var_groups_ratio)
+            dst_index = infection_genes_index_var_groups[group_id]
+            src1_genes_group_id_vec = src1_genes_all_groups[group_id]
+            # @assert length(src1_genes_group_id_vec) == round(Int, P.var_groups_ratio[group_id] * P.n_genes_per_strain) 
+            src1_genes_group_id = zeros(AlleleId, P.n_loci, length(src1_genes_group_id_vec))
+            for j in 1:length(src1_genes_group_id_vec)
+                src1_genes_group_id[:,j] = src1_genes_group_id_vec[j]
+            end
+            src2_genes_group_id_vec = src2_genes_all_groups[group_id]
+            # @assert length(src2_genes_group_id_vec) == round(Int, P.var_groups_ratio[group_id] * P.n_genes_per_strain) 
+            src2_genes_group_id = zeros(AlleleId, P.n_loci, length(src2_genes_group_id_vec))
+            for k in 1:length(src2_genes_group_id_vec)
+                src2_genes_group_id[:,k] = src2_genes_group_id_vec[k]
+            end
+            dst_genes_group_id = zeros(AlleleId, P.n_loci, length(dst_index))
+            sample_columns_from_two_matrices_to_util!(dst_genes_group_id, src1_genes_group_id, src2_genes_group_id)
+            dst[:, dst_index] = dst_genes_group_id
         end
     end
     nothing

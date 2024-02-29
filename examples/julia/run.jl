@@ -25,7 +25,7 @@ const P = let
     daily_biting_rate_multiplier = readdlm("../mosquito_population.txt", Float64)[:,1]
     #snp_ld_matrix = readdlm("../pairwise_ld_coefficient_24snps.txt", Float64)
 
-    t_end_years = 111
+    t_end_years = 100
     t_end = t_end_years * t_year
 
     # Uncomment this, and argument to Params() below, to enable an intervention
@@ -33,7 +33,7 @@ const P = let
 #     biting_rate_multiplier_by_year = repeat([1.0], t_end_years)
 #     biting_rate_multiplier_by_year[61:62] .= 0.5
 
-    t_burnin_years = 61
+    t_burnin_years = 80
     t_burnin = t_burnin_years * t_year
 
     Params(
@@ -58,7 +58,7 @@ const P = let
         t_year = t_year,
         t_end = t_end,
 
-        t_burnin = t_end,
+        t_burnin = t_burnin,
 
         n_hosts = 10000,
         n_initial_infections = 20,
@@ -68,12 +68,13 @@ const P = let
 
         n_loci = 2,
 
-        n_alleles_per_locus_initial = 960,
+        n_alleles_per_locus_initial = 960, 
 
-        transmissibility = 0.5,
+        transmissibility = 1,
         coinfection_reduces_transmission = true,
 
-        ectopic_recombination_rate = 1.8e-7,
+        # ectopic_recombination_rate = 1.8e-7,
+        ectopic_recombination_rate = [4.242641e-4, 4.242641e-4],
         p_ectopic_recombination_is_conversion = 0.0,
 
         ectopic_recombination_generates_new_alleles = false,
@@ -91,7 +92,8 @@ const P = let
 
         t_liver_stage = 14.0,
 
-        switching_rate = 1.0/6.0,
+        switching_rate = [1.0/6.0, 1.0/6.0],
+        # switching_rate = 1.0/6.0,
 
         mean_host_lifetime = 30 * t_year,
         max_host_lifetime = 80 * t_year,
@@ -100,17 +102,17 @@ const P = let
 
         immigration_rate_fraction = 0.0026,
 
-        n_infections_liver_max = 10,
-        n_infections_active_max = 10,
+        n_infections_liver_max = 20,
+        n_infections_active_max = 20,
 
-        biting_rate = 0.0005 * daily_biting_rate_multiplier,
+        biting_rate = 0.00002 * daily_biting_rate_multiplier, # 0.0005
 
 #         biting_rate_multiplier_by_year = biting_rate_multiplier_by_year,
 
         migrants_match_local_prevalence = true,
         migration_rate_update_period = 30,
 
-        n_snps_per_strain = 24,
+        n_snps_per_strain = 0,
 
         distinct_initial_snp_allele_frequencies = false,
 #         distinct_initial_snp_allele_frequencies = true,
@@ -119,6 +121,16 @@ const P = let
         snp_linkage_disequilibrium = false,
 #         snp_linkage_disequilibrium = true,
 #         snp_pairwise_ld = [snp_ld_matrix[:,i] for i in 1:size(snp_ld_matrix)[2]],
+
+
+        
+        # parameters for var groups implementation
+        var_groups_functionality = [1, 1],
+        var_groups_ratio = [0.25, 0.75],
+        var_groups_fix_ratio = true,
+        var_groups_do_not_share_alleles = true,
+        var_groups_high_functionality_express_earlier = true,
+        gene_group_id_association_recomputation_period = 30,
     )
 end
 

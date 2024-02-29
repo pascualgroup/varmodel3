@@ -26,7 +26,6 @@ string biting_rate_multiplier_file = argv("biting_rate_multiplier_file");
 string default_params_file = argv("default_params_file");
 string measurement_file = argv("measurement_file");
 string result_at = argv("result_at");
-string prev_result_file = argv("prev_result_file");
 
 string parse_params_template = """
 import json
@@ -96,14 +95,6 @@ result_json = json.dumps({'MOI': MOIvar, 'prevalence': preval, 'numberuniquegene
 os.remove(input_file)
 """;
 
-string precalc_result_code = """
-import precomputed_results
-
-instance = %s
-result_file = '%s'
-result = precomputed_results.get_result(instance, result_file)
-""";
-
 app (file out, file err) run(string instance_dir) {
     "bash" model_sh varmodel_x instance_dir @stdout=out @stderr=err;
 }
@@ -112,35 +103,28 @@ app (void o) rm(string filename) {
     "rm" filename;
 }
 
-// (string result) obj(string params_str) {
-//     string ps[] = split(params_str, "!");
-//     string instance = ps[0];
-//     string params = ps[1];
-//     // submission script should create this directory
-//     string instance_root = "%s/instances/instance_%s" % (turbine_output, instance);
-//     // string dbs[];
-//     string db;
-//     //foreach i in [0:replicates-1:1] {
-//         int i = 1;
-//         stage_code = stage_params % (i, instance_root, params);
-//         instance_dir = python_persist(stage_code, "instance_dir");
-        
-//         string out_f = "%s/out.txt" % instance_dir;
-//         string err_f = "%s/err.txt" % instance_dir;
-//         file out <out_f>;
-//         file err <err_f>;
-//         (out,err) = run(instance_dir) =>
-//         db = "%s/output.sqlite" % instance_dir;
-//     // }
-//     result_code = compute_result_code % (db, result_at, measurement_file);
-//     result = python_persist(result_code, "result_json");
-// }
-
 (string result) obj(string params_str) {
     string ps[] = split(params_str, "!");
     string instance = ps[0];
-    result_code = precalc_result_code % (instance, prev_result_file);
-    result = python_persist(result_code, "result");
+    string params = ps[1];
+    // submission script should create this directory
+    string instance_root = "%s/instances/instance_%s" % (turbine_output, instance);
+    // string dbs[];
+    string db;
+    //foreach i in [0:replicates-1:1] {
+        int i = 1;
+        stage_code = stage_params % (i, instance_root, params);
+        instance_dir = python_persist(stage_code, "instance_dir");
+        
+        string out_f = "%s/out.txt" % instance_dir;
+        string err_f = "%s/err.txt" % instance_dir;
+        file out <out_f>;
+        file err <err_f>;
+        (out,err) = run(instance_dir) =>
+        db = "%s/output.sqlite" % instance_dir;
+    // }
+    result_code = compute_result_code % (db, result_at, measurement_file);
+    result = python_persist(result_code, "result_json");
 }
 
 (void v) loop(location ME) {

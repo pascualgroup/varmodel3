@@ -1,0 +1,1 @@
+prevalence	MOI	PTS	n_strains	n_genes
