@@ -1,0 +1,10 @@
+"parameter_name","dist_base_name","density_fn","min","max","a","b","mean","sd"
+"biting_rate","unif",NA,1e-05,1e-04,NA,NA,NA,NA
+"immigration_rate_fraction","unif",NA,3e-04,0.03,NA,NA,NA,NA
+"immunity_loss_rate","unif",NA,3e-04,0.002,NA,NA,NA,NA
+"n_genes_initial","unif",NA,10000,40000,NA,NA,NA,NA
+"switching_rate_A","unif",NA,0.125,0.25,NA,NA,NA,NA
+"switching_rate_BC","unif",NA,0.0833333333333333,0.25,NA,NA,NA,NA
+"ectopic_recombination_rate_A","unif",NA,2e-05,7e-04,NA,NA,NA,NA
+"ectopic_recombination_rate_BC","unif",NA,1e-04,0.001,NA,NA,NA,NA
+"functionality_BC","unif",NA,0.4,1,NA,NA,NA,NA
