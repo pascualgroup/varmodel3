@@ -11,7 +11,7 @@ If so, it is required to provide a file describing the distribution of the numbe
 Moreover, it is also required to provide a proportion of host to keep for the calculations (e.g. proportion detected by microscopy).
 Note: the input file name should not contains a "." except before the extension (e.g. "input_file_name.sqlite").
 Note: the calculations only take into account the active infections.
-usage: python Targets.py --inputfile '/path/to/file.txt' --time 300 --measurement --distribution '/path/to/distribution.txt' --prop 0.57 
+usage: python _targets.py --inputfile '/path/to/file.txt' --time 71940 --measurement --prop 0.67 --supplementaryFileForMOIEst '/path/to/MOIestObjs.pkl' --aggregate 'mixtureDist'
 """
 
 import os.path

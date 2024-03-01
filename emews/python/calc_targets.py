@@ -13,7 +13,7 @@ def parse_instance(line):
     start = line.rfind(tag)
     return int(line[start + len(tag): end])
 
-supplementaryFileForMOIEst = "/project2/pascualmm/QZ/PhD/projects/ABC-fitting-ABM/test-fitting/round1/files/filesForNick/targetCalculation/MOIestObjs.pkl"
+supplementaryFileForMOIEst = "./MOIestObjs.pkl"
 aggregate = "mixtureDist"
 
 def run(exp_dir, result_at):
