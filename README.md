@@ -62,8 +62,7 @@ ___
 The parameter names should match the variables defined in `src/parameters.jl`, and the values should match the appropriate [type](https://docs.julialang.org/en/v1/manual/types/).
 
 | Name | Type | Description |
-| :--: | :--: | ----------- |
-| `background_clearance_rate` | `Float64` | Background clearance rate due to processes not explicitly modeled |
+| :--: | :--: | ----------- | 
 | `biting_rate` | `Array{Float64}` | Transmission rate for each day of the year |
 | `coinfection_reduces_transmission` | `Bool` | Whether or not transmissibility is reduced with coinfection |
 | `distinct_initial_snp_allele_frequencies` | `Bool` | Whether the initial allele frequencies of the SNPs are distinct |

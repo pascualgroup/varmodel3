@@ -25,15 +25,17 @@ source $CFG_FILE
 
 echo "--------------------------"
 echo "WALLTIME:              $CFG_WALLTIME"
-echo "UPF:                   $CFG_UPF"
+echo "PROCS:                 $CFG_PROCS"
+echo "PPN:                   $CFG_PPN"
+echo "UFP:                   $CFG_UPF"
 echo "--------------------------"
 
+export PROCS=$CFG_PROCS
 export QUEUE=$CFG_QUEUE
 export WALLTIME=$CFG_WALLTIME
+export PPN=$CFG_PPN
 export TURBINE_JOBNAME="${EXPID}_job"
 export PROJECT=$CFG_PROJECT
-
-EQ_SQL=$( readlink --canonicalize $EMEWS_PROJECT_ROOT/ext/EQ-SQL )
 
 # if R cannot be found, then these will need to be
 # uncommented and set correctly.
@@ -42,40 +44,16 @@ EQ_SQL=$( readlink --canonicalize $EMEWS_PROJECT_ROOT/ext/EQ-SQL )
 # if python packages can't be found, then uncommited and set this
 # PYTHONPATH="/lcrc/project/EMEWS/bebop/repos/probabilistic-sensitivity-analysis:"
 # PYTHONPATH+="/lcrc/project/EMEWS/bebop/repos/panmodel-0.20.0:"
-export PYTHONPATH+="$EMEWS_PROJECT_ROOT/python:$EQ_SQL"
-export PYTHONHOME="/software/python-anaconda-2020.11-el8-x86_64"
+export PYTHONPATH+="$EMEWS_PROJECT_ROOT/python"
+export PYTHONHOME="/software/python-anaconda-2021.05-el7-x86_64"
 # export PYTHONPATH
 # echo "PYTHONPATH: $PYTHONPATH"
 
-export WORKER_POOL_NODES=$CFG_WORKER_POOL_NODES
-export WORKER_POOL_PPN=$CFG_WORKER_POOL_PPN
-
-EMEWS_EXT=$EMEWS_PROJECT_ROOT/ext/emews
-
-export DB_HOST=$CFG_DB_HOST
-export DB_USER=$CFG_DB_USER
-export DB_PORT=$CFG_DB_PORT
-
-export SITE=midway3
-
-export ME_NODES=$CFG_SWEEP_NODES
-export ME_PPN=$CFG_SWEEP_PPN
-export ME_PROCS=$(( ME_NODES * ME_PPN ))
-
-ME_EXPORTS="PYTHONPATH=$EMEWS_PROJECT_ROOT/python:$EMEWS_PROJECT_ROOT/../post_analysis:$EMEWS_PROJECT_ROOT/ext/EQ-SQL\n"
-export ME_EXPORTS
+export SITE=midway
 
 # set machine to your schedule type (e.g. pbs, slurm, cobalt etc.),
 # or empty for an immediate non-queued unscheduled run
-MACHINE="slurm-multijob"
-
-export TOTAL_PROCS=$(( WORKER_POOL_NODES * WORKER_POOL_PPN + ME_NODES * ME_PPN ))
-
-# Set these to worker pool values because the worker pool
-# runs under turbine and it needs these.
-export PPN=$WORKER_POOL_PPN
-export PROCS=$(( WORKER_POOL_NODES * WORKER_POOL_PPN ))
-MEM_PER_CPU=$(( 56000 / PPN ))
+MACHINE="slurm"
 
 if [ -n "$MACHINE" ]; then
   MACHINE="-m $MACHINE"
@@ -83,10 +61,6 @@ fi
 
 mkdir -p $TURBINE_OUTPUT/instances
 cp $CFG_FILE $TURBINE_OUTPUT/cfg.cfg
-
-SRC_ME=$EMEWS_PROJECT_ROOT/python/sweep_me.py
-TARGET_ME=$TURBINE_OUTPUT/sweep_me.py
-cp $SRC_ME $TARGET_ME
 
 SRC_DEFAULT_PARAMS=$EMEWS_PROJECT_ROOT/data/parameters/$CFG_DEFAULT_PARAMS
 DST_DEFAULT_PARAMS=$TURBINE_OUTPUT/default_parameters.json
@@ -123,17 +97,9 @@ CMD_LINE_ARGS+="-result_at=$CFG_RESULT_AT"
 USER_VARS=( )
 # log variables and script to to TURBINE_OUTPUT directory
 
-export TURBINE_LAUNCHER=srun
-export TURBINE_SBATCH_ARGS="--exclusive\n#SBATCH --mail-type=BEGIN\n#SBATCH --mem=0"
-# export TURBINE_LAUNCH_OPTIONS="--mem-per-cpu=${MEM_PER_CPU} " # \n#SBATCH --exclusive"
-# export ME_LAUNCH_OPTIONS="--mem-per-cpu=56000 "
-ME_COMMAND="python3 $TARGET_ME -u $UPF_TARGET -m $MEAS_FILE "
-ME_COMMAND+="-t $CFG_RESULT_AT -e $EXPID"
-export ME_COMMAND
-
-# PGSQL_LIB=/project2/pascualmm/sfw/gcc-10.2.0/postgreql-14.2/lib
-PGSQL_LIB=/project2/pascualmm/sfw/midway3/gcc-10.2.0/postgreql-14.2/lib
-SLURM_LIB=/software/slurm-current-el8-x86_64/lib/slurm
+# export TURBINE_LAUNCHER=srun
+# export TURBINE_SBATCH_ARGS="-c 18"
+export TURBINE_SBATCH_ARGS="--mem-per-cpu=${CFG_MEM_PER_CPU}" # \n#SBATCH --exclusive"
 
 log_script
 
@@ -141,22 +107,14 @@ log_script
 # set -x
 
 swift-t -n $PROCS $MACHINE -p \
-    -r $EQ_SQL -I $EQ_SQL \
-    -I $EMEWS_EXT \
     -e EMEWS_PROJECT_ROOT \
     -e SITE \
     -e TURBINE_OUTPUT \
     -e TURBINE_LOG \
     -e TURBINE_DEBUG \
     -e ADLB_DEBUG \
-    -e DB_HOST \
-    -e DB_USER \
-    -e DB_PORT \
     -e PYTHONPATH \
     -e PYTHONHOME \
-    -e LD_LIBRARY_PATH=$PGSQL_LIB:$SLURM_LIB:$LD_LIBRARY_PATH \
-    $EMEWS_PROJECT_ROOT/swift/sweep_worker_pool.swift $CMD_LINE_ARGS
+    $EMEWS_PROJECT_ROOT/swift/lhs_sweep.swift $CMD_LINE_ARGS
 
 chmod g+rw $TURBINE_OUTPUT/*.tic
-
-# Dry Run Arg:    -t Y: \

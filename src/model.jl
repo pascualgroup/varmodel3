@@ -31,6 +31,42 @@ const (BITING, IMMIGRATION, BACKGROUND_CLEARANCE, SWITCHING, MUTATION, ECTOPIC_R
 
 const USE_BITING_RATE_MULTIPLIER_BY_YEAR = P.biting_rate_multiplier_by_year !== nothing
 
+gene_pair_indices = []
+for i in 1:(P.n_genes_per_strain-1)
+    for j in (i+1):P.n_genes_per_strain
+        push!(gene_pair_indices, (i,j))
+    end
+end
+
+num_genes_var_groups = []
+for i in 1:length(P.var_groups_ratio)
+    num_genes_var_group = round(Int, P.var_groups_ratio[i] * P.n_genes_initial) 
+    push!(num_genes_var_groups, num_genes_var_group)
+end
+
+allele_ids_var_groups = []
+num_allele_ids_var_groups = round.(Int, P.var_groups_ratio * P.n_alleles_per_locus_initial)
+for i in 1:length(P.var_groups_ratio)
+    allele_ids_var_group = if i == 1
+        1:num_allele_ids_var_groups[i]
+    else 
+        (sum(num_allele_ids_var_groups[1:(i-1)])+1):sum(num_allele_ids_var_groups[1:i])
+    end
+    push!(allele_ids_var_groups, allele_ids_var_group)
+end
+
+infection_genes_index_var_groups = []
+for i in 1:length(P.var_groups_ratio)
+    infection_genes_index_var_group = if i == 1
+        1:round(Int, P.var_groups_ratio[i] * P.n_genes_per_strain)
+    else
+        (sum(round.(Int, P.var_groups_ratio[1:(i-1)] * P.n_genes_per_strain)) + 1):sum(round.(Int, P.var_groups_ratio[1:i] * P.n_genes_per_strain))
+    end
+    push!(infection_genes_index_var_groups, infection_genes_index_var_group)
+end
+
+func_rank = ordinalrank(P.var_groups_functionality, rev = true)
+
 function run()
     db = initialize_database()
 
@@ -91,7 +127,11 @@ function run()
                     recompute_infected_ratio!(s)
                 end
             end
-
+            
+            if t_next_integer % P.gene_group_id_association_recomputation_period == 0
+                recompute_gene_group_id_association!(s)
+            end
+            
             t_next_integer += 1
         end
 
@@ -143,6 +183,43 @@ function recompute_infected_ratio!(s)
 end
 
 
+# Remove extinct genes from the association of gene to group_id dictionary.
+function recompute_gene_group_id_association!(s)
+    liver_infection_genes = Set()
+    active_infection_genes = Set()
+    for host in s.hosts
+        for liver_infection in host.liver_infections
+            for i in 1:size(liver_infection.genes)[2]
+                gene_temp_alleles = liver_infection.genes[:,i]
+                gene_temp = Gene(gene_temp_alleles)
+                push!(liver_infection_genes, gene_temp)
+            end
+        end
+        
+        for active_infection in host.active_infections
+            for i in 1:size(active_infection.genes)[2]
+                gene_temp_alleles = active_infection.genes[:,i]
+                gene_temp = Gene(gene_temp_alleles)
+                push!(active_infection_genes, gene_temp)
+            end
+        end
+    end
+    pool_genes = Set()
+    for i in 1:size(s.gene_pool)[2]
+        gene_temp_alleles = s.gene_pool[:, i]
+        gene_temp = Gene(gene_temp_alleles)
+        push!(pool_genes, gene_temp)
+    end
+    genes_circulating = union(liver_infection_genes, active_infection_genes, pool_genes)
+    genes_in_dictionary = collect(keys(s.association_genes_to_var_groups))
+    genes_extinct = setdiff(genes_in_dictionary, genes_circulating)
+    
+    for gene_extinct in genes_extinct 
+        delete!(s.association_genes_to_var_groups, gene_extinct)
+    end
+end
+
+
 ### INITIALIZATION ###
 
 #function initialize_state(a)
@@ -150,11 +227,31 @@ function initialize_state()
     println("initialize_state()")
 
     # Initialize gene pool as an (n_loci, n_genes_initial) matrix whose columns
-    # are unique randomly generated genes.
+    # are unique randomly generated genes. Initialize gene-to-group-id map as an empty dictionary.
     gene_pool_set = Set()
-    while length(gene_pool_set) < P.n_genes_initial
-        push!(gene_pool_set, rand(1:P.n_alleles_per_locus_initial, P.n_loci))
+    association_genes_to_var_groups_init = Dict{Gene, GeneGroupId}()
+    for group_id in 1:length(P.var_groups_ratio) # Create genes for each group
+        num_genes_var_group = num_genes_var_groups[group_id] 
+        if num_genes_var_group > 0
+            counter = sum(num_genes_var_groups[1:group_id])
+            if !P.var_groups_do_not_share_alleles 
+                allele_ids_var_group = 1:P.n_alleles_per_locus_initial
+            else  # If genes from different group do not share allele, then split alleles into groups corresponding to gene groups.
+                allele_ids_var_group = allele_ids_var_groups[group_id]
+            end
+            
+            while length(gene_pool_set) < counter
+                gene_temp_alleles = rand(allele_ids_var_group, P.n_loci)
+                if !(gene_temp_alleles in gene_pool_set)
+                    push!(gene_pool_set, gene_temp_alleles)
+                    gene_temp = Gene(gene_temp_alleles)
+                    association_genes_to_var_groups_init[gene_temp] = group_id
+                    # @assert haskey(association_genes_to_var_groups_init, gene_temp)
+                end
+            end
+        end
     end
+
     gene_pool = zeros(AlleleId, P.n_loci, P.n_genes_initial)
     for (i, gene) in enumerate(gene_pool_set)
         gene_pool[:,i] = gene
@@ -224,6 +321,7 @@ function initialize_state()
 
     # Infect n_initial_infections hosts at t = 0. Genes in the infection
     # are sampled uniformly randomly from the gene pool.
+    # Check for var_groups_fix_ratio
     for (infection_id, host_index) in enumerate(sample(1:P.n_hosts, P.n_initial_infections, replace = false))
         infection = create_empty_infection()
         infection.id = infection_id
@@ -231,10 +329,57 @@ function initialize_state()
         infection.t_expression = NaN
         infection.duration = NaN
         infection.strain_id = infection_id
-        infection.genes[:,:] = reshape(
-            gene_pool[:, rand(1:P.n_genes_initial, P.n_genes_per_strain)],
-            (P.n_loci, P.n_genes_per_strain)
-        )
+        if !P.var_groups_fix_ratio
+            infection.genes[:,:] = reshape(
+                gene_pool[:, rand(1:P.n_genes_initial, P.n_genes_per_strain)],
+                (P.n_loci, P.n_genes_per_strain)
+            )
+            group_ids = []
+            for i in 1:size(infection.genes)[2]
+                group_id = association_genes_to_var_groups_init[Gene(infection.genes[:,i])]
+                push!(group_ids, group_id)
+            end
+        else
+            infection_genes = zeros(AlleleId, P.n_loci, P.n_genes_per_strain)
+            group_ids = []
+            for group_id in 1:length(P.var_groups_ratio)
+                if P.var_groups_ratio[group_id] > 0.0
+                    infection_genes_index_var_group = infection_genes_index_var_groups[group_id]
+                    for infection_gene_index_var_group in infection_genes_index_var_group
+                        infection_gene = gene_pool[:,rand(1:P.n_genes_initial, 1)]
+                        infection_gene_group_id = association_genes_to_var_groups_init[Gene(infection_gene)]
+                        while infection_gene_group_id != group_id # Keeping drawing until the targeted group of genes is drawn.
+                            infection_gene = gene_pool[:,rand(1:P.n_genes_initial, 1)]
+                            infection_gene_group_id = association_genes_to_var_groups_init[Gene(infection_gene)]
+                        end
+                        # @assert association_genes_to_var_groups_init[Gene(infection_gene)] == group_id
+                        push!(group_ids, group_id)
+                        infection_genes[:,infection_gene_index_var_group] = infection_gene # sample with replacement
+                    end
+                end
+            end
+            infection.genes[:,:] = reshape(infection_genes, (P.n_loci, P.n_genes_per_strain))
+        end
+
+        if P.var_groups_high_functionality_express_earlier
+            genes_reorder = zeros(AlleleId, P.n_loci, P.n_genes_per_strain)
+            index_temp_all = []
+            for i in 1:length(func_rank)
+                group_id_temp = findfirst(item->item == i, func_rank)
+                index_temp = findall(item->item == group_id_temp, group_ids)
+                push!(index_temp_all, length(index_temp))
+                if length(index_temp) > 0
+                    index_temp_reorder = if i == 1
+                        1:length(index_temp)
+                    else 
+                        (sum(index_temp_all[1:(i-1)])+1):sum(index_temp_all[1:i])
+                    end
+                    genes_reorder[:,index_temp_reorder] = infection.genes[:, index_temp]
+                end
+            end
+            infection.genes[:,:] = reshape(genes_reorder, (P.n_loci, P.n_genes_per_strain))
+        end
+        
         if P.n_snps_per_strain > 0
             for snp in 1:P.n_snps_per_strain
                 infection.snps[snp] = sample([1, 2],
@@ -262,7 +407,8 @@ function initialize_state()
         n_transmitting_bites_for_migration_rate = 0,
         n_bites_for_migration_rate = 0,
         infected_ratio = 1.0,
-        initial_snp_allele_frequencies = snp_allele_freq
+        initial_snp_allele_frequencies = snp_allele_freq,
+        association_genes_to_var_groups = association_genes_to_var_groups_init
     )
 end
 
@@ -384,6 +530,7 @@ function do_biting!(t, s, stats)
         return false
     end
     stats.n_infected_bites += 1
+    s.n_transmitting_bites_for_migration_rate += 1
 
     # The destination host must have space available in the liver stage.
     dst_available_count = if isnothing(P.n_infections_liver_max)
@@ -406,7 +553,20 @@ function do_biting!(t, s, stats)
     # First choose the active strains from the host that will be transmitted to mosquito.
     # This is determined by the transmissibility.
     choose_transmit = rand(Float64, src_active_count)
-    transmitted_strains = src_host.active_infections[choose_transmit.<p_transmit]
+    
+    # Find out the currently expressed gene, and its group id, which impacts the transmissibility of the infection.
+    infs_transmissibility = []
+    for inf_temp in src_host.active_infections
+        gene_index = inf_temp.expression_index
+        # @assert 1 <= gene_index <= P.n_genes_per_strain
+        gene_temp = Gene(inf_temp.genes[:,gene_index])
+        # @assert haskey(s.association_genes_to_var_groups, gene_temp)
+        gene_temp_group_id = s.association_genes_to_var_groups[gene_temp]
+        inf_transmissibility = P.var_groups_functionality[gene_temp_group_id]
+        push!(infs_transmissibility, inf_transmissibility)
+    end
+    
+    transmitted_strains = src_host.active_infections[choose_transmit.<p_transmit*infs_transmissibility]
     #println("t = $(t): originalSize $(src_active_count), newSize $(length(transmitted_strains))")
 
     # The number of transmissions is bounded by the number of source infections
@@ -446,7 +606,7 @@ function do_biting!(t, s, stats)
             # Otherwise, the new infection is given a new strain constructed by
             # taking a random sample of the genes in the two source infections.
             dst_inf.strain_id = next_strain_id!(s)
-            sample_columns_from_two_matrices_to!(dst_inf.genes, src_inf_1.genes, src_inf_2.genes)
+            sample_columns_from_two_matrices_to_util2!(dst_inf.genes, src_inf_1.genes, src_inf_2.genes, P, s, infection_genes_index_var_groups)
             # The new infection is given a new set of SNP alleles constructed by
             # taking a random allele per SNP in the two source infections.
             if P.n_snps_per_strain > 0
@@ -489,7 +649,36 @@ function do_biting!(t, s, stats)
         end
 
         # Add this infection to the destination host.
-        push!(dst_host.liver_infections, dst_inf)
+        if !P.var_groups_high_functionality_express_earlier
+            push!(dst_host.liver_infections, dst_inf)
+        else
+            genes_reorder = zeros(AlleleId, P.n_loci, P.n_genes_per_strain)
+            group_ids = []
+            for i in 1:size(dst_inf.genes)[2]
+                gene_temp_alleles = dst_inf.genes[:,i]
+                gene_temp = Gene(gene_temp_alleles)
+                # @assert haskey(s.association_genes_to_var_groups, gene_temp)
+                gene_temp_group_id = s.association_genes_to_var_groups[gene_temp]
+                push!(group_ids, gene_temp_group_id)
+            end
+            
+            index_temp_all = []
+            for i in 1:length(func_rank)
+                group_id_temp = findfirst(item->item == i, func_rank)
+                index_temp = findall(item->item == group_id_temp, group_ids)
+                push!(index_temp_all, length(index_temp))
+                index_temp_reorder = if i == 1
+                    1:length(index_temp)
+                else 
+                    (sum(index_temp_all[1:(i-1)])+1):sum(index_temp_all[1:i])
+                end
+                genes_reorder[:,index_temp_reorder] = dst_inf.genes[:, index_temp]
+            end
+            dst_inf.genes = genes_reorder
+            
+            push!(dst_host.liver_infections, dst_inf)
+        end
+
         # Update population wide host liver max.
         s.n_liver_infections_per_host_max = max(s.n_liver_infections_per_host_max, length(dst_host.liver_infections))
 
@@ -497,7 +686,7 @@ function do_biting!(t, s, stats)
 
     if transmitted
         stats.n_transmitting_bites += 1
-        s.n_transmitting_bites_for_migration_rate += 1
+        # s.n_transmitting_bites_for_migration_rate += 1
         true
     else
         false
@@ -584,12 +773,64 @@ function do_immigration!(t, s, stats)
     infection.strain_id = next_strain_id!(s)
     infection.expression_index = 0
     infection.expression_index_locus = 0
-    for i in 1:P.n_genes_per_strain
-        infection.genes[:,i] = s.gene_pool[:, rand(1:size(s.gene_pool)[2])]
+    if !P.var_groups_fix_ratio
+        for i in 1:P.n_genes_per_strain
+            infection.genes[:,i] = s.gene_pool[:, rand(1:size(s.gene_pool)[2])]
+        end
+        group_ids = []
+        for i in 1:size(infection.genes)[2]
+            group_id = s.association_genes_to_var_groups[Gene(infection.genes[:,i])]
+            push!(group_ids, group_id)
+        end
+    else 
+        infection_genes = zeros(AlleleId, P.n_loci, P.n_genes_per_strain)
+        group_ids = []
+        for group_id in 1:length(P.var_groups_ratio)
+            if P.var_groups_ratio[group_id] > 0.0
+                infection_genes_index_var_group = infection_genes_index_var_groups[group_id]
+                for infection_gene_index_var_group in infection_genes_index_var_group
+                    infection_gene = s.gene_pool[:, rand(1:size(s.gene_pool)[2])]
+                    # @assert haskey(s.association_genes_to_var_groups, Gene(infection_gene))
+                    infection_gene_group_id = s.association_genes_to_var_groups[Gene(infection_gene)]
+                    while infection_gene_group_id != group_id
+                        infection_gene = s.gene_pool[:, rand(1:size(s.gene_pool)[2])]
+                        # @assert haskey(s.association_genes_to_var_groups, Gene(infection_gene))
+                        infection_gene_group_id = s.association_genes_to_var_groups[Gene(infection_gene)]
+                    end
+                    # @assert s.association_genes_to_var_groups[Gene(infection_gene)] == group_id
+                    push!(group_ids, group_id)
+                    infection_genes[:,infection_gene_index_var_group] = infection_gene # sample with replacement
+                end
+            end
+        end
+        infection.genes[:,:] = reshape(infection_genes, (P.n_loci, P.n_genes_per_strain))
     end
-    for snp in 1:P.n_snps_per_strain
-        infection.snps[snp] = sample([1, 2],
-        Weights([s.initial_snp_allele_frequencies[snp], 1 - s.initial_snp_allele_frequencies[snp]]))
+
+    # Check if need to reorder genes when setting high functionality express earlier to be true.
+    if P.var_groups_high_functionality_express_earlier
+        genes_reorder = zeros(AlleleId, P.n_loci, P.n_genes_per_strain)
+        index_temp_all = []
+        for j in 1:length(func_rank)
+            group_id_temp = findfirst(item->item == j, func_rank)
+            index_temp = findall(item->item == group_id_temp, group_ids)
+            push!(index_temp_all, length(index_temp))
+            if length(index_temp) > 0
+                index_temp_reorder = if j == 1
+                    1:length(index_temp)
+                else 
+                    (sum(index_temp_all[1:(j-1)])+1):sum(index_temp_all[1:j])
+                end
+                genes_reorder[:,index_temp_reorder] = infection.genes[:, index_temp]
+            end
+        end
+        infection.genes = genes_reorder    
+    end
+
+    if P.n_snps_per_strain > 0
+        for snp in 1:P.n_snps_per_strain
+            infection.snps[snp] = sample([1, 2],
+            Weights([s.initial_snp_allele_frequencies[snp], 1 - s.initial_snp_allele_frequencies[snp]]))
+        end
     end
 
     # Add infection to host.
@@ -640,23 +881,22 @@ function get_rate_switching(t, s)
     # Rejection sampling is used to effect the correct rate.
     if !P.whole_gene_immune
         # Switching rate set by total number of alleles.
-        (P.switching_rate * P.n_loci) * P.n_hosts * (s.n_active_infections_per_host_max + s.n_liver_infections_per_host_max)
+        (maximum(P.switching_rate) * P.n_loci) * P.n_hosts * (s.n_active_infections_per_host_max+s.n_liver_infections_per_host_max)
+        # (P.switching_rate * P.n_loci) * P.n_hosts * (s.n_active_infections_per_host_max+s.n_liver_infections_per_host_max)
     else
-        P.switching_rate * P.n_hosts * (s.n_active_infections_per_host_max + s.n_liver_infections_per_host_max)
+        maximum(P.switching_rate) * P.n_hosts * (s.n_active_infections_per_host_max+s.n_liver_infections_per_host_max)
+        # P.switching_rate * P.n_hosts * (s.n_active_infections_per_host_max+s.n_liver_infections_per_host_max)
     end
 end
 
 function do_switching!(t, s, stats)
-    if (s.n_active_infections_per_host_max + s.n_liver_infections_per_host_max < 1)
-        return false
-    end
-    index = rand(CartesianIndices((P.n_hosts, (s.n_active_infections_per_host_max + s.n_liver_infections_per_host_max))))
+    index = rand(CartesianIndices((P.n_hosts, (s.n_active_infections_per_host_max+s.n_liver_infections_per_host_max))))
     host = s.hosts[index[1]]
 
     # Advance host (rebirth or infection activation).
     advance_host!(t, s, host)
     inf_index = index[2]
-
+    
     # If the infection index is out of range, this is a rejected sample.
     # Otherwise we'll proceed.
     if inf_index > length(host.active_infections)
@@ -664,46 +904,64 @@ function do_switching!(t, s, stats)
     end
     infection = host.active_infections[inf_index]
 
-    """
-    Increment immunity level to currently expressed gene.
-    For the partial allele model, expression advance by alleles, but
-    Immunity only gains after the full gene finishes expression
-    """
-    if infection.expression_index_locus == P.n_loci
-        increment_immunity!(s, host, infection.genes[:, infection.expression_index])
-    end
+    gene_expression = infection.genes[:, infection.expression_index]
+    # @assert haskey(s.association_genes_to_var_groups, Gene(gene_expression))
+    gene_expression_group_id = s.association_genes_to_var_groups[Gene(gene_expression)]
+    p_acceptance = P.switching_rate[gene_expression_group_id]/maximum(P.switching_rate)
+    if rand() < p_acceptance
+        """
+        Check that the host is not immune to the currently expressed loci of the gene
+        """
+        # immunity_level_current_gene_locus = get(host.immunity.vd[infection.expression_index_locus], infection.genes[infection.expression_index_locus, infection.expression_index], ImmunityLevel(0))
+        # if immunity_level_current_gene_locus > 0
+        #     println(immunity_level_current_gene_locus) 
+        # end
+        # @assert immunity_level_current_gene_locus == 0
 
-    # If we're at the end, clear the infection and return.
-    if infection.expression_index == P.n_genes_per_strain && infection.expression_index_locus == P.n_loci
-        clear_active_infection!(t, s, host, inf_index)
-    else
-        # Otherwise, advance gene and/or locus expression(s).
-        if !P.whole_gene_immune
-            if infection.expression_index_locus == P.n_loci
-                infection.expression_index += 1
-                infection.expression_index_locus = 1
-            else
-                infection.expression_index_locus += 1
-            end
+
+        """
+        Increment immunity level to currently expressed gene.
+        For the partial allele model, expression advance by alleles, but
+        Immunity only gains after the full gene finishes expression
+        """
+        if infection.expression_index_locus == P.n_loci
+            increment_immunity!(s, host, infection.genes[:, infection.expression_index])
+        end
+
+        # If we're at the end, clear the infection and return.
+        if infection.expression_index == P.n_genes_per_strain && infection.expression_index_locus == P.n_loci
+            clear_active_infection!(t, s, host, inf_index)
         else
-            infection.expression_index += 1
-            infection.expression_index_locus = P.n_loci
+            # Otherwise, advance gene and/or locus expression(s).
+            if !P.whole_gene_immune
+                if infection.expression_index_locus == P.n_loci
+                    infection.expression_index += 1
+                    infection.expression_index_locus = 1
+                else
+                    infection.expression_index_locus += 1
+                end
+            else
+                infection.expression_index += 1
+                infection.expression_index_locus = P.n_loci
+            end
         end
-    end
 
-    """
-    after gaining immunity to the expressed gene, loop through the other infections
-    in the host to see if any one needs advancing
-    """
-    i = 1
-    while i <= length(host.active_infections)
-        if advance_immune_genes!(t,s,host,i)
-            # If there is no end of expression and reordering of infections, then index plus 1.
-            i += 1
+        """
+        after gaining immunity to the expressed gene, loop through the other infections
+        in the host to see if any one needs advancing
+        """
+        i = 1
+        while i <= length(host.active_infections)
+            if advance_immune_genes!(t,s,host,i)
+                # If there is no end of expression and reordering of infections, then index plus 1.
+                i += 1
+            end
         end
-    end
 
-    return true
+        return true
+    else 
+        return false
+    end
 end
 
 # This function moves the expression index of an infection to its first non-immune allele/gene.
@@ -740,6 +998,7 @@ function advance_immune_genes!(t, s, host, inf_index)
                 infection.expression_index_locus = P.n_loci
             end
         end
+    
         # If the host not immune, stop advancing.
         to_advance = is_immune(host.immunity, infection.genes[:, infection.expression_index],infection.expression_index_locus)
     end
@@ -757,9 +1016,6 @@ function get_rate_mutation(t, s)
 end
 
 function do_mutation!(t, s, stats)
-    if (s.n_active_infections_per_host_max + s.n_liver_infections_per_host_max < 1)
-        return false
-    end
     index = rand(CartesianIndices((P.n_hosts, (s.n_active_infections_per_host_max + s.n_liver_infections_per_host_max), P.n_genes_per_strain, P.n_loci)))
     host = s.hosts[index[1]]
     inf_index = index[2]
@@ -781,7 +1037,15 @@ function do_mutation!(t, s, stats)
 
     # Generate a new allele and insert it at the drawn location.
     s.n_alleles[locus] += 1
+    # Add new gene and its group id to the association map. Mutation preserves group id. 
+    gene_ori = Gene(infection.genes[:, expression_index])
     infection.genes[locus, expression_index] = s.n_alleles[locus]
+    gene_mut = Gene(infection.genes[:, expression_index])
+    # @assert haskey(s.association_genes_to_var_groups, gene_ori) # Check the association map contains the group id of the original gene, which should always be true.
+    gene_mut_group_id = s.association_genes_to_var_groups[gene_ori]
+    # @assert !(haskey(s.association_genes_to_var_groups, gene_mut))
+    s.association_genes_to_var_groups[gene_mut] = gene_mut_group_id
+    # @assert haskey(s.association_genes_to_var_groups, gene_mut) # Make sure the group id for the mutated gene is added to the association map.
     infection.strain_id = next_strain_id!(s)
     s.next_gene_id_mut += 1
 
@@ -795,7 +1059,7 @@ function get_rate_ectopic_recombination(t, s)
     # The total rate includes both active and liver infections because host state may not be fully up to date,
     # and a liver infection may be activated when host state is updated to the current time.
     # Rejection sampling is used to effect the correct rate.
-    P.ectopic_recombination_rate *
+    maximum(P.ectopic_recombination_rate)^2 *
         P.n_hosts * (s.n_active_infections_per_host_max + s.n_liver_infections_per_host_max) *
         P.n_genes_per_strain * (P.n_genes_per_strain - 1) / 2.0
 end
@@ -803,9 +1067,6 @@ end
 
 
 function do_ectopic_recombination!(t, s, stats)
-    if (s.n_active_infections_per_host_max + s.n_liver_infections_per_host_max < 1)
-        return false
-    end
     # Index based on the total number of infections.
     index = rand(CartesianIndices((P.n_hosts, (s.n_active_infections_per_host_max + s.n_liver_infections_per_host_max))))
     host = s.hosts[index[1]]
@@ -821,69 +1082,107 @@ function do_ectopic_recombination!(t, s, stats)
 
     infection = host.active_infections[inf_index]
 
-    gene_index_1 = rand(1:P.n_genes_per_strain)
-    gene_index_2 = rand(1:P.n_genes_per_strain)
+    gene_indices = rand(gene_pair_indices)
+    gene_index_1 = gene_indices[1]
+    gene_index_2 = gene_indices[2]
 
     gene1 = infection.genes[:, gene_index_1]
     gene2 = infection.genes[:, gene_index_2]
 
-    # If the genes are the same, this is a no-op.
-    if gene1 == gene2
+    # Check the group id of the two drawn genes, reject with a probability accounting for the differential ectopic recombination rate across var groups
+    gene1_group_id = s.association_genes_to_var_groups[Gene(gene1)]
+    gene2_group_id = s.association_genes_to_var_groups[Gene(gene2)]
+    
+    # if different var groups do not share alleles, then genes from different groups do not recombine either. 
+    if P.var_groups_do_not_share_alleles && gene1_group_id != gene2_group_id
         return false
     end
+    
+    gene1_recomb_rate_ratio = P.ectopic_recombination_rate[gene1_group_id]/maximum(P.ectopic_recombination_rate)
+    gene2_recomb_rate_ratio = P.ectopic_recombination_rate[gene2_group_id]/maximum(P.ectopic_recombination_rate)
+    p_acceptance = gene1_recomb_rate_ratio * gene2_recomb_rate_ratio
 
-    breakpoint, p_functional = if P.ectopic_recombination_generates_new_alleles
-        # Choose a breakpoint.
-        breakpoint = P.n_loci * rand()
-        p_functional = p_recombination_is_functional_real(gene1, gene2, breakpoint)
-
-        (Int(ceil(breakpoint)), p_functional)
-    else
-        # Choose a breakpoint.
-        breakpoint = rand(1:P.n_loci)
-        if breakpoint == 1
+    if rand() < p_acceptance
+        # If the genes are the same, this is a no-op.
+        if gene1 == gene2
             return false
         end
 
-        p_functional = p_recombination_is_functional_integer(gene1, gene2, breakpoint)
+        breakpoint, p_functional = if P.ectopic_recombination_generates_new_alleles
+            # Choose a breakpoint.
+            breakpoint = P.n_loci * rand()
+            p_functional = p_recombination_is_functional_real(gene1, gene2, breakpoint)
 
-        (breakpoint, p_functional)
-    end
-
-    is_conversion = rand() < P.p_ectopic_recombination_is_conversion
-
-    recombined = false
-
-    create_new_allele = P.ectopic_recombination_generates_new_alleles &&
-        rand() < P.p_ectopic_recombination_generates_new_allele
-
-    # Recombine to modify first gene, if functional.
-    if !is_conversion && rand() < p_functional
-        infection.genes[:, gene_index_1] = if create_new_allele
-            recombine_genes_new_allele(s, gene1, gene2, breakpoint)
+            (Int(ceil(breakpoint)), p_functional)
         else
-            recombine_genes(gene1, gene2, breakpoint, s)
-        end
-    end
+            # Choose a breakpoint.
+            breakpoint = rand(1:P.n_loci)
+            if breakpoint == 1
+                return false
+            end
 
-    # Recombine to modify second gene, if functional.
-    if rand() < p_functional
-        infection.genes[:, gene_index_2] = if create_new_allele
-            recombine_genes_new_allele(s, gene2, gene1, breakpoint)
-        else
-            recombine_genes(gene2, gene1, breakpoint, s)
-        end
-    end
+            p_functional = p_recombination_is_functional_integer(gene1, gene2, breakpoint)
 
-    if gene1 == infection.genes[:, gene_index_1] && gene2 == infection.genes[:, gene_index_2]
+            (breakpoint, p_functional)
+        end
+
+        is_conversion = rand() < P.p_ectopic_recombination_is_conversion
+
         recombined = false
-    else
-        recombined = true
-    end
 
-    if recombined
-        infection.strain_id = next_strain_id!(s)
-        true
+        create_new_allele = P.ectopic_recombination_generates_new_alleles &&
+            rand() < P.p_ectopic_recombination_generates_new_allele
+
+        # Recombine to modify first gene, if functional.
+        if !is_conversion && rand() < p_functional
+            infection.genes[:, gene_index_1] = if create_new_allele
+                recombine_genes_new_allele(s, gene1, gene2, breakpoint)
+            else
+                recombine_genes(gene1, gene2, breakpoint, s)
+            end
+        end
+
+        # Recombine to modify second gene, if functional.
+        if rand() < p_functional
+            infection.genes[:, gene_index_2] = if create_new_allele
+                recombine_genes_new_allele(s, gene2, gene1, breakpoint)
+            else
+                recombine_genes(gene2, gene1, breakpoint, s)
+            end
+        end
+
+        if gene1 == infection.genes[:, gene_index_1] && gene2 == infection.genes[:, gene_index_2]
+            recombined = false
+        else
+            recombined = true
+        end
+
+        if recombined
+            if gene1 != infection.genes[:, gene_index_1]
+                gene1_ectopic = Gene(infection.genes[:, gene_index_1])
+                # @assert haskey(s.association_genes_to_var_groups, Gene(gene1))
+                gene1_ectopic_group_id = s.association_genes_to_var_groups[Gene(gene1)]
+                # @assert !(haskey(s.association_genes_to_var_groups, gene1_ectopic))
+                if !(haskey(s.association_genes_to_var_groups, gene1_ectopic))
+                    s.association_genes_to_var_groups[gene1_ectopic] = gene1_ectopic_group_id
+                end
+                # @assert haskey(s.association_genes_to_var_groups, gene1_ectopic)
+            end
+            if gene2 != infection.genes[:, gene_index_2]
+                gene2_ectopic = Gene(infection.genes[:, gene_index_2])
+                # @assert haskey(s.association_genes_to_var_groups, Gene(gene2))
+                gene2_ectopic_group_id = s.association_genes_to_var_groups[Gene(gene2)]
+                # @assert !(haskey(s.association_genes_to_var_groups, gene2_ectopic))
+                if !(haskey(s.association_genes_to_var_groups, gene2_ectopic))
+                    s.association_genes_to_var_groups[gene2_ectopic] = gene2_ectopic_group_id
+                end
+                # @assert haskey(s.association_genes_to_var_groups, gene2_ectopic)
+            end
+            infection.strain_id = next_strain_id!(s)
+            true
+        else
+            false
+        end
     else
         false
     end
@@ -1004,9 +1303,6 @@ function get_rate_immunity_loss(t, s)
 end
 
 function do_immunity_loss!(t, s, stats)
-    if (s.n_immunities_per_host_max < 1)
-        return false
-    end
     index = rand(CartesianIndices((P.n_hosts, s.n_immunities_per_host_max)))
     host = s.hosts[index[1]]
     immunity_index = index[2]

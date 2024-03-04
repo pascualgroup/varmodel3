@@ -13,6 +13,8 @@ def parse_instance(line):
     start = line.rfind(tag)
     return int(line[start + len(tag): end])
 
+supplementaryFileForMOIEst = "./MOIestObjs.pkl"
+aggregate = "mixtureDist"
 
 def run(exp_dir, result_at):
     instances_dir = os.path.join(exp_dir, 'instances')
@@ -25,16 +27,16 @@ def run(exp_dir, result_at):
             lock = manager.Lock()
             for p in [0.47, 0.57, 0.67]:
                 print(f"{i + 1} of {n}: {sqldb}, {p}", flush=True)
-                preval, MOIvar, pts, nbstrain, nbgene = targets.calc_targets_meas(
-                    sqldb, result_at, measurement_file, p, lock)
+                preval, MOIvar, pts, ptsA, ptsBC, nbstrain, nbgene, nbgeneA, nbgeneBC = targets.CalculTargetsMeasFunc(
+                    sqldb, result_at, p, supplementaryFileForMOIEst, aggregate, lock)
                 result_file = os.path.join(
                     instance_dir, f'results_{p}_{result_at}.csv')
                 print(f'Writing result file: {result_file}', flush=True)
                 instance = parse_instance(instance_dir)
                 with open(result_file, 'w') as f_out:
-                    f_out.write('preval,MOIvar,pts,nbstrain,nbgene,instance\n')
+                    f_out.write('preval,MOIvar,pts,ptsA,ptsBC,nbstrain,nbgene,nbgeneA,nbgeneBC,instance\n')
                     f_out.write(
-                        f'{preval},{MOIvar},{pts},{nbstrain},{nbgene},{instance}\n')
+                        f'{preval},{MOIvar},{pts},{ptsA},{ptsBC},{nbstrain},{nbgene},{nbgeneA},{nbgeneBC},{instance}\n')
 
         print(f'Deleting {sqldb}', flush=True)
         os.remove(sqldb)
