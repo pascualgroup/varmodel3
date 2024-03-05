@@ -403,6 +403,21 @@ keyword constructor for the class.
     t_host_sampling_start::Union{Int, Nothing} = nothing 
     biting_rate_mean::Union{Float64, Nothing} = nothing
     # t_decimal_advance::Union{Float64, Nothing} = nothing
+
+    """
+        Whether to gather a sampling performance profile from this run.
+    """
+    profile_on::Bool = false
+
+    """
+        Filename for profiling data
+    """
+    profile_filename::String = "profile_data"
+
+    """
+        Delay between samples
+    """
+    profile_delay::Float64 = 0.1
 end
 
 """
