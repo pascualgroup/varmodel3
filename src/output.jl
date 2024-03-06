@@ -231,11 +231,11 @@ end
 ### OUTPUT FUNCTIONS ###
 
 function write_output!(db, t, s, stats)
-    if P.t_burnin !== missing && t < P.t_burnin
+    if P.t_burnin !== nothing && t < P.t_burnin
         return
     end
 
-    if t % P.summary_period == 0 || t % P.gene_strain_count_period == 0 || (((P.t_host_sampling_start !== missing && t >= P.t_host_sampling_start) || P.t_host_sampling_start === missing) && t % P.t_year in P.host_sampling_period)
+    if t % P.summary_period == 0 || t % P.gene_strain_count_period == 0 || (((P.t_host_sampling_start !== nothing && t >= P.t_host_sampling_start) || P.t_host_sampling_start === nothing) && t % P.t_year in P.host_sampling_period)
         println("t = $(t)")
 
         execute(db, "BEGIN TRANSACTION")
@@ -249,7 +249,7 @@ function write_output!(db, t, s, stats)
             write_gene_strain_counts(db, t, s)
         end    
         
-        if ((P.t_host_sampling_start !== missing && t >= P.t_host_sampling_start) || P.t_host_sampling_start === missing) && t % P.t_year in P.host_sampling_period
+        if ((P.t_host_sampling_start !== nothing && t >= P.t_host_sampling_start) || P.t_host_sampling_start === nothing) && t % P.t_year in P.host_sampling_period
             write_host_samples(db, t, s)
         end        
 

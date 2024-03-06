@@ -25,6 +25,9 @@ include("util.jl")
 include("state.jl")
 include("output.jl")
 
+import Profile
+import Serialization
+
 const N_EVENTS = 7
 const EVENTS = collect(1:N_EVENTS)
 const (BITING, IMMIGRATION, BACKGROUND_CLEARANCE, SWITCHING, MUTATION, ECTOPIC_RECOMBINATION, IMMUNITY_LOSS) = EVENTS
@@ -68,6 +71,22 @@ end
 func_rank = ordinalrank(P.var_groups_functionality, rev = true)
 
 function run()
+    if P.profile_on
+        profile()
+    else
+        run_inner()
+    end
+end
+
+function profile()
+    Profile.init(n = 10^7, delay = P.profile_delay)
+    @Profile.profile run_inner()
+
+    profile_data = Profile.retrieve()
+    Serialization.serialize(P.profile_filename, profile_data)
+end
+
+function run_inner()
     db = initialize_database()
 
     # Seed the random number generator using the provided seed,
