@@ -254,6 +254,7 @@ function write_output!(db, t, s, stats)
         end        
 
         execute(db, "COMMIT")
+        flush(stdout)
     end
 end
 

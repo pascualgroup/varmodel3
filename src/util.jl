@@ -169,3 +169,27 @@ function get_key_by_iteration_order(d::Dict{K, V}, index::Int) where {K, V}
     end
     @assert false
 end
+
+"""
+State for a batched distribution.
+"""
+mutable struct BatchedDistribution
+    d::Sampleable{Univariate, Continuous}
+    draws::Vector{Float64}
+    next_draw_index::Int
+
+    function BatchedDistribution(d, batch_size)
+        draws = Vector(undef, batch_size)
+        next_draw_index = 1
+        new(d, draws, 1)
+    end
+end
+
+function Base.rand(bd::BatchedDistribution)
+    if bd.next_draw_index == 1
+        rand!(bd.d, bd.draws)
+    end
+    draw = bd.draws[bd.next_draw_index]
+    bd.next_draw_index = 1 + mod(bd.next_draw_index, length(bd.draws))
+    draw
+end
