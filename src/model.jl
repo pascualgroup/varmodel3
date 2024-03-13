@@ -122,10 +122,13 @@ function run_inner()
     rates = [get_rate(t, s, event) for event in EVENTS]
     total_rate = sum(rates)
 
+    # Batched exponential distribution for event loop draws
+    batched_exp_dist = BatchedDistribution(Exponential(1.0), P.rng_batch_size)
+
     # Loop events until end of simulation.
     while total_rate > 0.0 && t < P.t_end
         # Draw next time with rate equal to the sum of all event rates.
-        dt = rand(Exponential(1.0 / total_rate))
+        dt = rand(batched_exp_dist) / total_rate
         @assert dt > 0.0 && !isinf(dt)
 
         # At each integer time, write output/state verification (if necessary),
