@@ -23,7 +23,6 @@
   "whole_gene_immune": false,
   "distinct_initial_snp_allele_frequencies": false,
   "var_groups_do_not_share_alleles": true,
-  "immunity_level_max": 32000,
   "rng_seed": null,
   "n_genes_per_strain": 60,
   "snp_pairwise_ld": null,

@@ -226,7 +226,7 @@ keyword constructor for the class.
 
     See description in the `immunity` field of struct `State`.
     """
-    immunity_level_max::Union{Int16, Nothing} = nothing
+    # immunity_level_max::Union{Int16, Nothing} = nothing
 
     """
     Rate at which immunity is lost, per host, per gene.
