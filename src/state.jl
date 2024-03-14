@@ -28,7 +28,7 @@ const StrainId = UInt32
 const ExpressionIndex = UInt8
 const ExpressionIndexLocus = UInt8
 # const ExpressionIndexLocus = Float32
-const ImmunityLevel = UInt16 # UInt8
+const ImmunityLevel = UInt8
 const Gene = SVector{P.n_loci, AlleleId}  # Immutable fixed-size vector
 const MGene = MVector{P.n_loci, AlleleId} # Mutable fixed-size vector
 
