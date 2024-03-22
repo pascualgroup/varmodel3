@@ -28,9 +28,9 @@ include("output.jl")
 import Profile
 import Serialization
 
-const N_EVENTS = 7
+const N_EVENTS = 9
 const EVENTS = collect(1:N_EVENTS)
-const (BITING, IMMIGRATION, BACKGROUND_CLEARANCE, SWITCHING, MUTATION, ECTOPIC_RECOMBINATION, IMMUNITY_LOSS) = EVENTS
+const (DEATH, BITING, IMMIGRATION, BACKGROUND_CLEARANCE, LIVER_PROGRESS, SWITCHING, MUTATION, ECTOPIC_RECOMBINATION, IMMUNITY_LOSS) = EVENTS
 
 const USE_BITING_RATE_MULTIPLIER_BY_YEAR = P.biting_rate_multiplier_by_year !== nothing
 
@@ -284,7 +284,7 @@ function initialize_state()
     hosts = [
         Host(
             id = id,
-            t_birth = 0, t_death = draw_host_lifetime(),
+            t_birth = 0, # t_death = draw_host_lifetime(),
             liver_infections = [], active_infections = [],
             immunity = ImmuneHistory(),
             n_cleared_infections = 0
@@ -292,8 +292,10 @@ function initialize_state()
         for id in 1:P.n_hosts
     ]
     for host in hosts
-        host.t_birth = -(rand() * host.t_death)
-        host.t_death = host.t_death + host.t_birth
+        # Chosen to roughly match the behavior of the old code, so some hosts die off "early"
+        # in case we want to compare lifetime distributions,
+        # but it doesn't actually affect dynamics at all since it's a Poisson process
+        host.t_birth = -rand() * rand(Exponential(P.mean_host_lifetime))
     end
 
     # Define the initial allele frequencies at each SNP.
@@ -348,6 +350,8 @@ function initialize_state()
         infection = create_empty_infection()
         infection.id = infection_id
         infection.t_infection = 0.0
+        infection.liver_index = 1
+        infection.expression_index = 0
         infection.t_expression = NaN
         infection.duration = NaN
         infection.strain_id = infection_id
@@ -459,6 +463,7 @@ function create_empty_infection()
         strain_id = StrainId(0),
         genes = fill(AlleleId(0), (P.n_loci, P.n_genes_per_strain)),
         snps = fill(SnpId(0), P.n_snps_per_strain),
+        liver_index = LiverIndex(0),
         expression_index = ExpressionIndex(0),
         expression_index_locus = ExpressionIndexLocus(0)
     )
@@ -483,12 +488,16 @@ function update_rates!(rates, t, s)
 end
 
 function get_rate(t, s, event)
-    if event == BITING
+    if event == DEATH
+        get_rate_death(t, s)
+    elseif event == BITING
         get_rate_biting(t, s)
     elseif event == IMMIGRATION
         get_rate_immigration(t, s)
     elseif event == BACKGROUND_CLEARANCE
         get_rate_background_clearance(t, s)
+    elseif event == LIVER_PROGRESS
+        get_rate_liver_progress(t, s)
     elseif event == SWITCHING
         get_rate_switching(t, s)
     elseif event == MUTATION
@@ -501,12 +510,16 @@ function get_rate(t, s, event)
 end
 
 function do_event!(t, s, stats, event, db)
-    if event == BITING
+    if event == DEATH
+        do_death!(t, s, stats)
+    elseif event == BITING
         do_biting!(t, s, stats)
     elseif event == IMMIGRATION
         do_immigration!(t, s, stats)
     elseif event == BACKGROUND_CLEARANCE
         do_background_clearance(t, s, stats)
+    elseif event == LIVER_PROGRESS
+        do_liver_progress!(t, s, stats)
     elseif event == SWITCHING
         do_switching!(t, s, stats)
     elseif event == MUTATION
@@ -516,6 +529,19 @@ function do_event!(t, s, stats, event, db)
     elseif event == IMMUNITY_LOSS
         do_immunity_loss!(t, s, stats)
     end
+end
+
+
+### DEATH EVENT ###
+
+function get_rate_death(t, s)
+    P.n_hosts / P.mean_host_lifetime
+end
+
+function do_death!(t, s, stats)
+    host = rand(s.hosts)
+    do_rebirth!(t, s, host)
+    true
 end
 
 
@@ -533,7 +559,6 @@ function get_rate_biting(t, s)
 end
 
 function do_biting!(t, s, stats)
-
     stats.n_bites += 1
     s.n_bites_for_migration_rate += 1
 
@@ -541,10 +566,6 @@ function do_biting!(t, s, stats)
     # (destination).
     src_host = rand(s.hosts)
     dst_host = rand(s.hosts)
-
-    # Advance host (rebirth or infection activation).
-    advance_host!(t, s, src_host)
-    advance_host!(t, s, dst_host)
 
     # The source host must be infected in order to transmit.
     src_active_count = length(src_host.active_infections)
@@ -610,6 +631,7 @@ function do_biting!(t, s, stats)
         dst_inf.id = next_infection_id!(s)
         dst_inf.t_infection = t
         dst_inf.t_expression = NaN
+        dst_inf.liver_index = 1
         dst_inf.expression_index = 0
         dst_inf.expression_index_locus = 0
         dst_inf.duration = NaN
@@ -715,51 +737,11 @@ function do_biting!(t, s, stats)
     end
 end
 
-function advance_host!(t, s, host)
-    if t > host.t_death
-        # If the host is past its death time.
-        do_rebirth!(t, s, host)
-    else
-        i = 1
-        while i <= length(host.liver_infections)
-            infection = host.liver_infections[i]
-            if infection.t_infection + P.t_liver_stage < t
-
-                # If the infection is past the liver stage, remove it from the liver.
-                delete_and_swap_with_end!(host.liver_infections, i)
-                # If there's room, move it into the active infections array.
-                # Otherwise, just put it into the recycle bin.
-                if isnothing(P.n_infections_active_max) || length(host.active_infections) < P.n_infections_active_max
-                    infection.expression_index = 1
-                    if P.whole_gene_immune
-                        infection.expression_index_locus = P.n_loci
-                    else
-                        infection.expression_index_locus = 1
-                    end
-                    push!(host.active_infections, infection)
-                    infection.t_expression = t
-
-                    advance_immune_genes!(t,s,host,length(host.active_infections))
-
-                    if length(host.active_infections) > s.n_active_infections_per_host_max
-                        s.n_active_infections_per_host_max = length(host.active_infections)
-                    end
-                else
-                    push!(s.old_infections, infection)
-                end
-            else
-                i += 1
-            end
-        end
-    end
-    nothing
-end
-
 
 function do_rebirth!(t, s, host)
     host.id = next_host_id!(s)
     host.t_birth = t
-    host.t_death = t + draw_host_lifetime()
+    # host.t_death = t + draw_host_lifetime()
     host.n_cleared_infections = 0
     empty!(host.liver_infections)
     empty!(host.active_infections)
@@ -777,7 +759,6 @@ function do_immigration!(t, s, stats)
 
     # Sample a random host and advance it (rebirth or infection activation).
     host = rand(s.hosts)
-    advance_host!(t, s, host)
 
     # If host doesn't have an available infection slot, reject this sample.
     if !isnothing(P.n_infections_liver_max)
@@ -793,6 +774,7 @@ function do_immigration!(t, s, stats)
     infection.t_expression = NaN
     infection.duration = NaN
     infection.strain_id = next_strain_id!(s)
+    infection.liver_index = 1
     infection.expression_index = 0
     infection.expression_index_locus = 0
     if !P.var_groups_fix_ratio
@@ -878,7 +860,6 @@ function do_background_clearance(t, s, stats)
     host = s.hosts[index[1]]
 
     # Advance host (rebirth or infection activation).
-    advance_host!(t, s, host)
     inf_index = index[2]
 
     # If the infection index is out of range, this is a rejected sample.
@@ -892,6 +873,55 @@ function do_background_clearance(t, s, stats)
 
         true
     end
+end
+
+
+### LIVER PROGRESS EVENT ###
+
+function get_rate_liver_progress(t, s)
+    P.n_hosts * s.n_liver_infections_per_host_max * P.liver_erlang_shape / P.t_liver_stage
+end
+
+function do_liver_progress!(t, s, stats)
+    index = rand(CartesianIndices((P.n_hosts, s.n_liver_infections_per_host_max)))
+    host = s.hosts[index[1]]
+    inf_index = index[2]
+
+    if inf_index > length(host.liver_infections)
+        return false
+    end
+    infection = host.liver_infections[inf_index]
+
+    # Increment liver progress or activate infection
+    @assert infection.liver_index >= 1 && infection.liver_index <= P.liver_erlang_shape
+    if infection.liver_index == P.liver_erlang_shape
+        # If the infection is past the liver stage, remove it from the liver and activate it.
+        delete_and_swap_with_end!(host.liver_infections, inf_index)
+        # If there's room, move it into the active infections array.
+        # Otherwise, just put it into the recycle bin.
+        if isnothing(P.n_infections_active_max) || length(host.active_infections) < P.n_infections_active_max
+            infection.liver_index = 0
+            infection.expression_index = 1
+            if P.whole_gene_immune
+                infection.expression_index_locus = P.n_loci
+            else
+                infection.expression_index_locus = 1
+            end
+            push!(host.active_infections, infection)
+            infection.t_expression = t
+            advance_immune_genes!(t, s, host, length(host.active_infections))
+
+            # Update maximum number of active infections per host
+            if length(host.active_infections) > s.n_active_infections_per_host_max
+                s.n_active_infections_per_host_max = length(host.active_infections)
+            end
+        else
+            push!(s.old_infections, infection)
+        end
+    else
+        infection.liver_index += 1
+    end
+    true
 end
 
 
@@ -914,9 +944,6 @@ end
 function do_switching!(t, s, stats)
     index = rand(CartesianIndices((P.n_hosts, (s.n_active_infections_per_host_max+s.n_liver_infections_per_host_max))))
     host = s.hosts[index[1]]
-
-    # Advance host (rebirth or infection activation).
-    advance_host!(t, s, host)
     inf_index = index[2]
     
     # If the infection index is out of range, this is a rejected sample.
@@ -1044,9 +1071,6 @@ function do_mutation!(t, s, stats)
     expression_index = index[3]
     locus = index[4]
 
-    # Advance host (rebirth or infection activation).
-    advance_host!(t, s, host)
-
     # If there's no active infection at the drawn index, reject this sample.
     if inf_index > length(host.active_infections)
         return false
@@ -1093,9 +1117,6 @@ function do_ectopic_recombination!(t, s, stats)
     index = rand(CartesianIndices((P.n_hosts, (s.n_active_infections_per_host_max + s.n_liver_infections_per_host_max))))
     host = s.hosts[index[1]]
     inf_index = index[2]
-
-    # Advance host (rebirth or infection activation).
-    advance_host!(t, s, host)
 
     # If there's no active infection at the drawn index, reject this sample.
     if inf_index > length(host.active_infections)
@@ -1328,9 +1349,6 @@ function do_immunity_loss!(t, s, stats)
     index = rand(CartesianIndices((P.n_hosts, s.n_immunities_per_host_max)))
     host = s.hosts[index[1]]
     immunity_index = index[2]
-
-    # Advance host (rebirth or infection activation).
-    advance_host!(t, s, host)
 
     # If the immunity index is beyond this host's immunity count, reject this sample.
     if immunity_index >  immunity_count(host.immunity)

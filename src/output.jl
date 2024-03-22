@@ -316,7 +316,7 @@ function write_host_samples(db, t, s)
         execute(
         db.sampled_hosts,
         (
-            t, Int64(host.id), host.t_birth, host.t_death,
+            t, Int64(host.id), host.t_birth, missing, # host.t_death, # Cannot know t_death
             length(host.liver_infections), length(host.active_infections)
         )
         )

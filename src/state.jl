@@ -25,6 +25,7 @@ else
 end
 
 const StrainId = UInt32
+const LiverIndex = UInt8
 const ExpressionIndex = UInt8
 const ExpressionIndexLocus = UInt8
 # const ExpressionIndexLocus = Float32
@@ -107,6 +108,15 @@ matrix of allele IDs), and the currently expressed index.
     genes::MMatrix{P.n_loci, P.n_genes_per_strain, AlleleId}
 
     """
+    Progression through liver stage as exponential substeps of an Erlang distribution for liver stage duration.
+    
+    Set to 1, 2, 3, ... k where k is the shape parameter of the distribution.
+    
+    Set to `0` (and ignored) for active infections.
+    """
+    liver_index::LiverIndex
+
+    """
     Index in `genes` matrix of currently expressed gene.
 
     Set to `0` (and ignored) for liver-stage infections.
@@ -143,8 +153,8 @@ Infection arrays are dynamically sized but currently limited to
     "Birth time of host."
     t_birth::Float64
 
-    "Death time of host."
-    t_death::Float64
+    # "Death time of host."
+    # t_death::Float64
 
     "Infections in liver stage, not yet activated."
     liver_infections::Array{Infection}

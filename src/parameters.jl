@@ -244,11 +244,19 @@ keyword constructor for the class.
     mutation_rate::Union{Float64, Nothing} = nothing
 
     """
-    Duration of the liver stage.
+    Mean duration of the liver stage.
 
-    Infections become active after `t_liver_stage` units of time.
+    Infections become active after `t_liver_stage` units of time on average.
+    Actual progression is governed by an Erlang distribution with shape `liver_erlang_shape`.
     """
     t_liver_stage::Union{Float64, Nothing} = nothing
+
+    """
+    Shape parameter for Erlang distribution governing liver stage progress.
+    
+    Default shape of 49 gives a standard deviation of 2 days with a mean duration of 14 days.
+    """
+    liver_erlang_shape::Union{Int, Nothing} = 49
 
     """
     Switching rate for genes the host is not immune to.
@@ -526,6 +534,10 @@ function validate(p::Params)
 
     @assert p.t_liver_stage !== nothing
     @assert p.t_liver_stage >= 0.0
+
+    @assert p.liver_erlang_shape !== nothing
+    @assert p.liver_erlang_shape >= 1
+    @assert p.liver_erlang_shape <= 100
 
     @assert p.switching_rate !== nothing
     @assert all(p.switching_rate .>= 0.0)
