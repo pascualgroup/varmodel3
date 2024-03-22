@@ -277,8 +277,7 @@ keyword constructor for the class.
     """
         Maximum host lifetime.
 
-        The exponential distribution used to draw host lifetime is truncated
-        at this value.
+        Not used, should be `nothing`.
     """
     max_host_lifetime::Union{Float32, Nothing} = nothing
 
@@ -546,8 +545,7 @@ function validate(p::Params)
     @assert p.mean_host_lifetime !== nothing
     @assert p.mean_host_lifetime >= 0.0
 
-    @assert p.max_host_lifetime !== nothing
-    @assert p.max_host_lifetime >= p.mean_host_lifetime
+    @assert p.max_host_lifetime === nothing
 
     @assert p.background_clearance_rate !== nothing
     @assert p.background_clearance_rate >= 0.0
