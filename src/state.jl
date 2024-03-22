@@ -12,7 +12,6 @@ const Locus = UInt8
 const HostId = UInt32
 const InfectionId = UInt32
 const GeneId = UInt32
-const SnpId = UInt8
 const GeneGroupId = UInt8
 
 
@@ -128,12 +127,6 @@ matrix of allele IDs), and the currently expressed index.
 
     "Duration of the infection."
     duration::Float64
-
-    """
-    Biallelic neutral SNPs, specified as 1 or 2 (e.g. A or G).
-    These SNPs do not contribute to the infection duration or host immune memory.
-    """
-    snps::Array{SnpId, 1}
 end
 
 """
@@ -310,12 +303,6 @@ management auxiliaries.
     during the sampling period, used as multiplier on migration rate.
     """
     infected_ratio::Float64
-
-    """
-    Array of initial SNP allele frequencies.
-    Used to pick an allele at each SNP during the initialization and immigration.
-    """
-    initial_snp_allele_frequencies::Array{Float64, 1}
 
     """
     Dictionary storing the map between gene (based on its two alleles) and its group id. 
