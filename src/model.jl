@@ -149,7 +149,8 @@ function run_inner()
         end
 
         # Draw the event, update time, and execute event.
-        event = direct_sample_linear_scan(rates, total_rate)
+        # event = direct_sample_linear_scan(rates, total_rate)
+        event = sample(Weights(rates, total_rate))
         t += dt
         event_happened = do_event!(t, s, stats, event, db)
 
