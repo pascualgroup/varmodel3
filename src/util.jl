@@ -243,7 +243,11 @@ function compute_n_bins_and_p_accept(weight, bin_size)
     n_bins_fractional = weight / bin_size
     n_bins_ceil = ceil(n_bins_fractional)
 
-    (Int(n_bins_ceil), n_bins_fractional / n_bins_ceil)
+    if n_bins_ceil == 0.0
+        (0, 0.0)
+    else
+        (Int(n_bins_ceil), n_bins_fractional / n_bins_ceil)
+    end
 end
 
 function verify(wdd::WeightedDiscreteDistribution)
@@ -294,6 +298,6 @@ function update!(wdd::WeightedDiscreteDistribution, item, weight)
         wdd.weights[item] = weight
         wdd.p_accept[item] = p_accept_new
 
-        verify(wdd)
+        # verify(wdd)
     end
 end

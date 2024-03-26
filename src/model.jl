@@ -112,7 +112,8 @@ function run_inner()
     # Initialize event rates.
     rates = [get_rate(t, s, event) for event in EVENTS]
     total_rate = sum(rates)
-    weights = Weights(rates, total_rate)
+    #weights = Weights(rates, total_rate)
+    weighted_event_dist = WeightedDiscreteDistribution(0.1, rates)
 
     # Batched exponential distribution for event loop draws
     batched_exp_dist = BatchedDistribution(Exponential(1.0), P.rng_batch_size)
@@ -151,7 +152,8 @@ function run_inner()
 
         # Draw the event, update time, and execute event.
         # event = direct_sample_linear_scan(rates, total_rate)
-        event = sample(weights)
+        # event = sample(weights)
+        event = rand(weighted_event_dist)
         t += dt
         event_happened = do_event!(t, s, stats, event, db)
 
@@ -160,7 +162,9 @@ function run_inner()
         # (This is wasteful but not a bottleneck.)
         if event_happened
             total_rate = update_rates!(rates, t, s)
-            weights = Weights(rates, total_rate)
+            for (event, rate) in enumerate(rates)
+                update!(weighted_event_dist, event, rate)
+            end
             stats.n_events += 1
         end
     end
