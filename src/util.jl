@@ -3,6 +3,7 @@ using Test
 import Base.push!
 import Base.delete!
 import Base.rand
+import Random.rand!
 import Base.length
 import Base.iterate
 import Base.in
@@ -140,13 +141,15 @@ Deletes index `i` in the array and replaces it with the last entry in the array.
 
 This enables maintaining a set of objects in an array (in arbitrary order)
 so they can be uniformly randomly sampled, with constant-time cost for removal.
+The moved item is returned so an auxiliary data structure can also track locations if necessary.
 """
 function delete_and_swap_with_end!(a, i)
     @assert i <= length(a)
-
+    
     x = pop!(a)
     if i <= length(a)
         a[i] = x
+        return x
     end
     nothing
 end
@@ -192,4 +195,105 @@ function Base.rand(bd::BatchedDistribution)
     draw = bd.draws[bd.next_draw_index]
     bd.next_draw_index = 1 + mod(bd.next_draw_index, length(bd.draws))
     draw
+end
+
+"""
+State for a weighted discrete distribution
+"""
+mutable struct WeightedDiscreteDistribution
+    bin_size::Float64
+    weights::Vector{Float64}
+    bins::Vector{Int}
+    bin_indices::Dict{Int, Set{Int}}
+    p_accept::Vector{Float64}
+    batch_dist::BatchedDistribution
+
+    function WeightedDiscreteDistribution(bin_size, weights; rand_batch_size = 10000000)
+        # Initialize bins
+        bins = Vector{Int}()
+        bin_indices = Dict{Int, Set{Int}}()
+        p_accept = Vector{Float64}()
+        for i in 1:length(weights)
+            (n_bins, p_accept_i) = compute_n_bins_and_p_accept(weights[i], bin_size)
+            push!(p_accept, p_accept_i)
+
+            bin_indices[i] = Set((length(bins) + 1):(length(bins) + n_bins))
+            @assert length(bin_indices[i]) == n_bins
+            append!(bins, fill(i, n_bins))
+        end
+        #println(p_accept)
+
+        wdd = new(bin_size, weights, bins, bin_indices, p_accept, BatchedDistribution(Uniform(), rand_batch_size))
+        verify(wdd)
+        wdd
+    end
+end
+
+function Base.rand(wdd::WeightedDiscreteDistribution)
+    # Repeat until a sample is accepted
+    while true
+        item = rand(wdd.bins) # TODO: batch this too if not fast enough
+        if rand(wdd.batch_dist) < wdd.p_accept[item]
+            return item
+        end
+    end
+end
+
+function compute_n_bins_and_p_accept(weight, bin_size)
+    n_bins_fractional = weight / bin_size
+    n_bins_ceil = ceil(n_bins_fractional)
+
+    (Int(n_bins_ceil), n_bins_fractional / n_bins_ceil)
+end
+
+function verify(wdd::WeightedDiscreteDistribution)
+    for (item, weight) in enumerate(wdd.weights)
+        (n_bins, p_accept) = compute_n_bins_and_p_accept(weight, wdd.bin_size)
+        @assert wdd.p_accept[item] == p_accept
+        @assert length(wdd.bin_indices[item]) == n_bins
+        for bin_index in wdd.bin_indices[item]
+            @assert wdd.bins[bin_index] == item
+        end
+    end
+
+    for (bin_index, item) in enumerate(wdd.bins)
+        @assert bin_index in wdd.bin_indices[item]
+    end
+end
+
+function update!(wdd::WeightedDiscreteDistribution, item, weight)
+    if weight != wdd.weights[item]
+        n_bins_old = length(wdd.bin_indices[item])
+        (n_bins_new, p_accept_new) = compute_n_bins_and_p_accept(weight, wdd.bin_size)
+
+        # Adjust the number of bins, if necessary
+        if n_bins_new > n_bins_old
+            for i in 1:(n_bins_new - n_bins_old)
+                push!(wdd.bins, item)
+                @assert !(length(wdd.bins) in wdd.bin_indices[item])
+                push!(wdd.bin_indices[item], length(wdd.bins))
+            end
+        elseif n_bins_old > n_bins_new
+            for i in 1:(n_bins_old - n_bins_new)
+                bin_index_to_remove = pop!(wdd.bin_indices[item])
+                last_bin_index = length(wdd.bins)
+                moved_item = delete_and_swap_with_end!(wdd.bins, bin_index_to_remove)
+                if moved_item !== nothing
+                    # Update the index set for the item that got moved from last_index
+                    # to bin_index_to_remove
+                    @assert last_bin_index in wdd.bin_indices[moved_item]
+                    delete!(wdd.bin_indices[moved_item], last_bin_index)
+                    @assert !(bin_index_to_remove in wdd.bin_indices[moved_item])
+                    push!(wdd.bin_indices[moved_item], bin_index_to_remove)
+
+                end
+            end
+        end
+
+        # Update the weight and acceptance probability
+        wdd.weights[item] = weight
+        wdd.p_accept[item] = p_accept_new
+
+        verify(wdd)
+    end
 end
