@@ -203,6 +203,7 @@ State for a weighted discrete distribution
 mutable struct WeightedDiscreteDistribution
     bin_size::Float64
     weights::Vector{Float64}
+    total_weight::Float64
     bins::Vector{Int}
     bin_indices::Dict{Int, Set{Int}}
     p_accept::Vector{Float64}
@@ -223,7 +224,7 @@ mutable struct WeightedDiscreteDistribution
         end
         #println(p_accept)
 
-        wdd = new(bin_size, weights, bins, bin_indices, p_accept, BatchedDistribution(Uniform(), rand_batch_size))
+        wdd = new(bin_size, weights, sum(weights), bins, bin_indices, p_accept, BatchedDistribution(Uniform(), rand_batch_size))
         verify(wdd)
         wdd
     end
@@ -248,6 +249,14 @@ function compute_n_bins_and_p_accept(weight, bin_size)
     else
         (Int(n_bins_ceil), n_bins_fractional / n_bins_ceil)
     end
+end
+
+function total_weight(wdd::WeightedDiscreteDistribution)
+    wdd.total_weight
+end
+
+function recompute_total_weight!(wdd::WeightedDiscreteDistribution)
+    wdd.total_weight = sum(wdd.weights)
 end
 
 function verify(wdd::WeightedDiscreteDistribution)
@@ -295,6 +304,7 @@ function update!(wdd::WeightedDiscreteDistribution, item, weight)
         end
 
         # Update the weight and acceptance probability
+        wdd.total_weight += weight - wdd.weights[item] # May introduce error; periodically call recompute_total_weight!()
         wdd.weights[item] = weight
         wdd.p_accept[item] = p_accept_new
 
