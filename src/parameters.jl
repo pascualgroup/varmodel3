@@ -226,7 +226,7 @@ keyword constructor for the class.
 
     See description in the `immunity` field of struct `State`.
     """
-    immunity_level_max::Union{Int16, Nothing} = nothing
+    immunity_level_max::Union{UInt8, Nothing} = nothing
 
     """
     Rate at which immunity is lost, per host, per gene.
@@ -456,8 +456,7 @@ function validate(p::Params)
     @assert p.gene_strain_count_period !== nothing
     @assert p.gene_strain_count_period > 0
 
-    @assert p.sample_infection_duration_every !== nothing
-    @assert p.sample_infection_duration_every >= 0
+    @assert p.sample_infection_duration_every === nothing || p.sample_infection_duration_every >= 0
 
     if p.verification_period !== nothing
         @assert p.verification_period > 0
@@ -588,8 +587,8 @@ function validate(p::Params)
     """
     @assert p.irs_start_year === nothing || p.irs_start_year >= 0 
     @assert p.irs_duration === nothing || p.irs_duration >= 0 
-    @assert p.biting_rate_factor === nothing || p.biting_rate_factor >= 0.0
+    @assert p.biting_rate_factor === nothing
     @assert p.t_host_sampling_start === nothing || p.t_host_sampling_start >= 0
-    @assert p.biting_rate_mean !== nothing && p.biting_rate_mean > 0.0
+    @assert p.biting_rate_mean === nothing
     # @assert p.t_decimal_advance !== nothing && p.t_decimal_advance > 0.0
 end

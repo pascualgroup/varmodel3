@@ -131,7 +131,7 @@ function run_inner()
         # Loop required in case the simulation jumps past two integer times.
         while t_next_integer < t + dt
             write_output!(db, t_next_integer, s, stats)
-            if P.verification_period != nothing && t_next_integer % P.verification_period == 0
+            if P.verification_period !== nothing && t_next_integer % P.verification_period == 0
                 verify(t_next_integer, s)
             end
 
@@ -149,11 +149,10 @@ function run_inner()
                 recompute_gene_group_id_association!(s)
             end
 
-            # Update biting and immigration rates once a day
-            update_rate!(t_next_integer, s, event_dist, BITING)
-            update_rate!(t_next_integer, s, event_dist, IMMIGRATION)
-
-            # Recompute rate total to reset potential error accumulation
+            # Update all rates & reset rate total to prevent error accumulation
+            for event in EVENTS
+                update_rate!(t_next_integer, s, event_dist, event)
+            end
             recompute_total_weight!(event_dist)
             
             t_next_integer += 1
@@ -1183,9 +1182,11 @@ end
     * Random background clearance events
 """
 function clear_active_infection!(t, s, host, inf_index)
-    if s.n_cleared_infections % P.sample_infection_duration_every == 0
-        # Calculate and write the infection duration.
-        add_infection_duration!(t, s, host, inf_index)
+    if P.sample_infection_duration_every !== nothing
+        if s.n_cleared_infections % P.sample_infection_duration_every == 0
+            # Calculate and write the infection duration.
+            add_infection_duration!(t, s, host, inf_index)
+        end
     end
     s.n_cleared_infections += 1
     host.n_cleared_infections += 1
