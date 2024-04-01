@@ -115,7 +115,7 @@ function run_inner()
     # Initialize event rates.
     # total_rate = sum(rates)
     #weights = Weights(rates, total_rate)
-    event_dist = WeightedDiscreteDistribution(0.1, [get_rate(t, s, event) for event in EVENTS])
+    event_dist = WeightedDiscreteDistribution(10.0, [get_rate(t, s, event) for event in EVENTS])
 
     # Batched exponential distribution for event loop draws
     batched_exp_dist = BatchedDistribution(Exponential(1.0), P.rng_batch_size)
@@ -171,6 +171,10 @@ function run_inner()
     elapsed_time = Dates.value(now() - start_datetime) / 1000.0
     println("elapsed time (s): $(elapsed_time)")
     execute(db.meta, ("elapsed_time", elapsed_time))
+    
+    max_rss_gb = Sys.maxrss() / 2^30
+    println("maxrss (GB) = $(max_rss_gb)")
+    execute(db.meta, ("max_rss_gb", max_rss_gb))
 
     went_extinct = total_weight(event_dist) == 0.0
     println("went extinct? $(went_extinct)")
