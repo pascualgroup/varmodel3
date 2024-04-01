@@ -440,7 +440,7 @@ function do_biting!(t, s, stats)
             shuffle_columns_to!(dst_inf.genes, src_inf_1.genes)
             # The new infection is given infection 1's SNP alleles.
             if P.n_snps_per_strain > 0
-                dst_inf.snps = src_inf_1.snps
+                dst_inf.snps[:] = src_inf_1.snps[:]
             end
         else
             # Otherwise, the new infection is given a new strain constructed by
