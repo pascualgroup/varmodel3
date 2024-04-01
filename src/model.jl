@@ -174,6 +174,10 @@ function run_inner()
     elapsed_time = Dates.value(now() - start_datetime) / 1000.0
     println("elapsed time (s): $(elapsed_time)")
     execute(db.meta, ("elapsed_time", elapsed_time))
+    
+    max_rss_gb = Sys.maxrss() / 2^30
+    println("maxrss (GB) = $(max_rss_gb)")
+    execute(db.meta, ("max_rss_gb", max_rss_gb))
 
     went_extinct = total_rate == 0.0
     println("went extinct? $(went_extinct)")
