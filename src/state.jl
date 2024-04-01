@@ -180,6 +180,11 @@ management auxiliaries.
 """
 @with_kw mutable struct State
     """
+    Random device.
+    """
+    rng::Xoshiro
+
+    """
     Gene pool used to generate initial infections and immigration events.
     Entry (i, j) is the allele ID for gene j, locus i.
 
