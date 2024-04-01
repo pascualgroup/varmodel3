@@ -101,7 +101,7 @@ function run_inner()
     start_datetime = now()
 
     # Used to decide when to do output and verification.
-    t_next_integer = 1
+    t_next_integer_float = 1.0
 
     # Initialize state.
     t = 0.0
@@ -129,7 +129,9 @@ function run_inner()
         # At each integer time, write output/state verification (if necessary),
         # and update the biting/immigration rate.
         # Loop required in case the simulation jumps past two integer times.
-        while t_next_integer < t + dt
+        t_next = t + dt
+        while t_next_integer_float < t_next
+            t_next_integer = Int64(t_next_integer_float)
             write_output!(db, t_next_integer, s, stats)
             if P.verification_period !== nothing && t_next_integer % P.verification_period == 0
                 verify(t_next_integer, s)
@@ -155,14 +157,14 @@ function run_inner()
             end
             recompute_total_weight!(event_dist)
             
-            t_next_integer += 1
+            t_next_integer_float += 1.0
         end
 
         # Draw the event, update time, and execute event.
         # event = direct_sample_linear_scan(rates, total_rate)
         # event = sample(weights)
         event = rand(event_dist)
-        t += dt
+        t = t_next
         if do_event!(t, s, stats, event, event_dist)
             stats.n_events += 1
         end
