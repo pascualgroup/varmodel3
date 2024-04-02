@@ -795,11 +795,8 @@ function get_rate_background_clearance(t, s)
 end
 
 function do_background_clearance(t, s, stats, event_dist)
-    index = rand(s.rng, CartesianIndices((P.n_hosts, s.n_active_infections_per_host_max)))
-    host = s.hosts[index[1]]
-
-    # Advance host (rebirth or infection activation).
-    inf_index = index[2]
+    host = rand(s.rng, P.n_hosts)
+    inf_index = rand(s.rng, 1:s.n_active_infections_per_host_max)
 
     # If the infection index is out of range, this is a rejected sample.
     # Otherwise we'll proceed.
@@ -821,9 +818,8 @@ function get_rate_liver_progress(t, s)
 end
 
 function do_liver_progress!(t, s, stats, event_dist)
-    index = rand(s.rng, CartesianIndices((P.n_hosts, s.n_liver_infections_per_host_max)))
-    host = s.hosts[index[1]]
-    inf_index = index[2]
+    host = rand(s.rng, s.hosts)
+    inf_index = rand(s.rng, 1:s.n_liver_infections_per_host_max)
 
     if inf_index > length(host.liver_infections)
         return false
@@ -882,9 +878,8 @@ function get_rate_switching(t, s)
 end
 
 function do_switching!(t, s, stats, event_dist)
-    index = rand(s.rng, CartesianIndices((P.n_hosts, s.n_active_infections_per_host_max)))
-    host = s.hosts[index[1]]
-    inf_index = index[2]
+    host = rand(s.rng, s.hosts)
+    inf_index = rand(s.rng, 1:s.n_active_infections_per_host_max)
     
     # If the infection index is out of range, this is a rejected sample.
     # Otherwise we'll proceed.
@@ -1014,16 +1009,16 @@ function get_rate_mutation(t, s)
 end
 
 function do_mutation!(t, s, stats, event_dist)
-    index = rand(s.rng, CartesianIndices((P.n_hosts, s.n_active_infections_per_host_max, P.n_genes_per_strain, P.n_loci)))
-    host = s.hosts[index[1]]
-    inf_index = index[2]
-    expression_index = index[3]
-    locus = index[4]
+    host = rand(s.rng, s.hosts)
+    inf_index = rand(s.rng, 1:s.n_active_infections_per_host_max)
 
     # If there's no active infection at the drawn index, reject this sample.
     if inf_index > length(host.active_infections)
         return false
     end
+
+    expression_index = rand(s.rng, 1:P.n_genes_per_strain)
+    locus = rand(s.rng, 1:P.n_loci)
 
     infection = host.active_infections[inf_index]
 
@@ -1062,10 +1057,8 @@ end
 
 
 function do_ectopic_recombination!(t, s, stats, event_dist)
-    # Index based on the total number of infections.
-    index = rand(s.rng, CartesianIndices((P.n_hosts, s.n_active_infections_per_host_max)))
-    host = s.hosts[index[1]]
-    inf_index = index[2]
+    host = rand(s.rng, s.hosts)
+    inf_index = rand(s.rng, 1:s.n_active_infections_per_host_max)
 
     # If there's no active infection at the drawn index, reject this sample.
     if inf_index > length(host.active_infections)
@@ -1297,9 +1290,8 @@ function get_rate_immunity_loss(t, s)
 end
 
 function do_immunity_loss!(t, s, stats, event_dist)
-    index = rand(s.rng, CartesianIndices((P.n_hosts, s.n_immunities_per_host_max)))
-    host = s.hosts[index[1]]
-    immunity_index = index[2]
+    host = rand(s.rng, s.hosts)
+    immunity_index = rand(s.rng, 1:s.n_immunities_per_host_max)
 
     # If the immunity index is beyond this host's immunity count, reject this sample.
     if immunity_index >  immunity_count(host.immunity)
