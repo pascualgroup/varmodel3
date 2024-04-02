@@ -124,14 +124,14 @@ function run_inner()
     # Loop events until end of simulation.
     while total_weight(event_dist) > 0.0 && t < P.t_end
         # Draw next time with rate equal to the sum of all event rates.
-        dt = rand(rng, batched_exp_dist) / total_weight(event_dist)
+        dt = @fastmath rand(rng, batched_exp_dist) / total_weight(event_dist)
         # @assert dt > 0.0 && !isinf(dt)
 
         # At each integer time, write output/state verification (if necessary),
         # and update the biting/immigration rate.
         # Loop required in case the simulation jumps past two integer times.
-        t_next = t + dt
-        while t_next_integer_float < t_next
+        t_next = @fastmath t + dt
+        while @fastmath t_next_integer_float < t_next
             t_next_integer = Int64(t_next_integer_float)
             write_output!(db, t_next_integer, s, stats)
             if P.verification_period !== nothing && t_next_integer % P.verification_period == 0
@@ -164,9 +164,9 @@ function run_inner()
         # Draw the event, update time, and execute event.
         # event = direct_sample_linear_scan(rates, total_rate)
         # event = sample(weights)
-        event = rand(rng, event_dist)
+        event = @fastmath rand(rng, event_dist)
         t = t_next
-        if do_event!(t, s, stats, event, event_dist)
+        if @fastmath do_event!(t, s, stats, event, event_dist)
             stats.n_events += 1
         end
     end
@@ -818,8 +818,8 @@ function get_rate_liver_progress(t, s)
 end
 
 function do_liver_progress!(t, s, stats, event_dist)
-    host = rand(s.rng, s.hosts)
-    inf_index = rand(s.rng, 1:s.n_liver_infections_per_host_max)
+    host = @fastmath rand(s.rng, s.hosts)
+    inf_index = @fastmath rand(s.rng, 1:s.n_liver_infections_per_host_max)
 
     if inf_index > length(host.liver_infections)
         return false
