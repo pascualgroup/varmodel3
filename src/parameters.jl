@@ -226,7 +226,7 @@ keyword constructor for the class.
 
     See description in the `immunity` field of struct `State`.
     """
-    immunity_level_max::Union{Int16, Nothing} = nothing
+    immunity_level_max::Union{UInt8, Nothing} = nothing
 
     """
     Rate at which immunity is lost, per host, per gene.
@@ -244,11 +244,19 @@ keyword constructor for the class.
     mutation_rate::Union{Float64, Nothing} = nothing
 
     """
-    Duration of the liver stage.
+    Mean duration of the liver stage.
 
-    Infections become active after `t_liver_stage` units of time.
+    Infections become active after `t_liver_stage` units of time on average.
+    Actual progression is governed by an Erlang distribution with shape `liver_erlang_shape`.
     """
     t_liver_stage::Union{Float64, Nothing} = nothing
+
+    """
+    Shape parameter for Erlang distribution governing liver stage progress.
+    
+    Default shape of 49 gives a standard deviation of 2 days with a mean duration of 14 days.
+    """
+    liver_erlang_shape::Union{Int, Nothing} = 49
 
     """
     Switching rate for genes the host is not immune to.
@@ -269,8 +277,7 @@ keyword constructor for the class.
     """
         Maximum host lifetime.
 
-        The exponential distribution used to draw host lifetime is truncated
-        at this value.
+        Not used, should be `nothing`.
     """
     max_host_lifetime::Union{Float32, Nothing} = nothing
 
@@ -418,6 +425,14 @@ keyword constructor for the class.
         Delay between samples
     """
     profile_delay::Float64 = 0.1
+
+    """
+        Batch size for batched exponential draws.
+        Exponential draws are a significant percent of simulation time;
+        drawing them in large batches enables the use of vector (SIMD) instructions
+        for a ~ 4x RNG speedup in isolated tests.
+    """
+    rng_batch_size::Int = 10000000
 end
 
 """
@@ -441,8 +456,7 @@ function validate(p::Params)
     @assert p.gene_strain_count_period !== nothing
     @assert p.gene_strain_count_period > 0
 
-    @assert p.sample_infection_duration_every !== nothing
-    @assert p.sample_infection_duration_every >= 0
+    @assert p.sample_infection_duration_every === nothing || p.sample_infection_duration_every >= 0
 
     if p.verification_period !== nothing
         @assert p.verification_period > 0
@@ -519,6 +533,10 @@ function validate(p::Params)
     @assert p.t_liver_stage !== nothing
     @assert p.t_liver_stage >= 0.0
 
+    @assert p.liver_erlang_shape !== nothing
+    @assert p.liver_erlang_shape >= 1
+    @assert p.liver_erlang_shape <= 100
+
     @assert p.switching_rate !== nothing
     @assert all(p.switching_rate .>= 0.0)
     # @assert p.switching_rate >= 0.0
@@ -526,8 +544,7 @@ function validate(p::Params)
     @assert p.mean_host_lifetime !== nothing
     @assert p.mean_host_lifetime >= 0.0
 
-    @assert p.max_host_lifetime !== nothing
-    @assert p.max_host_lifetime >= p.mean_host_lifetime
+    @assert p.max_host_lifetime === nothing
 
     @assert p.background_clearance_rate !== nothing
     @assert p.background_clearance_rate >= 0.0
@@ -550,29 +567,6 @@ function validate(p::Params)
         @assert p.migration_rate_update_period !== nothing
     end
 
-    @assert p.n_snps_per_strain !== nothing
-    @assert p.n_snps_per_strain >= 0
-    if p.n_snps_per_strain > 0
-        @assert p.distinct_initial_snp_allele_frequencies !== nothing
-        if p.distinct_initial_snp_allele_frequencies
-            @assert p.initial_snp_allele_frequency !== nothing
-            @assert length(p.initial_snp_allele_frequency) == 2
-            @assert p.initial_snp_allele_frequency[1] >= 0.0
-            @assert p.initial_snp_allele_frequency[1] < 1.0
-            @assert p.initial_snp_allele_frequency[2] > 0.0
-            @assert p.initial_snp_allele_frequency[2] <= 1.0
-            @assert p.initial_snp_allele_frequency[1] < p.initial_snp_allele_frequency[2]
-        end
-        @assert p.snp_linkage_disequilibrium !== nothing
-        if p.snp_linkage_disequilibrium
-            @assert p.n_snps_per_strain >= 2
-            @assert length(p.snp_pairwise_ld) == p.n_snps_per_strain
-            for i in 1:p.n_snps_per_strain
-                @assert length(p.snp_pairwise_ld[i]) == p.n_snps_per_strain
-            end
-        end
-    end
-
     """
     check the parameters for different var groups implementation.
     """
@@ -593,8 +587,8 @@ function validate(p::Params)
     """
     @assert p.irs_start_year === nothing || p.irs_start_year >= 0 
     @assert p.irs_duration === nothing || p.irs_duration >= 0 
-    @assert p.biting_rate_factor === nothing || p.biting_rate_factor >= 0.0
+    @assert p.biting_rate_factor === nothing
     @assert p.t_host_sampling_start === nothing || p.t_host_sampling_start >= 0
-    @assert p.biting_rate_mean !== nothing && p.biting_rate_mean > 0.0
+    @assert p.biting_rate_mean === nothing
     # @assert p.t_decimal_advance !== nothing && p.t_decimal_advance > 0.0
 end

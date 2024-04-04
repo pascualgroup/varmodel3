@@ -12,7 +12,6 @@ const Locus = UInt8
 const HostId = UInt32
 const InfectionId = UInt32
 const GeneId = UInt32
-const SnpId = UInt8
 const GeneGroupId = UInt8
 
 
@@ -25,10 +24,11 @@ else
 end
 
 const StrainId = UInt32
+const LiverIndex = UInt8
 const ExpressionIndex = UInt8
 const ExpressionIndexLocus = UInt8
 # const ExpressionIndexLocus = Float32
-const ImmunityLevel = UInt16 # UInt8
+const ImmunityLevel = UInt8 # UInt16 # UInt8
 const Gene = SVector{P.n_loci, AlleleId}  # Immutable fixed-size vector
 const MGene = MVector{P.n_loci, AlleleId} # Mutable fixed-size vector
 
@@ -107,6 +107,15 @@ matrix of allele IDs), and the currently expressed index.
     genes::MMatrix{P.n_loci, P.n_genes_per_strain, AlleleId}
 
     """
+    Progression through liver stage as exponential substeps of an Erlang distribution for liver stage duration.
+    
+    Set to 1, 2, 3, ... k where k is the shape parameter of the distribution.
+    
+    Set to `0` (and ignored) for active infections.
+    """
+    liver_index::LiverIndex
+
+    """
     Index in `genes` matrix of currently expressed gene.
 
     Set to `0` (and ignored) for liver-stage infections.
@@ -118,12 +127,6 @@ matrix of allele IDs), and the currently expressed index.
 
     "Duration of the infection."
     duration::Float64
-
-    """
-    Biallelic neutral SNPs, specified as 1 or 2 (e.g. A or G).
-    These SNPs do not contribute to the infection duration or host immune memory.
-    """
-    snps::Array{SnpId, 1}
 end
 
 """
@@ -143,8 +146,8 @@ Infection arrays are dynamically sized but currently limited to
     "Birth time of host."
     t_birth::Float64
 
-    "Death time of host."
-    t_death::Float64
+    # "Death time of host."
+    # t_death::Float64
 
     "Infections in liver stage, not yet activated."
     liver_infections::Array{Infection}
@@ -300,12 +303,6 @@ management auxiliaries.
     during the sampling period, used as multiplier on migration rate.
     """
     infected_ratio::Float64
-
-    """
-    Array of initial SNP allele frequencies.
-    Used to pick an allele at each SNP during the initialization and immigration.
-    """
-    initial_snp_allele_frequencies::Array{Float64, 1}
 
     """
     Dictionary storing the map between gene (based on its two alleles) and its group id. 

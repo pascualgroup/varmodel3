@@ -36,8 +36,6 @@ struct VarModelDB
     sampled_durations::Stmt
     sampled_infection_genes::Stmt
     sampled_immunity::Stmt
-    sampled_infection_snps::Stmt
-    initial_snp_allele_frequencies::Stmt
 end
 
 """
@@ -182,22 +180,6 @@ function initialize_database()
         );
     """)
 
-    execute(db, """
-        CREATE TABLE sampled_infection_snps(
-            infection_id INTEGER,
-            snp_index INTEGER,
-            allele_snp_id INTEGER,
-            UNIQUE(infection_id, snp_index) ON CONFLICT IGNORE
-        );
-    """)
-
-    execute(db, """
-        CREATE TABLE initial_snp_allele_frequencies(
-            snp_index INTEGER,
-            allele_frequencies FLOAT
-        );
-    """)
-
     VarModelDB(
         db,
         make_insert_statement(db, "meta", 2),
@@ -207,9 +189,7 @@ function initialize_database()
         make_insert_statement(db, "sampled_infections", 6),
         make_insert_statement(db, "sampled_durations", 6),
         make_insert_statement(db, "sampled_infection_genes", 2 + 1 + P.n_loci),
-        make_insert_statement(db, "sampled_immunity", 5),
-        make_insert_statement(db, "sampled_infection_snps", 3),
-        make_insert_statement(db, "initial_snp_allele_frequencies", 2)
+        make_insert_statement(db, "sampled_immunity", 5)
     )
 end
 
@@ -254,6 +234,7 @@ function write_output!(db, t, s, stats)
         end        
 
         execute(db, "COMMIT")
+        flush(stdout)
     end
 end
 
@@ -315,7 +296,7 @@ function write_host_samples(db, t, s)
         execute(
         db.sampled_hosts,
         (
-            t, Int64(host.id), host.t_birth, host.t_death,
+            t, Int64(host.id), host.t_birth, missing, # host.t_death, # Cannot know t_death
             length(host.liver_infections), length(host.active_infections)
         )
         )
@@ -358,11 +339,6 @@ function write_infection(db, t, host, infection, s)
         @assert haskey(s.association_genes_to_var_groups, gene_id)
         gene_group_id = s.association_genes_to_var_groups[gene_id]
         execute(db.sampled_infection_genes, vcat([infection.id, i], gene_group_id, infection.genes[:,i]))
-    end
-    if P.n_snps_per_strain > 0
-        for i in 1:P.n_snps_per_strain
-            execute(db.sampled_infection_snps, vcat([infection.id, i], infection.snps[i]))
-        end
     end
 end
 
@@ -429,14 +405,5 @@ function write_immunity(db, t, host)
         for (key, value) in d
             execute(db.sampled_immunity, (t, Int64(host.id), Int64(locus), Int64(key), Int64(value)))
         end
-    end
-end
-
-"""
-Write the initial snp allele frequencies.
-"""
-function write_initial_snp_allele_frequencies(db, s)
-    for snp in 1:P.n_snps_per_strain
-        execute(db.initial_snp_allele_frequencies, (Int64(snp), Float64(round(s.initial_snp_allele_frequencies[snp], digits = 3))))
     end
 end
