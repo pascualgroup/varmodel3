@@ -94,7 +94,8 @@ function run_inner()
     else
         P.rng_seed
     end
-    Random.seed!(rng_seed)
+    # Random.seed!(rng_seed)
+    rng = Xoshiro(rng_seed)
     execute(db.meta, ("rng_seed", rng_seed))
 
     # Start recording elapsed time.
@@ -105,7 +106,7 @@ function run_inner()
 
     # Initialize state.
     t = 0.0
-    s = initialize_state()
+    s = initialize_state(rng)
     verify(t, s)
 
     # Run initial output.
@@ -123,14 +124,14 @@ function run_inner()
     # Loop events until end of simulation.
     while total_weight(event_dist) > 0.0 && t < P.t_end
         # Draw next time with rate equal to the sum of all event rates.
-        dt = rand(batched_exp_dist) / total_weight(event_dist)
+        dt = @fastmath rand(rng, batched_exp_dist) / total_weight(event_dist)
         # @assert dt > 0.0 && !isinf(dt)
 
         # At each integer time, write output/state verification (if necessary),
         # and update the biting/immigration rate.
         # Loop required in case the simulation jumps past two integer times.
-        t_next = t + dt
-        while t_next_integer_float < t_next
+        t_next = @fastmath t + dt
+        while @fastmath t_next_integer_float < t_next
             t_next_integer = Int64(t_next_integer_float)
             write_output!(db, t_next_integer, s, stats)
             if P.verification_period !== nothing && t_next_integer % P.verification_period == 0
@@ -163,9 +164,9 @@ function run_inner()
         # Draw the event, update time, and execute event.
         # event = direct_sample_linear_scan(rates, total_rate)
         # event = sample(weights)
-        event = rand(event_dist)
+        event = @fastmath rand(rng, event_dist)
         t = t_next
-        if do_event!(t, s, stats, event, event_dist)
+        if @fastmath do_event!(t, s, stats, event, event_dist)
             stats.n_events += 1
         end
     end
@@ -248,7 +249,7 @@ end
 ### INITIALIZATION ###
 
 #function initialize_state(a)
-function initialize_state()
+function initialize_state(rng)
     println("initialize_state()")
 
     # Initialize gene pool as an (n_loci, n_genes_initial) matrix whose columns
@@ -266,7 +267,7 @@ function initialize_state()
             end
             
             while length(gene_pool_set) < counter
-                gene_temp_alleles = rand(allele_ids_var_group, P.n_loci)
+                gene_temp_alleles = rand(rng, allele_ids_var_group, P.n_loci)
                 if !(gene_temp_alleles in gene_pool_set)
                     push!(gene_pool_set, gene_temp_alleles)
                     gene_temp = Gene(gene_temp_alleles)
@@ -298,13 +299,13 @@ function initialize_state()
         # Chosen to roughly match the behavior of the old code, so some hosts die off "early"
         # in case we want to compare lifetime distributions,
         # but it doesn't actually affect dynamics at all since it's a Poisson process
-        host.t_birth = -rand() * rand(Exponential(P.mean_host_lifetime))
+        host.t_birth = -rand(rng) * rand(rng, Exponential(P.mean_host_lifetime))
     end
 
     # Infect n_initial_infections hosts at t = 0. Genes in the infection
     # are sampled uniformly randomly from the gene pool.
     # Check for var_groups_fix_ratio
-    for (infection_id, host_index) in enumerate(sample(1:P.n_hosts, P.n_initial_infections, replace = false))
+    for (infection_id, host_index) in enumerate(sample(rng, 1:P.n_hosts, P.n_initial_infections, replace = false))
         infection = create_empty_infection()
         infection.id = infection_id
         infection.t_infection = 0.0
@@ -315,7 +316,7 @@ function initialize_state()
         infection.strain_id = infection_id
         if !P.var_groups_fix_ratio
             infection.genes[:,:] = reshape(
-                gene_pool[:, rand(1:P.n_genes_initial, P.n_genes_per_strain)],
+                gene_pool[:, rand(rng, 1:P.n_genes_initial, P.n_genes_per_strain)],
                 (P.n_loci, P.n_genes_per_strain)
             )
             group_ids = []
@@ -330,10 +331,10 @@ function initialize_state()
                 if P.var_groups_ratio[group_id] > 0.0
                     infection_genes_index_var_group = infection_genes_index_var_groups[group_id]
                     for infection_gene_index_var_group in infection_genes_index_var_group
-                        infection_gene = gene_pool[:,rand(1:P.n_genes_initial, 1)]
+                        infection_gene = gene_pool[:,rand(rng, 1:P.n_genes_initial, 1)]
                         infection_gene_group_id = association_genes_to_var_groups_init[Gene(infection_gene)]
                         while infection_gene_group_id != group_id # Keeping drawing until the targeted group of genes is drawn.
-                            infection_gene = gene_pool[:,rand(1:P.n_genes_initial, 1)]
+                            infection_gene = gene_pool[:,rand(rng, 1:P.n_genes_initial, 1)]
                             infection_gene_group_id = association_genes_to_var_groups_init[Gene(infection_gene)]
                         end
                         # @assert association_genes_to_var_groups_init[Gene(infection_gene)] == group_id
@@ -368,6 +369,7 @@ function initialize_state()
     end
 
     State(
+        rng = rng,
         n_alleles = fill(P.n_alleles_per_locus_initial, P.n_loci),
         gene_pool = gene_pool,
         next_host_id = P.n_hosts + 1,
@@ -395,10 +397,10 @@ end
     The distribution is an exponential distribution with mean
     `mean_host_lifetime`, truncated at `max_host_lifetime`.
 """
-function draw_host_lifetime()
+function draw_host_lifetime(rng)
     dist = Exponential(P.mean_host_lifetime)
     while true
-        lifetime = rand(dist)
+        lifetime = rand(rng, dist)
         if lifetime < P.max_host_lifetime
             return lifetime
         end
@@ -494,7 +496,7 @@ function get_rate_death(t, s)
 end
 
 function do_death!(t, s, stats, event_dist)
-    host = rand(s.hosts)
+    host = rand(s.rng, s.hosts)
     do_rebirth!(t, s, host)
     true
 end
@@ -519,8 +521,8 @@ function do_biting!(t, s, stats, event_dist)
 
     # Uniformly randomly sample infecting host (source) and host being infected
     # (destination).
-    src_host = rand(s.hosts)
-    dst_host = rand(s.hosts)
+    src_host = rand(s.rng, s.hosts)
+    dst_host = rand(s.rng, s.hosts)
 
     # The source host must be infected in order to transmit.
     src_active_count = length(src_host.active_infections)
@@ -550,7 +552,7 @@ function do_biting!(t, s, stats, event_dist)
 
     # First choose the active strains from the host that will be transmitted to mosquito.
     # This is determined by the transmissibility.
-    choose_transmit = rand(Float64, src_active_count)
+    choose_transmit = rand(s.rng, Float64, src_active_count)
     
     # Find out the currently expressed gene, and its group id, which impacts the transmissibility of the infection.
     infs_transmissibility = []
@@ -577,8 +579,8 @@ function do_biting!(t, s, stats, event_dist)
         transmitted = true
 
         # Randomly sample two source infections within transmitted_strains to recombine.
-        src_inf_1 = rand(transmitted_strains)
-        src_inf_2 = rand(transmitted_strains)
+        src_inf_1 = rand(s.rng, transmitted_strains)
+        src_inf_2 = rand(s.rng, transmitted_strains)
 
         # Get a new infection struct, or recycle an old infection
         # to prevent excess memory allocation.
@@ -596,12 +598,12 @@ function do_biting!(t, s, stats, event_dist)
             # If both infections have the same strain, then the new infection
             # is given infection 1's genes with expression order shuffled.
             dst_inf.strain_id = src_inf_1.strain_id
-            shuffle_columns_to!(dst_inf.genes, src_inf_1.genes)
+            shuffle_columns_to!(s.rng, dst_inf.genes, src_inf_1.genes)
         else
             # Otherwise, the new infection is given a new strain constructed by
             # taking a random sample of the genes in the two source infections.
             dst_inf.strain_id = next_strain_id!(s)
-            sample_columns_from_two_matrices_to_util2!(dst_inf.genes, src_inf_1.genes, src_inf_2.genes, P, s, infection_genes_index_var_groups)
+            sample_columns_from_two_matrices_to_util2!(s.rng, dst_inf.genes, src_inf_1.genes, src_inf_2.genes, P, s, infection_genes_index_var_groups)
         end
 
         # Add this infection to the destination host.
@@ -703,7 +705,7 @@ end
 function do_immigration!(t, s, stats, event_dist)
 
     # Sample a random host and advance it (rebirth or infection activation).
-    host = rand(s.hosts)
+    host = rand(s.rng, s.hosts)
 
     # If host doesn't have an available infection slot, reject this sample.
     if !isnothing(P.n_infections_liver_max)
@@ -724,7 +726,7 @@ function do_immigration!(t, s, stats, event_dist)
     infection.expression_index_locus = 0
     if !P.var_groups_fix_ratio
         for i in 1:P.n_genes_per_strain
-            infection.genes[:,i] = s.gene_pool[:, rand(1:size(s.gene_pool)[2])]
+            infection.genes[:,i] = s.gene_pool[:, rand(s.rng, 1:size(s.gene_pool)[2])]
         end
         group_ids = []
         for i in 1:size(infection.genes)[2]
@@ -738,11 +740,11 @@ function do_immigration!(t, s, stats, event_dist)
             if P.var_groups_ratio[group_id] > 0.0
                 infection_genes_index_var_group = infection_genes_index_var_groups[group_id]
                 for infection_gene_index_var_group in infection_genes_index_var_group
-                    infection_gene = s.gene_pool[:, rand(1:size(s.gene_pool)[2])]
+                    infection_gene = s.gene_pool[:, rand(s.rng, 1:size(s.gene_pool)[2])]
                     # @assert haskey(s.association_genes_to_var_groups, Gene(infection_gene))
                     infection_gene_group_id = s.association_genes_to_var_groups[Gene(infection_gene)]
                     while infection_gene_group_id != group_id
-                        infection_gene = s.gene_pool[:, rand(1:size(s.gene_pool)[2])]
+                        infection_gene = s.gene_pool[:, rand(s.rng, 1:size(s.gene_pool)[2])]
                         # @assert haskey(s.association_genes_to_var_groups, Gene(infection_gene))
                         infection_gene_group_id = s.association_genes_to_var_groups[Gene(infection_gene)]
                     end
@@ -793,11 +795,8 @@ function get_rate_background_clearance(t, s)
 end
 
 function do_background_clearance(t, s, stats, event_dist)
-    index = rand(CartesianIndices((P.n_hosts, s.n_active_infections_per_host_max)))
-    host = s.hosts[index[1]]
-
-    # Advance host (rebirth or infection activation).
-    inf_index = index[2]
+    host = rand(s.rng, P.n_hosts)
+    inf_index = rand(s.rng, 1:s.n_active_infections_per_host_max)
 
     # If the infection index is out of range, this is a rejected sample.
     # Otherwise we'll proceed.
@@ -819,9 +818,8 @@ function get_rate_liver_progress(t, s)
 end
 
 function do_liver_progress!(t, s, stats, event_dist)
-    index = rand(CartesianIndices((P.n_hosts, s.n_liver_infections_per_host_max)))
-    host = s.hosts[index[1]]
-    inf_index = index[2]
+    host = @fastmath rand(s.rng, s.hosts)
+    inf_index = @fastmath rand(s.rng, 1:s.n_liver_infections_per_host_max)
 
     if inf_index > length(host.liver_infections)
         return false
@@ -880,9 +878,8 @@ function get_rate_switching(t, s)
 end
 
 function do_switching!(t, s, stats, event_dist)
-    index = rand(CartesianIndices((P.n_hosts, s.n_active_infections_per_host_max)))
-    host = s.hosts[index[1]]
-    inf_index = index[2]
+    host = rand(s.rng, s.hosts)
+    inf_index = rand(s.rng, 1:s.n_active_infections_per_host_max)
     
     # If the infection index is out of range, this is a rejected sample.
     # Otherwise we'll proceed.
@@ -895,7 +892,7 @@ function do_switching!(t, s, stats, event_dist)
     # @assert haskey(s.association_genes_to_var_groups, Gene(gene_expression))
     gene_expression_group_id = s.association_genes_to_var_groups[Gene(gene_expression)]
     p_acceptance = P.switching_rate[gene_expression_group_id]/maximum(P.switching_rate)
-    if rand() < p_acceptance
+    if rand(s.rng, ) < p_acceptance
         should_update_rates = false
 
         """
@@ -1012,16 +1009,16 @@ function get_rate_mutation(t, s)
 end
 
 function do_mutation!(t, s, stats, event_dist)
-    index = rand(CartesianIndices((P.n_hosts, s.n_active_infections_per_host_max, P.n_genes_per_strain, P.n_loci)))
-    host = s.hosts[index[1]]
-    inf_index = index[2]
-    expression_index = index[3]
-    locus = index[4]
+    host = rand(s.rng, s.hosts)
+    inf_index = rand(s.rng, 1:s.n_active_infections_per_host_max)
 
     # If there's no active infection at the drawn index, reject this sample.
     if inf_index > length(host.active_infections)
         return false
     end
+
+    expression_index = rand(s.rng, 1:P.n_genes_per_strain)
+    locus = rand(s.rng, 1:P.n_loci)
 
     infection = host.active_infections[inf_index]
 
@@ -1060,10 +1057,8 @@ end
 
 
 function do_ectopic_recombination!(t, s, stats, event_dist)
-    # Index based on the total number of infections.
-    index = rand(CartesianIndices((P.n_hosts, s.n_active_infections_per_host_max)))
-    host = s.hosts[index[1]]
-    inf_index = index[2]
+    host = rand(s.rng, s.hosts)
+    inf_index = rand(s.rng, 1:s.n_active_infections_per_host_max)
 
     # If there's no active infection at the drawn index, reject this sample.
     if inf_index > length(host.active_infections)
@@ -1072,7 +1067,7 @@ function do_ectopic_recombination!(t, s, stats, event_dist)
 
     infection = host.active_infections[inf_index]
 
-    gene_indices = rand(gene_pair_indices)
+    gene_indices = rand(s.rng, gene_pair_indices)
     gene_index_1 = gene_indices[1]
     gene_index_2 = gene_indices[2]
 
@@ -1092,7 +1087,7 @@ function do_ectopic_recombination!(t, s, stats, event_dist)
     gene2_recomb_rate_ratio = P.ectopic_recombination_rate[gene2_group_id]/maximum(P.ectopic_recombination_rate)
     p_acceptance = gene1_recomb_rate_ratio * gene2_recomb_rate_ratio
 
-    if rand() < p_acceptance
+    if rand(s.rng) < p_acceptance
         # If the genes are the same, this is a no-op.
         if gene1 == gene2
             return false
@@ -1100,13 +1095,13 @@ function do_ectopic_recombination!(t, s, stats, event_dist)
 
         breakpoint, p_functional = if P.ectopic_recombination_generates_new_alleles
             # Choose a breakpoint.
-            breakpoint = P.n_loci * rand()
+            breakpoint = P.n_loci * rand(s.rng)
             p_functional = p_recombination_is_functional_real(gene1, gene2, breakpoint)
 
             (Int(ceil(breakpoint)), p_functional)
         else
             # Choose a breakpoint.
-            breakpoint = rand(1:P.n_loci)
+            breakpoint = rand(s.rng, 1:P.n_loci)
             if breakpoint == 1
                 return false
             end
@@ -1116,15 +1111,15 @@ function do_ectopic_recombination!(t, s, stats, event_dist)
             (breakpoint, p_functional)
         end
 
-        is_conversion = rand() < P.p_ectopic_recombination_is_conversion
+        is_conversion = rand(s.rng) < P.p_ectopic_recombination_is_conversion
 
         recombined = false
 
         create_new_allele = P.ectopic_recombination_generates_new_alleles &&
-            rand() < P.p_ectopic_recombination_generates_new_allele
+            rand(s.rng) < P.p_ectopic_recombination_generates_new_allele
 
         # Recombine to modify first gene, if functional.
-        if !is_conversion && rand() < p_functional
+        if !is_conversion && rand(s.rng) < p_functional
             infection.genes[:, gene_index_1] = if create_new_allele
                 recombine_genes_new_allele(s, gene1, gene2, breakpoint)
             else
@@ -1133,7 +1128,7 @@ function do_ectopic_recombination!(t, s, stats, event_dist)
         end
 
         # Recombine to modify second gene, if functional.
-        if rand() < p_functional
+        if rand(s.rng) < p_functional
             infection.genes[:, gene_index_2] = if create_new_allele
                 recombine_genes_new_allele(s, gene2, gene1, breakpoint)
             else
@@ -1295,9 +1290,8 @@ function get_rate_immunity_loss(t, s)
 end
 
 function do_immunity_loss!(t, s, stats, event_dist)
-    index = rand(CartesianIndices((P.n_hosts, s.n_immunities_per_host_max)))
-    host = s.hosts[index[1]]
-    immunity_index = index[2]
+    host = rand(s.rng, s.hosts)
+    immunity_index = rand(s.rng, 1:s.n_immunities_per_host_max)
 
     # If the immunity index is beyond this host's immunity count, reject this sample.
     if immunity_index >  immunity_count(host.immunity)

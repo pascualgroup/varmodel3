@@ -33,9 +33,9 @@ cumulative sum.
 If the sampled location is less than the cumulative sum, return the index of
 the most recently scanned box.
 """
-function direct_sample_linear_scan(weights, total_weight)
+function direct_sample_linear_scan(rng, weights, total_weight)
     bin_right_side = 0.0
-    sampled_location = rand() * total_weight
+    sampled_location = rand(rng) * total_weight
     for i in 1:(length(weights) - 1)
         bin_right_side += weights[i]
         if sampled_location < bin_right_side
@@ -48,10 +48,10 @@ end
 """
 Copies the columns of `src` to `dst` in random order.
 """
-function shuffle_columns_to!(dst, src)
+function shuffle_columns_to!(rng, dst, src)
     m = size(dst)[2]
     src_indices = MVector{m, Int}(1:m)
-    shuffle!(src_indices)
+    shuffle!(rng, src_indices)
     dst[:,:] = src[:,src_indices]
 end
 
@@ -59,13 +59,13 @@ end
 Copies a random sample of the columns of `src1` and `src2` to `dst`.
 """
 
-function sample_columns_from_two_matrices_to_util!(dst, src1, src2)
+function sample_columns_from_two_matrices_to_util!(rng, dst, src1, src2)
     m_dst = size(dst)[2]
     m_src_1 = size(src1)[2]
     m_src_2 = size(src2)[2]
     m_src = m_src_1 + m_src_2
     src_indices = MVector{m_src, Int}(1:m_src)
-    shuffle!(src_indices)
+    shuffle!(rng, src_indices)
     for i_dst in 1:m_dst
         i_src = src_indices[i_dst]
         if i_src <= m_src_1
@@ -79,9 +79,9 @@ end
 
 
 
-function sample_columns_from_two_matrices_to_util2!(dst, src1, src2, P, s, infection_genes_index_var_groups)
+function sample_columns_from_two_matrices_to_util2!(rng, dst, src1, src2, P, s, infection_genes_index_var_groups)
     if !P.var_groups_fix_ratio
-        sample_columns_from_two_matrices_to_util!(dst, src1, src2)
+        sample_columns_from_two_matrices_to_util!(rng, dst, src1, src2)
     else
         # extract genes of the specific group from two source strains.
         src1_genes_all_groups = []
@@ -119,7 +119,7 @@ function sample_columns_from_two_matrices_to_util2!(dst, src1, src2, P, s, infec
                 src2_genes_group_id[:,k] = src2_genes_group_id_vec[k]
             end
             dst_genes_group_id = zeros(AlleleId, P.n_loci, length(dst_index))
-            sample_columns_from_two_matrices_to_util!(dst_genes_group_id, src1_genes_group_id, src2_genes_group_id)
+            sample_columns_from_two_matrices_to_util!(rng, dst_genes_group_id, src1_genes_group_id, src2_genes_group_id)
             dst[:, dst_index] = dst_genes_group_id
         end
     end
@@ -188,9 +188,9 @@ mutable struct BatchedDistribution
     end
 end
 
-function Base.rand(bd::BatchedDistribution)
+function Base.rand(rng::AbstractRNG, bd::BatchedDistribution)
     if bd.next_draw_index == 1
-        rand!(bd.d, bd.draws)
+        rand!(rng, bd.d, bd.draws)
     end
     draw = bd.draws[bd.next_draw_index]
     bd.next_draw_index = 1 + mod(bd.next_draw_index, length(bd.draws))
@@ -230,11 +230,11 @@ mutable struct WeightedDiscreteDistribution
     end
 end
 
-function Base.rand(wdd::WeightedDiscreteDistribution)
+function Base.rand(rng::AbstractRNG, wdd::WeightedDiscreteDistribution)
     # Repeat until a sample is accepted
     while true
-        item = rand(wdd.bins) # TODO: batch this too if not fast enough
-        if rand(wdd.batch_dist) < wdd.p_accept[item]
+        item = rand(rng, wdd.bins) # TODO: batch this too if not fast enough
+        if rand(rng, wdd.batch_dist) < wdd.p_accept[item]
             return item
         end
     end
