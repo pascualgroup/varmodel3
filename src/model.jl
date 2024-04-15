@@ -119,12 +119,13 @@ function run_inner()
     event_dist = WeightedDiscreteDistribution(10.0, [get_rate(t, s, event) for event in EVENTS])
 
     # Batched exponential distribution for event loop draws
-    batched_exp_dist = BatchedDistribution(Exponential(1.0), P.rng_batch_size)
+    exp_dist = Exponential(1.0)
 
     # Loop events until end of simulation.
     while total_weight(event_dist) > 0.0 && t < P.t_end
         # Draw next time with rate equal to the sum of all event rates.
-        dt = @fastmath rand(rng, batched_exp_dist) / total_weight(event_dist)
+        # dt = @fastmath rand(rng, batched_exp_dist) / total_weight(event_dist)
+        dt = @fastmath rand(rng, exp_dist) / total_weight(event_dist)
         # @assert dt > 0.0 && !isinf(dt)
 
         # At each integer time, write output/state verification (if necessary),
