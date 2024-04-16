@@ -32,6 +32,12 @@ const ImmunityLevel = UInt8 # UInt16 # UInt8
 const Gene = SVector{P.n_loci, AlleleId}  # Immutable fixed-size vector
 const MGene = MVector{P.n_loci, AlleleId} # Mutable fixed-size vector
 
+const Genes = MMatrix{P.n_loci, P.n_genes_per_strain, AlleleId}
+
+function create_empty_genes()
+    @MMatrix zeros(AlleleId, P.n_loci, P.n_genes_per_strain)
+end
+
 
 struct ImmuneHistory
     vd::Vector{Dict{AlleleId, ImmunityLevel}}
@@ -104,7 +110,7 @@ matrix of allele IDs), and the currently expressed index.
 
     Allele identifiers are unique for a each locus.
     """
-    genes::MMatrix{P.n_loci, P.n_genes_per_strain, AlleleId}
+    genes::Genes
 
     """
     Progression through liver stage as exponential substeps of an Erlang distribution for liver stage duration.
@@ -127,6 +133,20 @@ matrix of allele IDs), and the currently expressed index.
 
     "Duration of the infection."
     duration::Float64
+
+    function Infection(t_infection::Float64, id::InfectionId, strain_id::StrainId, genes::Genes)
+        new(
+            id,
+            t_infection,
+            NaN,
+            strain_id,
+            genes,
+            1,
+            0,
+            0,
+            NaN
+        )
+    end
 end
 
 """
@@ -169,6 +189,16 @@ Infection arrays are dynamically sized but currently limited to
     When the level reaches 0, the allele is removed from the dictionary.
     """
     immunity::ImmuneHistory
+
+    function Host(t_birth::Float64, id::HostId)
+        new(
+            id,
+            0,
+            [], [],
+            0,
+            ImmuneHistory(),
+        )
+    end
 end
 
 """
@@ -280,12 +310,12 @@ management auxiliaries.
     """
     n_liver_infections_per_host_max::Int
 
-    """
-    Array of old infections.
+    # """
+    # Array of old infections.
 
-    Used to prevent allocation of new infections.
-    """
-    old_infections::Array{Infection}
+    # Used to prevent allocation of new infections.
+    # """
+    # old_infections::Array{Infection}
 
     "Number of cleared infections."
     n_cleared_infections::Int

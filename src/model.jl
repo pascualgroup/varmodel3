@@ -288,45 +288,40 @@ function initialize_state(rng)
     # distribution, and no initial infections or immunity.
     hosts = [
         Host(
-            id = id,
-            t_birth = 0, # t_death = draw_host_lifetime(),
-            liver_infections = [], active_infections = [],
-            immunity = ImmuneHistory(),
-            n_cleared_infections = 0
+            # Birth time chosen to roughly match the behavior of the old code, so some hosts die off "early"
+            # in case we want to compare lifetime distributions,
+            # but it doesn't actually affect dynamics since host death is now a Poisson process
+            -rand(rng) * rand(rng, Exponential(P.mean_host_lifetime)),
+            HostId(id)
         )
         for id in 1:P.n_hosts
     ]
-    for host in hosts
-        # Chosen to roughly match the behavior of the old code, so some hosts die off "early"
-        # in case we want to compare lifetime distributions,
-        # but it doesn't actually affect dynamics at all since it's a Poisson process
-        host.t_birth = -rand(rng) * rand(rng, Exponential(P.mean_host_lifetime))
-    end
 
     # Infect n_initial_infections hosts at t = 0. Genes in the infection
     # are sampled uniformly randomly from the gene pool.
     # Check for var_groups_fix_ratio
     for (infection_id, host_index) in enumerate(sample(rng, 1:P.n_hosts, P.n_initial_infections, replace = false))
-        infection = create_empty_infection()
-        infection.id = infection_id
-        infection.t_infection = 0.0
-        infection.liver_index = 1
-        infection.expression_index = 0
-        infection.t_expression = NaN
-        infection.duration = NaN
-        infection.strain_id = infection_id
+        # infection = create_empty_infection()
+        # infection.id = infection_id
+        # infection.t_infection = 0.0
+        # infection.liver_index = 1
+        # infection.expression_index = 0
+        # infection.t_expression = NaN
+        # infection.duration = NaN
+        # infection.strain_id = infection_id
+        genes_initial = create_empty_genes()
         if !P.var_groups_fix_ratio
-            infection.genes[:,:] = reshape(
+            genes_initial[:,:] = reshape(
                 gene_pool[:, rand(rng, 1:P.n_genes_initial, P.n_genes_per_strain)],
                 (P.n_loci, P.n_genes_per_strain)
             )
             group_ids = []
-            for i in 1:size(infection.genes)[2]
-                group_id = association_genes_to_var_groups_init[Gene(infection.genes[:,i])]
+            for i in 1:size(genes_initial)[2]
+                group_id = association_genes_to_var_groups_init[Gene(genes_initial[:,i])]
                 push!(group_ids, group_id)
             end
         else
-            infection_genes = zeros(AlleleId, P.n_loci, P.n_genes_per_strain)
+            # infection_genes = zeros(AlleleId, P.n_loci, P.n_genes_per_strain)
             group_ids = []
             for group_id in 1:length(P.var_groups_ratio)
                 if P.var_groups_ratio[group_id] > 0.0
@@ -340,15 +335,15 @@ function initialize_state(rng)
                         end
                         # @assert association_genes_to_var_groups_init[Gene(infection_gene)] == group_id
                         push!(group_ids, group_id)
-                        infection_genes[:,infection_gene_index_var_group] = infection_gene # sample with replacement
+                        genes_initial[:,infection_gene_index_var_group] = infection_gene # sample with replacement
                     end
                 end
             end
-            infection.genes[:,:] = reshape(infection_genes, (P.n_loci, P.n_genes_per_strain))
+            # infection.genes[:,:] = reshape(infection_genes, (P.n_loci, P.n_genes_per_strain))
         end
 
-        if P.var_groups_high_functionality_express_earlier
-            genes_reorder = zeros(AlleleId, P.n_loci, P.n_genes_per_strain)
+        genes_for_infection = if P.var_groups_high_functionality_express_earlier
+            genes_reordered = create_empty_genes()
             index_temp_all = []
             for i in 1:length(func_rank)
                 group_id_temp = findfirst(item->item == i, func_rank)
@@ -360,13 +355,17 @@ function initialize_state(rng)
                     else 
                         (sum(index_temp_all[1:(i-1)])+1):sum(index_temp_all[1:i])
                     end
-                    genes_reorder[:,index_temp_reorder] = infection.genes[:, index_temp]
+                    genes_reordered[:,index_temp_reorder] = genes_initial[:, index_temp]
                 end
             end
-            infection.genes[:,:] = reshape(genes_reorder, (P.n_loci, P.n_genes_per_strain))
+            genes_reordered
+        else
+            genes_initial
         end
 
-        push!(hosts[host_index].liver_infections, infection)
+        push!(hosts[host_index].liver_infections, Infection(
+            0.0, InfectionId(infection_id), StrainId(infection_id), genes_for_infection
+        ))
     end
 
     State(
@@ -379,7 +378,7 @@ function initialize_state(rng)
         next_gene_id_mut = 1,
         next_gene_id_recomb = 1,
         hosts = hosts,
-        old_infections = [],
+        # old_infections = [],
         n_immunities_per_host_max = 0,
         n_active_infections_per_host_max = 0,
         n_liver_infections_per_host_max = 0,
@@ -408,27 +407,19 @@ function draw_host_lifetime(rng)
     end
 end
 
-function create_empty_infection()
-    Infection(
-        id = 0,
-        t_infection = NaN,
-        t_expression = NaN,
-        duration = NaN,
-        strain_id = StrainId(0),
-        genes = fill(AlleleId(0), (P.n_loci, P.n_genes_per_strain)),
-        liver_index = LiverIndex(0),
-        expression_index = ExpressionIndex(0),
-        expression_index_locus = ExpressionIndexLocus(0)
-    )
-end
-
-function recycle_or_create_infection(s::State)
-    if !isempty(s.old_infections)
-        pop!(s.old_infections)
-    else
-        create_empty_infection()
-    end
-end
+# function create_empty_infection()
+#     Infection(
+#         id = 0,
+#         t_infection = NaN,
+#         t_expression = NaN,
+#         duration = NaN,
+#         strain_id = StrainId(0),
+#         genes = fill(AlleleId(0), (P.n_loci, P.n_genes_per_strain)),
+#         liver_index = LiverIndex(0),
+#         expression_index = ExpressionIndex(0),
+#         expression_index_locus = ExpressionIndexLocus(0)
+#     )
+# end
 
 
 ### EVENT DEMUX ###
@@ -497,8 +488,8 @@ function get_rate_death(t, s)
 end
 
 function do_death!(t, s, stats, event_dist)
-    host = rand(s.rng, s.hosts)
-    do_rebirth!(t, s, host)
+    host_index = rand(s.rng, 1:P.n_hosts)
+    s.hosts[host_index] = Host(t, next_host_id!(s))
     true
 end
 
@@ -583,39 +574,26 @@ function do_biting!(t, s, stats, event_dist)
         src_inf_1 = rand(s.rng, transmitted_strains)
         src_inf_2 = rand(s.rng, transmitted_strains)
 
-        # Get a new infection struct, or recycle an old infection
-        # to prevent excess memory allocation.
-        dst_inf = recycle_or_create_infection(s)
-        dst_inf.id = next_infection_id!(s)
-        dst_inf.t_infection = t
-        dst_inf.t_expression = NaN
-        dst_inf.liver_index = 1
-        dst_inf.expression_index = 0
-        dst_inf.expression_index_locus = 0
-        dst_inf.duration = NaN
-
         # Construct strain for new infection.
-        if src_inf_1.strain_id == src_inf_2.strain_id
+        genes_initial = create_empty_genes()
+        strain_id = if src_inf_1.strain_id == src_inf_2.strain_id
             # If both infections have the same strain, then the new infection
             # is given infection 1's genes with expression order shuffled.
-            dst_inf.strain_id = src_inf_1.strain_id
-            shuffle_columns_to!(s.rng, dst_inf.genes, src_inf_1.genes)
+            shuffle_columns_to!(s.rng, genes_initial, src_inf_1.genes)
+            src_inf_1.strain_id
         else
             # Otherwise, the new infection is given a new strain constructed by
             # taking a random sample of the genes in the two source infections.
-            dst_inf.strain_id = next_strain_id!(s)
-            sample_columns_from_two_matrices_to_util2!(s.rng, dst_inf.genes, src_inf_1.genes, src_inf_2.genes, P, s, infection_genes_index_var_groups)
+            sample_columns_from_two_matrices_to_util2!(s.rng, genes_initial, src_inf_1.genes, src_inf_2.genes, P, s, infection_genes_index_var_groups)
+            next_strain_id!(s)
         end
 
-        # Add this infection to the destination host.
-        if !P.var_groups_high_functionality_express_earlier
-            push!(dst_host.liver_infections, dst_inf)
-        else
-            genes_reorder = zeros(AlleleId, P.n_loci, P.n_genes_per_strain)
+        # Reorder genes if high functionality genes express earlier
+        genes_for_infection = if P.var_groups_high_functionality_express_earlier
+            genes_reordered = create_empty_genes()
             group_ids = []
-            for i in 1:size(dst_inf.genes)[2]
-                gene_temp_alleles = dst_inf.genes[:,i]
-                gene_temp = Gene(gene_temp_alleles)
+            for i in 1:size(genes_initial)[2]
+                gene_temp = Gene(@view genes_initial[:,i])
                 # @assert haskey(s.association_genes_to_var_groups, gene_temp)
                 gene_temp_group_id = s.association_genes_to_var_groups[gene_temp]
                 push!(group_ids, gene_temp_group_id)
@@ -631,12 +609,18 @@ function do_biting!(t, s, stats, event_dist)
                 else 
                     (sum(index_temp_all[1:(i-1)])+1):sum(index_temp_all[1:i])
                 end
-                genes_reorder[:,index_temp_reorder] = dst_inf.genes[:, index_temp]
+                genes_reordered[:,index_temp_reorder] = genes_initial[:, index_temp]
             end
-            dst_inf.genes = genes_reorder
-            
-            push!(dst_host.liver_infections, dst_inf)
+
+            genes_reordered
+        else
+            genes_initial
         end
+
+        # Add infection to liver stage
+        push!(dst_host.liver_infections, Infection(
+            t, next_infection_id!(s), strain_id, genes_for_infection
+        ))
 
         # Update population wide host liver max
         should_update_rates = should_update_rates || update_n_liver_infections_per_host_max(s, dst_host)
@@ -686,17 +670,6 @@ function update_n_active_infections_per_host_max(s, host)
 end
 
 
-function do_rebirth!(t, s, host)
-    host.id = next_host_id!(s)
-    host.t_birth = t
-    # host.t_death = t + draw_host_lifetime()
-    host.n_cleared_infections = 0
-    empty!(host.liver_infections)
-    empty!(host.active_infections)
-    empty!(host.immunity)
-end
-
-
 ### IMMIGRATION EVENT ###
 
 function get_rate_immigration(t, s)
@@ -715,27 +688,29 @@ function do_immigration!(t, s, stats, event_dist)
         end
     end
 
-    # Construct infection by sampling from gene pool.
-    infection = recycle_or_create_infection(s)
-    infection.id = next_infection_id!(s)
-    infection.t_infection = t
-    infection.t_expression = NaN
-    infection.duration = NaN
-    infection.strain_id = next_strain_id!(s)
-    infection.liver_index = 1
-    infection.expression_index = 0
-    infection.expression_index_locus = 0
+    # # Construct infection by sampling from gene pool.
+    # infection = recycle_or_create_infection(s)
+    # infection.id = next_infection_id!(s)
+    # infection.t_infection = t
+    # infection.t_expression = NaN
+    # infection.duration = NaN
+    # infection.strain_id = next_strain_id!(s)
+    # infection.liver_index = 1
+    # infection.expression_index = 0
+    # infection.expression_index_locus = 0
+
+    genes_initial = create_empty_genes()
     if !P.var_groups_fix_ratio
         for i in 1:P.n_genes_per_strain
-            infection.genes[:,i] = s.gene_pool[:, rand(s.rng, 1:size(s.gene_pool)[2])]
+            genes_initial[:,i] = s.gene_pool[:, rand(s.rng, 1:size(s.gene_pool)[2])]
         end
         group_ids = []
-        for i in 1:size(infection.genes)[2]
-            group_id = s.association_genes_to_var_groups[Gene(infection.genes[:,i])]
+        for i in 1:size(genes_initial)[2]
+            group_id = s.association_genes_to_var_groups[Gene(@view genes_initial[:,i])]
             push!(group_ids, group_id)
         end
     else 
-        infection_genes = zeros(AlleleId, P.n_loci, P.n_genes_per_strain)
+        # infection_genes = zeros(AlleleId, P.n_loci, P.n_genes_per_strain)
         group_ids = []
         for group_id in 1:length(P.var_groups_ratio)
             if P.var_groups_ratio[group_id] > 0.0
@@ -751,16 +726,16 @@ function do_immigration!(t, s, stats, event_dist)
                     end
                     # @assert s.association_genes_to_var_groups[Gene(infection_gene)] == group_id
                     push!(group_ids, group_id)
-                    infection_genes[:,infection_gene_index_var_group] = infection_gene # sample with replacement
+                    genes_initial[:,infection_gene_index_var_group] = infection_gene # sample with replacement
                 end
             end
         end
-        infection.genes[:,:] = reshape(infection_genes, (P.n_loci, P.n_genes_per_strain))
+        # infection.genes[:,:] = reshape(infection_genes, (P.n_loci, P.n_genes_per_strain))
     end
 
     # Check if need to reorder genes when setting high functionality express earlier to be true.
-    if P.var_groups_high_functionality_express_earlier
-        genes_reorder = zeros(AlleleId, P.n_loci, P.n_genes_per_strain)
+    genes_for_infection = if P.var_groups_high_functionality_express_earlier
+        genes_reordered = create_empty_genes()
         index_temp_all = []
         for j in 1:length(func_rank)
             group_id_temp = findfirst(item->item == j, func_rank)
@@ -772,14 +747,18 @@ function do_immigration!(t, s, stats, event_dist)
                 else 
                     (sum(index_temp_all[1:(j-1)])+1):sum(index_temp_all[1:j])
                 end
-                genes_reorder[:,index_temp_reorder] = infection.genes[:, index_temp]
+                genes_reordered[:,index_temp_reorder] = genes_initial[:, index_temp]
             end
         end
-        infection.genes = genes_reorder    
+        genes_reordered
+    else
+        genes_initial
     end
 
     # Add infection to host.
-    push!(host.liver_infections, infection)
+    push!(host.liver_infections, Infection(
+        t, next_infection_id!(s), next_strain_id!(s), genes_for_infection
+    ))
     
     if update_n_liver_infections_per_host_max(s, host)
         update_rate!(t, s, event_dist, LIVER_PROGRESS)
@@ -833,7 +812,7 @@ function do_liver_progress!(t, s, stats, event_dist)
         # If the infection is past the liver stage, remove it from the liver and activate it.
         delete_and_swap_with_end!(host.liver_infections, inf_index)
         # If there's room, move it into the active infections array.
-        # Otherwise, just put it into the recycle bin.
+        # Otherwise, abandon the infection
         if isnothing(P.n_infections_active_max) || length(host.active_infections) < P.n_infections_active_max
             infection.liver_index = 0
             infection.expression_index = 1
@@ -854,7 +833,7 @@ function do_liver_progress!(t, s, stats, event_dist)
                 update_rates_from_n_active_infections_per_host_max!(t, s, event_dist)
             end
         else
-            push!(s.old_infections, infection)
+            # push!(s.old_infections, infection)
         end
     else
         infection.liver_index += 1
@@ -1192,7 +1171,7 @@ function clear_active_infection!(t, s, host, inf_index)
     end
     s.n_cleared_infections += 1
     host.n_cleared_infections += 1
-    push!(s.old_infections, host.active_infections[inf_index])
+    # push!(s.old_infections, host.active_infections[inf_index])
     delete_and_swap_with_end!(host.active_infections, inf_index)
 end
 
