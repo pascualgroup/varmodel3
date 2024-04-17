@@ -303,63 +303,12 @@ function initialize_state(rng)
     # are sampled uniformly randomly from the gene pool.
     # Check for var_groups_fix_ratio
     for (infection_id, host_index) in enumerate(sample(rng, 1:P.n_hosts, P.n_initial_infections, replace = false))
-        infection = create_empty_infection()
-        infection.id = infection_id
-        infection.t_infection = 0.0
-        infection.liver_index = 1
-        infection.expression_index = 0
-        infection.t_expression = NaN
-        infection.duration = NaN
+        infection = create_empty_infection(infection_id, 0.0)
         infection.strain_id = infection_id
-        if !P.var_groups_fix_ratio
-            infection.genes[:,:] = reshape(
-                gene_pool[:, rand(rng, 1:P.n_genes_initial, P.n_genes_per_strain)],
-                (P.n_loci, P.n_genes_per_strain)
-            )
-            group_ids = []
-            for i in 1:size(infection.genes)[2]
-                group_id = association_genes_to_var_groups_init[Gene(infection.genes[:,i])]
-                push!(group_ids, group_id)
-            end
-        else
-            infection_genes = zeros(AlleleId, P.n_loci, P.n_genes_per_strain)
-            group_ids = []
-            for group_id in 1:length(P.var_groups_ratio)
-                if P.var_groups_ratio[group_id] > 0.0
-                    infection_genes_index_var_group = infection_genes_index_var_groups[group_id]
-                    for infection_gene_index_var_group in infection_genes_index_var_group
-                        infection_gene = gene_pool[:,rand(rng, 1:P.n_genes_initial, 1)]
-                        infection_gene_group_id = association_genes_to_var_groups_init[Gene(infection_gene)]
-                        while infection_gene_group_id != group_id # Keeping drawing until the targeted group of genes is drawn.
-                            infection_gene = gene_pool[:,rand(rng, 1:P.n_genes_initial, 1)]
-                            infection_gene_group_id = association_genes_to_var_groups_init[Gene(infection_gene)]
-                        end
-                        # @assert association_genes_to_var_groups_init[Gene(infection_gene)] == group_id
-                        push!(group_ids, group_id)
-                        infection_genes[:,infection_gene_index_var_group] = infection_gene # sample with replacement
-                    end
-                end
-            end
-            infection.genes[:,:] = reshape(infection_genes, (P.n_loci, P.n_genes_per_strain))
-        end
+        group_ids = initialize_genes_from_pool(rng, gene_pool, infection, association_genes_to_var_groups_init)
 
         if P.var_groups_high_functionality_express_earlier
-            genes_reorder = zeros(AlleleId, P.n_loci, P.n_genes_per_strain)
-            index_temp_all = []
-            for i in 1:length(func_rank)
-                group_id_temp = findfirst(item->item == i, func_rank)
-                index_temp = findall(item->item == group_id_temp, group_ids)
-                push!(index_temp_all, length(index_temp))
-                if length(index_temp) > 0
-                    index_temp_reorder = if i == 1
-                        1:length(index_temp)
-                    else 
-                        (sum(index_temp_all[1:(i-1)])+1):sum(index_temp_all[1:i])
-                    end
-                    genes_reorder[:,index_temp_reorder] = infection.genes[:, index_temp]
-                end
-            end
-            infection.genes[:,:] = reshape(genes_reorder, (P.n_loci, P.n_genes_per_strain))
+            infection.genes = reorder_genes_by_functionality(group_ids, infection.genes)
         end
 
         push!(hosts[host_index].liver_infections, infection)
@@ -404,26 +353,85 @@ function draw_host_lifetime(rng)
     end
 end
 
-function create_empty_infection()
+function create_empty_infection(id, t)
     Infection(
-        id = 0,
-        t_infection = NaN,
+        id = id,
+        t_infection = t,
         t_expression = NaN,
         duration = NaN,
         strain_id = StrainId(0),
-        genes = fill(AlleleId(0), (P.n_loci, P.n_genes_per_strain)),
-        liver_index = LiverIndex(0),
+        genes = (@MMatrix zeros(AlleleId, P.n_loci, P.n_genes_per_strain)),
+        liver_index = LiverIndex(1),
         expression_index = ExpressionIndex(0),
         expression_index_locus = ExpressionIndexLocus(0)
     )
 end
 
-function recycle_or_create_infection(s::State)
+function recycle_or_create_infection(t, s)
     if !isempty(s.old_infections)
-        pop!(s.old_infections)
+        infection = pop!(s.old_infections)
+        infection.id = next_infection_id!(s)
+        infection.t_infection = t
+        infection.t_expression = NaN
+        infection.duration = NaN
+        infection.strain_id = StrainId(0)
+        infection.genes[:,:] .= AlleleId(0)
+        infection.liver_index = LiverIndex(1)
+        infection.expression_index = ExpressionIndex(0)
+        infection.expression_index_locus = ExpressionIndexLocus(0)
+        infection
     else
-        create_empty_infection()
+        create_empty_infection(next_infection_id!(s), t)
     end
+end
+
+function initialize_genes_from_pool(rng, gene_pool, infection, association_genes_to_var_groups)
+    group_ids = []
+    if P.var_groups_fix_ratio
+        for group_id in 1:length(P.var_groups_ratio)
+            if P.var_groups_ratio[group_id] > 0.0
+                infection_genes_index_var_group = infection_genes_index_var_groups[group_id]
+                for infection_gene_index_var_group in infection_genes_index_var_group
+                    infection_gene = gene_pool[:,rand(rng, 1:P.n_genes_initial, 1)]
+                    infection_gene_group_id = association_genes_to_var_groups[Gene(infection_gene)]
+                    while infection_gene_group_id != group_id # Keeping drawing until the targeted group of genes is drawn.
+                        infection_gene = gene_pool[:,rand(rng, 1:P.n_genes_initial, 1)]
+                        infection_gene_group_id = association_genes_to_var_groups[Gene(infection_gene)]
+                    end
+                    # @assert association_genes_to_var_groups[Gene(infection_gene)] == group_id
+                    push!(group_ids, group_id)
+                    infection.genes[:,infection_gene_index_var_group] = infection_gene # sample with replacement
+                end
+            end
+        end
+    else
+        gene_indices = rand(rng, 1:size(s.gene_pool)[2], P.n_genes_per_strain)
+        infection.genes[:,:] = (@view gene_pool[:, gene_indices]),
+        for i in 1:size(infection.genes)[2]
+            group_id = association_genes_to_var_groups[infection.genes[:,i]]
+            push!(group_ids, group_id)
+        end
+    end
+    group_ids
+end
+
+function reorder_genes_by_functionality(group_ids, genes)
+    genes_reordered = @MMatrix zeros(AlleleId, P.n_loci, P.n_genes_per_strain)
+    index_temp_all = []
+    for i in 1:length(func_rank)
+        group_id_temp = findfirst(item->item == i, func_rank)
+        index_temp = findall(item->item == group_id_temp, group_ids)
+        push!(index_temp_all, length(index_temp))
+        if length(index_temp) > 0
+            index_temp_reorder = if i == 1
+                1:length(index_temp)
+            else 
+                (sum(index_temp_all[1:(i-1)])+1):sum(index_temp_all[1:i])
+            end
+            genes_reordered[:,index_temp_reorder] = genes[:, index_temp]
+        end
+    end
+    genes_reordered
 end
 
 
@@ -581,14 +589,7 @@ function do_biting!(t, s, stats, event_dist)
 
         # Get a new infection struct, or recycle an old infection
         # to prevent excess memory allocation.
-        dst_inf = recycle_or_create_infection(s)
-        dst_inf.id = next_infection_id!(s)
-        dst_inf.t_infection = t
-        dst_inf.t_expression = NaN
-        dst_inf.liver_index = 1
-        dst_inf.expression_index = 0
-        dst_inf.expression_index_locus = 0
-        dst_inf.duration = NaN
+        dst_inf = recycle_or_create_infection(t, s)
 
         # Construct strain for new infection.
         if src_inf_1.strain_id == src_inf_2.strain_id
@@ -604,10 +605,7 @@ function do_biting!(t, s, stats, event_dist)
         end
 
         # Add this infection to the destination host.
-        if !P.var_groups_high_functionality_express_earlier
-            push!(dst_host.liver_infections, dst_inf)
-        else
-            genes_reorder = zeros(AlleleId, P.n_loci, P.n_genes_per_strain)
+        if P.var_groups_high_functionality_express_earlier
             group_ids = []
             for i in 1:size(dst_inf.genes)[2]
                 gene_temp_alleles = dst_inf.genes[:,i]
@@ -616,23 +614,10 @@ function do_biting!(t, s, stats, event_dist)
                 gene_temp_group_id = s.association_genes_to_var_groups[gene_temp]
                 push!(group_ids, gene_temp_group_id)
             end
-            
-            index_temp_all = []
-            for i in 1:length(func_rank)
-                group_id_temp = findfirst(item->item == i, func_rank)
-                index_temp = findall(item->item == group_id_temp, group_ids)
-                push!(index_temp_all, length(index_temp))
-                index_temp_reorder = if i == 1
-                    1:length(index_temp)
-                else 
-                    (sum(index_temp_all[1:(i-1)])+1):sum(index_temp_all[1:i])
-                end
-                genes_reorder[:,index_temp_reorder] = dst_inf.genes[:, index_temp]
-            end
-            dst_inf.genes = genes_reorder
-            
-            push!(dst_host.liver_infections, dst_inf)
+
+            dst_inf.genes = reorder_genes_by_functionality(group_ids, dst_inf.genes)
         end
+        push!(dst_host.liver_infections, dst_inf)
 
         # Update population wide host liver max
         should_update_rates = should_update_rates || update_n_liver_infections_per_host_max(s, dst_host)
@@ -712,66 +697,13 @@ function do_immigration!(t, s, stats, event_dist)
     end
 
     # Construct infection by sampling from gene pool.
-    infection = recycle_or_create_infection(s)
-    infection.id = next_infection_id!(s)
-    infection.t_infection = t
-    infection.t_expression = NaN
-    infection.duration = NaN
+    infection = recycle_or_create_infection(t, s)
     infection.strain_id = next_strain_id!(s)
-    infection.liver_index = 1
-    infection.expression_index = 0
-    infection.expression_index_locus = 0
-    if !P.var_groups_fix_ratio
-        for i in 1:P.n_genes_per_strain
-            infection.genes[:,i] = s.gene_pool[:, rand(s.rng, 1:size(s.gene_pool)[2])]
-        end
-        group_ids = []
-        for i in 1:size(infection.genes)[2]
-            group_id = s.association_genes_to_var_groups[Gene(infection.genes[:,i])]
-            push!(group_ids, group_id)
-        end
-    else 
-        infection_genes = zeros(AlleleId, P.n_loci, P.n_genes_per_strain)
-        group_ids = []
-        for group_id in 1:length(P.var_groups_ratio)
-            if P.var_groups_ratio[group_id] > 0.0
-                infection_genes_index_var_group = infection_genes_index_var_groups[group_id]
-                for infection_gene_index_var_group in infection_genes_index_var_group
-                    infection_gene = s.gene_pool[:, rand(s.rng, 1:size(s.gene_pool)[2])]
-                    # @assert haskey(s.association_genes_to_var_groups, Gene(infection_gene))
-                    infection_gene_group_id = s.association_genes_to_var_groups[Gene(infection_gene)]
-                    while infection_gene_group_id != group_id
-                        infection_gene = s.gene_pool[:, rand(s.rng, 1:size(s.gene_pool)[2])]
-                        # @assert haskey(s.association_genes_to_var_groups, Gene(infection_gene))
-                        infection_gene_group_id = s.association_genes_to_var_groups[Gene(infection_gene)]
-                    end
-                    # @assert s.association_genes_to_var_groups[Gene(infection_gene)] == group_id
-                    push!(group_ids, group_id)
-                    infection_genes[:,infection_gene_index_var_group] = infection_gene # sample with replacement
-                end
-            end
-        end
-        infection.genes[:,:] = reshape(infection_genes, (P.n_loci, P.n_genes_per_strain))
-    end
+    group_ids = initialize_genes_from_pool(s.rng, s.gene_pool, infection, s.association_genes_to_var_groups)
 
     # Check if need to reorder genes when setting high functionality express earlier to be true.
     if P.var_groups_high_functionality_express_earlier
-        genes_reorder = zeros(AlleleId, P.n_loci, P.n_genes_per_strain)
-        index_temp_all = []
-        for j in 1:length(func_rank)
-            group_id_temp = findfirst(item->item == j, func_rank)
-            index_temp = findall(item->item == group_id_temp, group_ids)
-            push!(index_temp_all, length(index_temp))
-            if length(index_temp) > 0
-                index_temp_reorder = if j == 1
-                    1:length(index_temp)
-                else 
-                    (sum(index_temp_all[1:(j-1)])+1):sum(index_temp_all[1:j])
-                end
-                genes_reorder[:,index_temp_reorder] = infection.genes[:, index_temp]
-            end
-        end
-        infection.genes = genes_reorder    
+        infection.genes = reorder_genes_by_functionality(group_ids, infection.genes)
     end
 
     # Add infection to host.
