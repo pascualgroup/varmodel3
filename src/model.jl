@@ -502,7 +502,12 @@ end
 
 function do_death!(t, s, stats, event_dist)
     host = rand(s.rng, s.hosts)
-    do_rebirth!(t, s, host)
+    host.id = next_host_id!(s)
+    host.t_birth = t
+    host.n_cleared_infections = 0
+    empty!(host.liver_infections)
+    empty!(host.active_infections)
+    empty!(host.immunity)
     true
 end
 
@@ -664,17 +669,6 @@ function update_n_active_infections_per_host_max(s, host)
     else
         false
     end
-end
-
-
-function do_rebirth!(t, s, host)
-    host.id = next_host_id!(s)
-    host.t_birth = t
-    # host.t_death = t + draw_host_lifetime()
-    host.n_cleared_infections = 0
-    empty!(host.liver_infections)
-    empty!(host.active_infections)
-    empty!(host.immunity)
 end
 
 
