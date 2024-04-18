@@ -247,8 +247,6 @@ end
 
 #function initialize_state(a)
 function initialize_state(rng)
-    println(stderr, "initialize_state()")
-
     # Initialize gene pool as an (n_loci, n_genes_initial) matrix whose columns
     # are unique randomly generated genes. Initialize gene-to-group-id map as an empty dictionary.
     gene_pool_set = Set()
@@ -335,22 +333,6 @@ function initialize_state(rng)
         infected_ratio = 1.0,
         association_genes_to_var_groups = association_genes_to_var_groups_init
     )
-end
-
-"""
-    Draws host lifetime from a distribution.
-
-    The distribution is an exponential distribution with mean
-    `mean_host_lifetime`, truncated at `max_host_lifetime`.
-"""
-function draw_host_lifetime(rng)
-    dist = Exponential(P.mean_host_lifetime)
-    while true
-        lifetime = rand(rng, dist)
-        if lifetime < P.max_host_lifetime
-            return lifetime
-        end
-    end
 end
 
 function create_empty_infection(id, t)
