@@ -36,7 +36,7 @@ const P = let
     t_burnin_years = 80
     t_burnin = t_burnin_years * t_year
 
-    Params(
+    add_params(Params(), (
         upper_bound_recomputation_period = 30,
 
         output_db_filename = "output.sqlite",
@@ -131,7 +131,7 @@ const P = let
         var_groups_do_not_share_alleles = true,
         var_groups_high_functionality_express_earlier = true,
         gene_group_id_association_recomputation_period = 30,
-    )
+    ))
 end
 
 # Load and run the model code, which can now be compiled with reference to

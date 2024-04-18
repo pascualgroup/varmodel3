@@ -1,25 +1,6 @@
 using Parameters
 using Base.Filesystem
 
-"""
-Convenience function to assign fields in a dictionary or named tuple to a mutable struct.
-"""
-function assign_fields!(s, d)
-    for k in keys(d)
-        k_symb = Symbol(k)
-        if hasfield(typeof(s), k_symb)
-            try
-                setproperty!(s, k_symb, d[k])
-            catch
-                println(stderr, "ERROR setting parameter $(k):")
-                rethrow()
-            end
-        else
-            println(stderr, "WARNING: value provided for key $(k) but $(typeof(s)) has no such field.")
-        end
-    end
-end
-
 
 """
 Parameters for a simulation.
@@ -27,7 +8,7 @@ Parameters for a simulation.
 The `@with_kw` macro, provided by the `Parameters` package, generates a
 keyword constructor for the class.
 """
-@with_kw mutable struct Params
+@with_kw struct Params
     """
     Seed for random number generator.
 
@@ -36,7 +17,7 @@ keyword constructor for the class.
     on the same processor architecture.
     (It is possible that some of those could vary while preserving reproducibility.)
     """
-    rng_seed::Union{Int, Nothing} = nothing
+    rng_seed::Union{Int64, Nothing} = nothing
 
     """
     How often to recompute upper bounds for rejection sampling.
@@ -399,7 +380,29 @@ keyword constructor for the class.
 end
 
 """
+Check fields one at a time while constructing Params from a dictionary or named tuple.
+Params is immutable for performance reasons, so this function creates a new Params for every addition.
+"""
+function add_params(p, d)
+    for k in keys(d)
+        k_symb = Symbol(k)
+        if hasfield(Params, k_symb)
+            try
+                p = Params(p; NamedTuple{(k_symb,)}((d[k],))...)
+                # setproperty!(s, k_symb, d[k])
+            catch
+                println(stderr, "ERROR setting parameter $(k):")
+                rethrow()
+            end
+        else
+            println(stderr, "WARNING: value provided for key $(k) but Params has no such field.")
+        end
+    end
+    p
+end
 
+"""
+Validate parameter values.
 """
 function validate(p::Params)
     @assert p.upper_bound_recomputation_period !== nothing

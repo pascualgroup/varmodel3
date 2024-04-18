@@ -28,8 +28,7 @@ const P = let
 
     json_str = read(params_filename, String)
     json_odict = JSON.parse(json_str, dicttype=OrderedDict)
-    params = Params()
-    assign_fields!(params, json_odict)
+    params = add_params(Params(), json_odict)
     params
 end
 

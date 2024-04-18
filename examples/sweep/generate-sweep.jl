@@ -115,12 +115,11 @@ function generate_runs(db)
 
             for replicate in 1:N_REPLICATES
                 rng_seed = rand(seed_rng, 1:typemax(Int64))
-                params = Params(
-                    base_params;
+                params = add_params(base_params, (
                     rng_seed = rng_seed,
                     mutation_rate = mutation_rate,
                     transmissibility = transmissibility
-                )
+                ))
 
                 run_dir = joinpath("runs", "c$(combo_id)", "r$(replicate)")
                 @assert !ispath(run_dir)
@@ -253,7 +252,7 @@ function init_base_params()
     t_burnin_years = 61
     t_burnin = t_burnin_years * t_year
 
-    Params(
+    add_params(Params(), (
         upper_bound_recomputation_period = 30,
 
         output_db_filename = "output.sqlite",
@@ -336,7 +335,7 @@ function init_base_params()
         snp_linkage_disequilibrium = false,
 #         snp_linkage_disequilibrium = true,
 #         snp_pairwise_ld = [snp_ld_matrix[:,i] for i in 1:size(snp_ld_matrix)[2]],
-    )
+    ))
 end
 
 main()
