@@ -129,6 +129,8 @@ function run_inner()
         # Loop required in case the simulation jumps past two integer times.
         t_next = @fastmath t + dt
         while @fastmath t_next_integer_float < t_next
+            sleep(0.1)
+
             t_next_integer = Int64(t_next_integer_float)
             write_output!(db, t_next_integer, s, stats)
             if P.verification_period !== nothing && t_next_integer % P.verification_period == 0
