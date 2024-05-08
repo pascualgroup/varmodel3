@@ -932,6 +932,9 @@ function get_rate_switching(t, s)
 end
 
 function do_switching!(t, s, stats)
+    if (s.n_active_infections_per_host_max + s.n_liver_infections_per_host_max < 1)
+        return false
+    end
     index = rand(CartesianIndices((P.n_hosts, (s.n_active_infections_per_host_max+s.n_liver_infections_per_host_max))))
     host = s.hosts[index[1]]
 
@@ -1058,6 +1061,9 @@ function get_rate_mutation(t, s)
 end
 
 function do_mutation!(t, s, stats)
+    if (s.n_active_infections_per_host_max + s.n_liver_infections_per_host_max < 1)
+        return false
+    end
     index = rand(CartesianIndices((P.n_hosts, (s.n_active_infections_per_host_max + s.n_liver_infections_per_host_max), P.n_genes_per_strain, P.n_loci)))
     host = s.hosts[index[1]]
     inf_index = index[2]
@@ -1109,6 +1115,9 @@ end
 
 
 function do_ectopic_recombination!(t, s, stats)
+    if (s.n_active_infections_per_host_max + s.n_liver_infections_per_host_max < 1)
+        return false
+    end
     # Index based on the total number of infections.
     index = rand(CartesianIndices((P.n_hosts, (s.n_active_infections_per_host_max + s.n_liver_infections_per_host_max))))
     host = s.hosts[index[1]]
@@ -1345,6 +1354,9 @@ function get_rate_immunity_loss(t, s)
 end
 
 function do_immunity_loss!(t, s, stats)
+    if (s.n_immunities_per_host_max < 1)
+        return false
+    end
     index = rand(CartesianIndices((P.n_hosts, s.n_immunities_per_host_max)))
     host = s.hosts[index[1]]
     immunity_index = index[2]
