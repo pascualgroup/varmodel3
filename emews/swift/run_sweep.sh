@@ -45,15 +45,17 @@ export PROJECT=$CFG_PROJECT
 # PYTHONPATH="/lcrc/project/EMEWS/bebop/repos/probabilistic-sensitivity-analysis:"
 # PYTHONPATH+="/lcrc/project/EMEWS/bebop/repos/panmodel-0.20.0:"
 export PYTHONPATH+="$EMEWS_PROJECT_ROOT/python"
-export PYTHONHOME="/software/python-anaconda-2021.05-el7-x86_64"
+export PYTHONHOME="/software/python-anaconda-2022.05-el8-x86_64"
 # export PYTHONPATH
 # echo "PYTHONPATH: $PYTHONPATH"
 
-export SITE=midway
+export SITE=midway3
 
 # set machine to your schedule type (e.g. pbs, slurm, cobalt etc.),
 # or empty for an immediate non-queued unscheduled run
 MACHINE="slurm"
+# we aren't using openmpi but we want those args
+export SLURM_OPENMPI=1
 
 if [ -n "$MACHINE" ]; then
   MACHINE="-m $MACHINE"
@@ -98,8 +100,9 @@ USER_VARS=( )
 # log variables and script to to TURBINE_OUTPUT directory
 
 # export TURBINE_LAUNCHER=srun
-# export TURBINE_SBATCH_ARGS="-c 18"
-export TURBINE_SBATCH_ARGS="--mem-per-cpu=${CFG_MEM_PER_CPU}" # \n#SBATCH --exclusive"
+
+export TURBINE_SBATCH_ARGS="--exclusive\n#SBATCH --mail-type=BEGIN\n#SBATCH --mem=180G"
+# --mem-per-cpu=$CFG_MEM_PER_CPU"
 
 log_script
 

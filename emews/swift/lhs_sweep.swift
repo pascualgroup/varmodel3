@@ -22,15 +22,17 @@ import json
 import numpy as np
 import hashlib
 
-p_map = json.loads('%s')
+params = '%s'
+dp_file = '%s'
+mos_pop = '%s'
+
+p_map = json.loads(params)
 # print(param_list, flush=True)
 
-dp_file = '%s'
 with open(dp_file) as fin:
     dp_map = json.load(fin)
 
-bite_rate_mults = np.loadtxt('%s')
-
+bite_rate_mults = np.loadtxt(mos_pop)
 
 imabc_seed = p_map.pop('seed')
 h = hashlib.md5(str.encode(imabc_seed)).digest()[:6]
@@ -42,10 +44,23 @@ final_map = dp_map.copy()
 final_map.update(p_map)
 bite_rate = bite_rate_mults * p_map['biting_rate']
 final_map['biting_rate'] = bite_rate.tolist()
+
+
+err_a = final_map.pop('ectopic_recombination_rate_A')
+err_b = final_map.pop('ectopic_recombination_rate_BC')
+final_map['ectopic_recombination_rate'] = [err_a, err_b]
+
+sr_a = final_map.pop('switching_rate_A')
+sr_b = final_map.pop('switching_rate_BC')
+final_map['switching_rate'] =[sr_a, sr_b]
+
+fbc = final_map.pop('functionality_BC')
+final_map['var_groups_functionality'] = [1.0, fbc]
+
 # model expects this to be an int
 final_map['n_genes_initial'] = int(round(final_map['n_genes_initial']))
 # "n_alleles_per_locus_initial": "n_genes_initial/10",
-final_map['n_alleles_per_locus_initial'] = int(round(final_map['n_genes_initial'] / 10))
+final_map['n_alleles_per_locus_initial'] = int(round(final_map['n_genes_initial'] / 20))
 
 instance = final_map.pop('instance')
 params = '{}!{}'.format(instance, json.dumps(final_map))
@@ -111,9 +126,9 @@ app (void o) rm(string filename) {
     file out <out_f>;
     file err <err_f>;
     (out,err) = run(instance_dir) =>
-    db = "%s/output.sqlite" % instance_dir;
-    result_code = compute_result_code % (db, instance_dir, result_at, measurement_file);
-    python_persist(result_code, "result_json") =>
+    db = "%s/output.sqlite" % instance_dir =>
+    // result_code = compute_result_code % (db, instance_dir, result_at, measurement_file);
+    //python_persist(result_code, "result_json") =>
     v = propagate();
 }
 

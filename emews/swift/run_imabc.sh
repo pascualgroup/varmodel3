@@ -47,23 +47,24 @@ export PROJECT=$CFG_PROJECT
 # PYTHONPATH="/lcrc/project/EMEWS/bebop/repos/probabilistic-sensitivity-analysis:"
 # PYTHONPATH+="/lcrc/project/EMEWS/bebop/repos/panmodel-0.20.0:"
 export PYTHONPATH+="$EMEWS_PROJECT_ROOT/python"
-export PYTHONHOME="/software/python-anaconda-2021.05-el7-x86_64"
+export PYTHONHOME="/software/python-anaconda-2022.05-el8-x86_64"
 # export PYTHONPATH
 # echo "PYTHONPATH: $PYTHONPATH"
 
-export SITE=midway
+export SITE=midway3
 
 # Resident task workers and ranks
 export TURBINE_RESIDENT_WORK_WORKERS=1
 export RESIDENT_WORK_RANKS=$(( PROCS - 2 ))
 
 # EQ/R location
-EQR=/project2/pascualmm/sfw/gcc-10.2.0/EQ-R
-
+EQR=/project/jozik/sfw/gcc-10.2.0/swift-t-03042024/turbine/ext/eqr
 
 # set machine to your schedule type (e.g. pbs, slurm, cobalt etc.),
 # or empty for an immediate non-queued unscheduled run
 MACHINE="slurm"
+# we aren't using openmpi but we want those args
+export SLURM_OPENMPI=1
 
 if [ -n "$MACHINE" ]; then
   MACHINE="-m $MACHINE"
