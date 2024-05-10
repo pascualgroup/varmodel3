@@ -1039,8 +1039,8 @@ end
 """
 function find_linked_snps(i)
     linked_snps = [i]
-    for j = (i+1):P.n_snps_per_strain
-        if rand() < P.snp_pairwise_ld[j, i]
+    for j = (i+1):P_n_snps_per_strain
+        if rand() < P_snp_pairwise_ld[j, i]
             append!(linked_snps, j)
         end
     end
