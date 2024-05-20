@@ -41,20 +41,25 @@ def create_argparser():
     return parser
 
 
-def CalculTargetsMeasFunc(inputfile, time, prop, supplementaryFileForMOIEst, aggregate, lock):
+def CalculTargetsMeasFunc(inputfile, time, prop, supplementaryFileForMOIEst, aggregate):
     if os.path.exists(inputfile):
-        with lock:
-            con = sqlite3.connect(inputfile)
-            df1 = pd.read_sql_query('SELECT time, id, n_infections_active, birth_time FROM sampled_hosts', con)
-            df2 = pd.read_sql_query('SELECT time, host_id, infection_id, strain_id, expression_index FROM sampled_infections', con)
-            df3 = pd.read_sql_query('SELECT infection_id, expression_index, group_id, allele_id_1, allele_id_2 FROM sampled_infection_genes', con)
-            con.close()
+        con = sqlite3.connect(inputfile)
+        df1 = pd.read_sql_query('SELECT time, id, n_infections_active, birth_time FROM sampled_hosts', con)
+        df2 = pd.read_sql_query('SELECT time, host_id, infection_id, strain_id, expression_index FROM sampled_infections', con)
+        df3 = pd.read_sql_query('SELECT infection_id, expression_index, group_id, allele_id_1, allele_id_2 FROM sampled_infection_genes', con)
+        con.close()
 
         df1.columns = ['time', 'host_id', 'n_infections_active', 'birth_time']
         df2.columns = ['time', 'host_id', 'infection_id', 'strain_id', 'expression_index_infection']
         df2 = df2.dropna()
         df3.columns = ['infection_id', 'expression_index_gene', 'group_id', 'allele_id_1', 'allele_id_2']
 
+        return do_calc_targets(time, prop, supplementaryFileForMOIEst, aggregate)
+    else:
+        raise ValueError('Error: provide a valid path to the input file')
+
+def do_calc_targets(df1, df2, df3, time, prop, supplementaryFileForMOIEst, aggregate):
+    try:
         if len(df2) > 0:
             # Filter/reformat data
             df1 = Times(df1, time)
@@ -150,12 +155,14 @@ def CalculTargetsMeasFunc(inputfile, time, prop, supplementaryFileForMOIEst, agg
             nbgene = len(np.unique(genes))
             nbgeneA = len(np.unique(genesA))
             nbgeneBC = len(np.unique(genesBC))
-            return preval, MOIvar, pts, ptsA, ptsBC, nbstrain, nbgene, nbgeneA, nbgeneBC
+            return [preval, MOIvar, pts, ptsA, ptsBC, nbstrain, nbgene, nbgeneA, nbgeneBC]
         else:
-            return 0, 0, 0, 0, 0, 0, 0, 0, 0
-    else:
-        sys.exit('Error: provide a valid path to the input file') 
-   
+            return [0, 0, 0, 0, 0, 0, 0, 0, 0]
+
+    except ValueError:
+        return [-1, -1, -1, -1, -1, -1, -1, -1, -1]
+
+
 def CalculTargetsMeas(inputfile, time, prop, supplementaryFileForMOIEst, aggregate):
     outputfile = inputfile.split("/")[-1].split(".")[0] + "_targets_" + str(time) + "days_meas.txt"
     f = open(outputfile, 'w')
@@ -279,11 +286,12 @@ def MOIest(nb_var, priors, probSizeGivenMOI, maxMOI = 20, repSizeLow = 10, repSi
     MOI_temp = pd.DataFrame({'MOI': list(range(1, maxMOI + 1, 1)), 'Prob': probMOIGivenIsoSize})
     return MOI_temp
 
-# if __name__ == '__main__':
-#     parser = create_argparser()
-#     args = parser.parse_args()
-#     if args.measurement:
-#         CalculTargetsMeas(args.inputfile, args.time, args.prop, args.supplementaryFileForMOIEst, args.aggregate)
-#         # CalculTargetsMeas(args.inputfile, args.time, args.distribution, args.prop)
-#     else:
-#         CalculTargets(args.inputfile, args.time)
+
+if __name__ == '__main__':
+    f = '/project/jozik/ncollier/repos/varmodel3/emews/experiments/runtime_test_8.0/instances/instance_14_1/output.sqlite'
+    moi_est_f = '/project/jozik/ncollier/repos/varmodel3/emews/python/MOIestObjs.pkl'
+    at = 35940
+
+    res = CalculTargetsMeasFunc(f, at, 0.47, moi_est_f, 'mixtureDist')
+    # preval, MOIvar, pts, ptsA, ptsBC, nbstrain, nbgene, nbgeneA, nbgeneBC
+    print(res)

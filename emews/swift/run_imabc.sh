@@ -124,6 +124,9 @@ USER_VARS=( )
 # export TURBINE_SBATCH_ARGS="-c 18"
 export TURBINE_SBATCH_ARGS="--mem-per-cpu=${CFG_MEM_PER_CPU}" # \n#SBATCH --exclusive"
 
+# export LD_PRELOAD="/software/openmpi-5.0.2-el8-x86_64+gcc-12.2.0/lib/libmpi.so"
+export LD_LIBRARY_PATH="/project/ahotton/sfw/gcc-12.2.0/R-4.3.3/lib64/R/lib:$LD_LIBRARY_PATH"
+
 log_script
 
 # echo's anything following this standard out
@@ -136,6 +139,8 @@ swift-t -n $PROCS $MACHINE -p \
     -e TURBINE_OUTPUT \
     -e TURBINE_LOG \
     -e TURBINE_DEBUG \
+    -e LD_PRELOAD \
+    -e LD_LIBRARY_PATH \
     -e ADLB_DEBUG \
     -e PYTHONPATH \
     -e PYTHONHOME \

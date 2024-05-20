@@ -1,0 +1,7 @@
+db_host: beagle3-tbd1.rcc.local
+db_port: 54311
+db_name: EQ_SQL
+db_user: eqsql_user
+
+
+upf: /project/jozik/ncollier/repos/varmodel3/emews/data/parameters/runtime_tests_upf.txt

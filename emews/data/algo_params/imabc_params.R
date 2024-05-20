@@ -3,7 +3,7 @@ algo.params <- list(
     imabc.args = list(
         target_fun = NULL,
         # previous_results_dir = '/lus/eagle/projects/ModelCRC/cisnet_calib/miscan/experiments/imabc_2.4.1.nt',
-        N_start = 9000,
+        N_start = 8000,
         # N_start = 26,
         seed = 12345,
         latinHypercube = TRUE,
