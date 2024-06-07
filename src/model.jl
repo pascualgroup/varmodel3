@@ -110,8 +110,12 @@ function run_inner()
     verify(t, s)
 
     # Run initial output.
-    stats = SummaryStats()
-    write_output!(db, 0, s, stats)
+    stats = if P.t_burnin === nothing || P.t_burnin == 0
+        stats = SummaryStats()
+        write_output!(db, 0, s, stats)
+    else
+        nothing
+    end
 
     # Initialize event rates.
     # total_rate = sum(rates)
@@ -130,6 +134,10 @@ function run_inner()
         t_next = @fastmath t + dt
         while @fastmath t_next_integer_float < t_next
             t_next_integer = Int64(t_next_integer_float)
+
+            if P.t_burnin !== nothing && P.t_burnin == t_next_integer
+                stats = SummaryStats()
+            end
             write_output!(db, t_next_integer, s, stats)
             if P.verification_period !== nothing && t_next_integer % P.verification_period == 0
                 verify(t_next_integer, s)
@@ -164,7 +172,7 @@ function run_inner()
         event = @fastmath rand(rng, event_dist)
         t = t_next
         if @fastmath do_event!(t, s, stats, event, event_dist)
-            stats.n_events += 1
+            increment_n_events!(stats)
         end
     end
 
@@ -508,7 +516,7 @@ function get_rate_biting(t, s)
 end
 
 function do_biting!(t, s, stats, event_dist)
-    stats.n_bites += 1
+    increment_n_bites!(stats)
     s.n_bites_for_migration_rate += 1
 
     # Uniformly randomly sample infecting host (source) and host being infected
@@ -521,7 +529,7 @@ function do_biting!(t, s, stats, event_dist)
     if src_active_count == 0
         return false
     end
-    stats.n_infected_bites += 1
+    increment_n_infected_bites!(stats)
     s.n_transmitting_bites_for_migration_rate += 1
 
     # The destination host must have space available in the liver stage.
@@ -533,7 +541,7 @@ function do_biting!(t, s, stats, event_dist)
     if dst_available_count == 0
         return false
     end
-    stats.n_infected_bites_with_space += 1
+    increment_n_infected_bites_with_space!(stats)
 
     # Compute probability of each transmission.
     p_transmit = if P.coinfection_reduces_transmission
@@ -567,7 +575,7 @@ function do_biting!(t, s, stats, event_dist)
     transmitted = false
     should_update_rates = false
     for i in 1:n_transmissions_max
-        stats.n_transmissions += 1
+        increment_n_transmissions!(stats)
         transmitted = true
 
         # Randomly sample two source infections within transmitted_strains to recombine.
@@ -616,7 +624,7 @@ function do_biting!(t, s, stats, event_dist)
     end
 
     if transmitted
-        stats.n_transmitting_bites += 1
+        increment_n_transmitting_bites!(stats)
         true
     else
         false
@@ -1089,7 +1097,7 @@ end
 """
 function clear_active_infection!(t, s, host, inf_index)
     if P.sample_infection_duration_every !== nothing
-        if s.n_cleared_infections % P.sample_infection_duration_every == 0
+        if (P.t_burnin === nothing || t >= P.t_burnin) && (s.n_cleared_infections % P.sample_infection_duration_every == 0)
             # Calculate and write the infection duration.
             add_infection_duration!(t, s, host, inf_index)
         end

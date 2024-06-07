@@ -74,6 +74,72 @@ function reset!(stats::SummaryStats, start_datetime)
 end
 
 """
+Increment # events
+"""
+function increment_n_events!(stats::SummaryStats)
+    stats.n_events += 1
+end
+
+function increment_n_events!(stats::Nothing)
+    nothing
+end
+
+"""
+Increment # bites
+"""
+function increment_n_bites!(stats::SummaryStats)
+    stats.n_bites += 1
+end
+
+function increment_n_bites!(stats::Nothing)
+    nothing
+end
+
+"""
+Increment # infected bites
+"""
+function increment_n_infected_bites!(stats::SummaryStats)
+    stats.n_infected_bites += 1
+end
+
+function increment_n_infected_bites!(stats::Nothing)
+    nothing
+end
+
+"""
+Increment # infected bites w/ space
+"""
+function increment_n_infected_bites_with_space!(stats::SummaryStats)
+    stats.n_infected_bites_with_space += 1
+end
+
+function increment_n_infected_bites_with_space!(stats::Nothing)
+    nothing
+end
+
+"""
+Increment # transmissions
+"""
+function increment_n_transmissions!(stats::SummaryStats)
+    stats.n_transmissions += 1
+end
+
+function increment_n_transmissions!(stats::Nothing)
+    nothing
+end
+
+"""
+Increment # transmitting bites
+"""
+function increment_n_transmitting_bites!(stats::SummaryStats)
+    stats.n_transmitting_bites += 1
+end
+
+function increment_n_transmitting_bites!(stats::Nothing)
+    nothing
+end
+
+"""
 Pass commands issued to a `VarModelDB` on to the underlying `SQLite.DB`.
 """
 function execute(db::VarModelDB, cmd)
@@ -210,11 +276,11 @@ end
 
 ### OUTPUT FUNCTIONS ###
 
-function write_output!(db, t, s, stats)
-    if P.t_burnin !== nothing && t < P.t_burnin
-        return
-    end
+function write_output!(db, t, s, stats::Nothing)
+    nothing
+end
 
+function write_output!(db, t, s, stats::SummaryStats)
     if t % P.summary_period == 0 || t % P.gene_strain_count_period == 0 || (((P.t_host_sampling_start !== nothing && t >= P.t_host_sampling_start) || P.t_host_sampling_start === nothing) && t % P.t_year in P.host_sampling_period)
         println(stderr, "t = $(t)")
 
