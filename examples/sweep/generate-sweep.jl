@@ -49,6 +49,7 @@ using Random
 using SQLite
 import SQLite.DBInterface.execute
 using DelimitedFiles
+import DataStructures.OrderedDict
 
 # Get relevant paths and cd to the script path.
 # NB: use actual relative locations of varmodel3 root relative to your script.
@@ -115,12 +116,11 @@ function generate_runs(db)
 
             for replicate in 1:N_REPLICATES
                 rng_seed = rand(seed_rng, 1:typemax(Int64))
-                params = Params(
-                    base_params;
+                params = add_params(base_params, (
                     rng_seed = rng_seed,
                     mutation_rate = mutation_rate,
                     transmissibility = transmissibility
-                )
+                ))
 
                 run_dir = joinpath("runs", "c$(combo_id)", "r$(replicate)")
                 @assert !ispath(run_dir)
@@ -231,7 +231,7 @@ function generate_jobs(db)
 end
 
 function pretty_json(params)
-    d = Dict(fn => getfield(params, fn) for fn in fieldnames(typeof(params)))
+    d = OrderedDict(fn => getfield(params, fn) for fn in fieldnames(typeof(params)))
     io = IOBuffer()
     JSON.print(io, d, 2)
     String(take!(io))
@@ -250,10 +250,10 @@ function init_base_params()
 #     biting_rate_multiplier_by_year = repeat([1.0], t_end_years)
 #     biting_rate_multiplier_by_year[61:62] .= 0.5
 
-    t_burnin_years = 61
+    t_burnin_years = 0
     t_burnin = t_burnin_years * t_year
 
-    Params(
+    add_params(Params(), (
         upper_bound_recomputation_period = 30,
 
         output_db_filename = "output.sqlite",
@@ -261,7 +261,7 @@ function init_base_params()
         summary_period = 30,
         gene_strain_count_period = t_year,
 
-        host_sampling_period = 30,
+        host_sampling_period = [30],
         host_sample_size = 100,
 
         verification_period = t_year,
@@ -275,9 +275,9 @@ function init_base_params()
         t_year = t_year,
         t_end = t_end,
 
-        t_burnin = t_end,
+        t_burnin = t_burnin,
 
-        n_hosts = 10000,
+        n_hosts = 1000,
         n_initial_infections = 20,
 
         n_genes_initial = 9600,
@@ -290,7 +290,8 @@ function init_base_params()
         transmissibility = 0.5,
         coinfection_reduces_transmission = true,
 
-        ectopic_recombination_rate = 1.8e-7,
+        # ectopic_recombination_rate = 1.8e-7,
+        ectopic_recombination_rate = [4.242641e-4, 4.242641e-4],
         p_ectopic_recombination_is_conversion = 0.0,
 
         ectopic_recombination_generates_new_alleles = false,
@@ -308,10 +309,9 @@ function init_base_params()
 
         t_liver_stage = 14.0,
 
-        switching_rate = 1.0/6.0,
+        switching_rate = [1.0/6.0, 1.0/6.0],
 
-        mean_host_lifetime = 30 * t_year,
-        max_host_lifetime = 80 * t_year,
+        mean_host_lifetime = 23.38837487739662 * t_year,
 
         background_clearance_rate = 0.0,
 
@@ -326,17 +326,15 @@ function init_base_params()
 
         migrants_match_local_prevalence = true,
         migration_rate_update_period = 30,
-
-        n_snps_per_strain = 24,
-
-        distinct_initial_snp_allele_frequencies = false,
-#         distinct_initial_snp_allele_frequencies = true,
-#         initial_snp_allele_frequency = [0.1, 0.9],
-
-        snp_linkage_disequilibrium = false,
-#         snp_linkage_disequilibrium = true,
-#         snp_pairwise_ld = [snp_ld_matrix[:,i] for i in 1:size(snp_ld_matrix)[2]],
-    )
+        
+        # parameters for var groups implementation
+        var_groups_functionality = [1, 1],
+        var_groups_ratio = [0.25, 0.75],
+        var_groups_fix_ratio = true,
+        var_groups_do_not_share_alleles = true,
+        var_groups_high_functionality_express_earlier = true,
+        gene_group_id_association_recomputation_period = 30,
+    ))
 end
 
 main()

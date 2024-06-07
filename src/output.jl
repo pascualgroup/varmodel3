@@ -216,7 +216,7 @@ function write_output!(db, t, s, stats)
     end
 
     if t % P.summary_period == 0 || t % P.gene_strain_count_period == 0 || (((P.t_host_sampling_start !== nothing && t >= P.t_host_sampling_start) || P.t_host_sampling_start === nothing) && t % P.t_year in P.host_sampling_period)
-        println("t = $(t)")
+        println(stderr, "t = $(t)")
 
         execute(db, "BEGIN TRANSACTION")
 
@@ -234,6 +234,7 @@ function write_output!(db, t, s, stats)
         end        
 
         execute(db, "COMMIT")
+        flush(stderr)
         flush(stdout)
     end
 end

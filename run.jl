@@ -13,6 +13,8 @@ argument. (If not provided, "parameters.json" is assumed.)
 
 include("preamble.jl")
 
+import DataStructures.OrderedDict
+
 # Load parameters into a constant global, so that they can be used when compiling
 # the model code.
 const P = let
@@ -25,10 +27,9 @@ const P = let
     end
 
     json_str = read(params_filename, String)
-
-    d_str = JSON.parse(json_str)
-    d_symb = Dict((Symbol(k), v) for (k, v) in d_str)
-    Params(; d_symb...)
+    json_odict = JSON.parse(json_str, dicttype=OrderedDict)
+    params = add_params(Params(), json_odict)
+    params
 end
 
 include("src/model.jl")

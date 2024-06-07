@@ -1,6 +1,7 @@
 using Parameters
 using Base.Filesystem
 
+
 """
 Parameters for a simulation.
 
@@ -16,7 +17,7 @@ keyword constructor for the class.
     on the same processor architecture.
     (It is possible that some of those could vary while preserving reproducibility.)
     """
-    rng_seed::Union{Int, Nothing} = nothing
+    rng_seed::Union{Int64, Nothing} = nothing
 
     """
     How often to recompute upper bounds for rejection sampling.
@@ -268,18 +269,8 @@ keyword constructor for the class.
 
     """
     Mean of exponential distribution used to draw host lifetime.
-
-    This distribution is truncated at `max_host_lifetime`, so the effective
-    mean is lower than this number.
     """
     mean_host_lifetime::Union{Float32, Nothing} = nothing
-
-    """
-        Maximum host lifetime.
-
-        Not used, should be `nothing`.
-    """
-    max_host_lifetime::Union{Float32, Nothing} = nothing
 
     """
         Background clearance rate due to processes not explicitly modeled.
@@ -344,51 +335,6 @@ keyword constructor for the class.
     migration_rate_update_period::Union{Int, Nothing} = nothing
 
     """
-        Number of biallelic neutral single nucleotide polymorphims (SNPs) in strain.
-        These SNPs do not contribute to the infection or host immune memory.
-        They are used to keep track of the neutral part of each parasite genome.
-    """
-    n_snps_per_strain::Union{Int, Nothing} = nothing
-
-    """
-        Whether the initial allele frequencies of the SNPs are distinct.
-        If `true`, then the initial allele frequency are distinct in each SNP.
-        For example, while one SNP could have its minor allele frequency (MAF)
-        equals to 0.5, another SNP could have its MAF equals to 0.3.
-        If `false`, then the initial allele frequencies are similar in all SNPs,
-        i.e. their initial MAFs equal 0.5.
-    """
-    distinct_initial_snp_allele_frequencies::Union{Bool, Nothing} = nothing
-
-    """
-        If `distinct_initial_snp_allele_frequencies` is `true, then this is the
-        range of the possible initial frequencies for one of the two SNP alleles,
-        e.g. [0.1, 0.9].
-    """
-    initial_snp_allele_frequency::Union{Array{Float32}, Nothing} = nothing
-
-    """
-        Whether the SNPs (or some SNPs) are in linkage disequilibrium (LD).
-        If `true`, then the linked SNPs will have similar initial SNP allele
-        frequencies and they will tend to co-segregate during recombination.
-        If `false`, then all the SNPs are considered unlinked and they will
-        evolve independently.
-    """
-    snp_linkage_disequilibrium::Union{Bool, Nothing} = nothing
-
-    """
-        If `snp_linkage_disequilibrium` is `true`, then this is the pairwise
-        linkage disequilibrium (LD) matrix. This matrix should provide the
-        coefficient of LD between each pair of SNPs. If two loci are not
-        coinherited at all (they are independent) then the value will be 0.0.
-        If two loci are in total disequilibrium then value would be 1.0.
-        The R script "Rscript_Create_LDPairwiseMatrix.R" could be used to
-        create a pairwise LD matrix.
-    """
-#     snp_pairwise_ld::Union{Array{Float32, 2}, Nothing} = nothing
-    snp_pairwise_ld::Union{Vector{Vector{Float64}}, Nothing} = nothing
-
-    """
         below is the parameters added for implementing different var groups 
         in this Julia code; also modified switching_rate paremeter above from 
         a single value to a vector with elements corresponding to different
@@ -406,9 +352,7 @@ keyword constructor for the class.
     """
     irs_start_year::Union{Int, Nothing} = nothing
     irs_duration::Union{Int, Nothing} = nothing
-    biting_rate_factor::Union{Float64, Nothing} = nothing
     t_host_sampling_start::Union{Int, Nothing} = nothing 
-    biting_rate_mean::Union{Float64, Nothing} = nothing
     # t_decimal_advance::Union{Float64, Nothing} = nothing
 
     """
@@ -436,7 +380,29 @@ keyword constructor for the class.
 end
 
 """
+Check fields one at a time while constructing Params from a dictionary or named tuple.
+Params is immutable for performance reasons, so this function creates a new Params for every addition.
+"""
+function add_params(p, d)
+    for k in keys(d)
+        k_symb = Symbol(k)
+        if hasfield(Params, k_symb)
+            try
+                p = Params(p; NamedTuple{(k_symb,)}((d[k],))...)
+                # setproperty!(s, k_symb, d[k])
+            catch
+                println(stderr, "ERROR setting parameter $(k):")
+                rethrow()
+            end
+        else
+            println(stderr, "WARNING: value provided for key $(k) but Params has no such field.")
+        end
+    end
+    p
+end
 
+"""
+Validate parameter values.
 """
 function validate(p::Params)
     @assert p.upper_bound_recomputation_period !== nothing
@@ -544,8 +510,6 @@ function validate(p::Params)
     @assert p.mean_host_lifetime !== nothing
     @assert p.mean_host_lifetime >= 0.0
 
-    @assert p.max_host_lifetime === nothing
-
     @assert p.background_clearance_rate !== nothing
     @assert p.background_clearance_rate >= 0.0
 
@@ -587,8 +551,6 @@ function validate(p::Params)
     """
     @assert p.irs_start_year === nothing || p.irs_start_year >= 0 
     @assert p.irs_duration === nothing || p.irs_duration >= 0 
-    @assert p.biting_rate_factor === nothing
     @assert p.t_host_sampling_start === nothing || p.t_host_sampling_start >= 0
-    @assert p.biting_rate_mean === nothing
     # @assert p.t_decimal_advance !== nothing && p.t_decimal_advance > 0.0
 end

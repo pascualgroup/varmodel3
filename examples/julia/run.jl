@@ -36,7 +36,7 @@ const P = let
     t_burnin_years = 80
     t_burnin = t_burnin_years * t_year
 
-    Params(
+    add_params(Params(), (
         upper_bound_recomputation_period = 30,
 
         output_db_filename = "output.sqlite",
@@ -44,7 +44,7 @@ const P = let
         summary_period = 30,
         gene_strain_count_period = t_year,
 
-        host_sampling_period = 30,
+        host_sampling_period = [30],
         host_sample_size = 100,
 
         verification_period = t_year,
@@ -95,8 +95,7 @@ const P = let
         switching_rate = [1.0/6.0, 1.0/6.0],
         # switching_rate = 1.0/6.0,
 
-        mean_host_lifetime = 30 * t_year,
-        max_host_lifetime = 80 * t_year,
+        mean_host_lifetime = 23.38837487739662 * t_year,
 
         background_clearance_rate = 0.0,
 
@@ -112,16 +111,6 @@ const P = let
         migrants_match_local_prevalence = true,
         migration_rate_update_period = 30,
 
-        n_snps_per_strain = 0,
-
-        distinct_initial_snp_allele_frequencies = false,
-#         distinct_initial_snp_allele_frequencies = true,
-#         initial_snp_allele_frequency = [0.1, 0.9],
-
-        snp_linkage_disequilibrium = false,
-#         snp_linkage_disequilibrium = true,
-#         snp_pairwise_ld = [snp_ld_matrix[:,i] for i in 1:size(snp_ld_matrix)[2]],
-
 
         
         # parameters for var groups implementation
@@ -131,7 +120,7 @@ const P = let
         var_groups_do_not_share_alleles = true,
         var_groups_high_functionality_express_earlier = true,
         gene_group_id_association_recomputation_period = 30,
-    )
+    ))
 end
 
 # Load and run the model code, which can now be compiled with reference to

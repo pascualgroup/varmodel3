@@ -4,6 +4,7 @@ import Base.push!
 import Base.delete!
 import Base.rand
 import Random.rand!
+import Random.AbstractRNG
 import Base.length
 import Base.iterate
 import Base.in
@@ -204,3 +205,6 @@ function update!(wdd::WeightedDiscreteDistribution, item, weight)
         wdd.weights[item] = weight
     end
 end
+
+"""
+"""

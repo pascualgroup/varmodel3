@@ -74,14 +74,14 @@ function run()
 end
 
 function profile()
-    println("Running with profiling on...")
+    println(stderr, "Running with profiling on...")
     Profile.init(n = 10^7, delay = P.profile_delay)
     @Profile.profile run_inner()
 
-    println("About to write profile...")
+    println(stderr, "About to write profile...")
     profile_data = Profile.retrieve()
     Serialization.serialize(P.profile_filename, profile_data)
-    println("Profile written.")
+    println(stderr, "Profile written.")
 end
 
 function run_inner()
@@ -169,23 +169,23 @@ function run_inner()
     end
 
     elapsed_time = Dates.value(now() - start_datetime) / 1000.0
-    println("elapsed time (s): $(elapsed_time)")
+    println(stderr, "elapsed time (s): $(elapsed_time)")
     execute(db.meta, ("elapsed_time", elapsed_time))
     
     max_rss_gb = Sys.maxrss() / 2^30
-    println("maxrss (GB) = $(max_rss_gb)")
+    println(stderr, "maxrss (GB) = $(max_rss_gb)")
     execute(db.meta, ("max_rss_gb", max_rss_gb))
 
     went_extinct = total_weight(event_dist) == 0.0
-    println("went extinct? $(went_extinct)")
+    println(stderr, "went extinct? $(went_extinct)")
     execute(db.meta, ("went_extinct", Int64(went_extinct)))
 
     total_num_genes_generated_mut = s.next_gene_id_mut - 1
-    println("total number of new genes generated out of mutation? $(total_num_genes_generated_mut)")
+    println(stderr, "total number of new genes generated out of mutation? $(total_num_genes_generated_mut)")
     execute(db.meta, ("total_num_genes_generated_mut", Int64(total_num_genes_generated_mut)))
 
     total_num_genes_generated_recomb = s.next_gene_id_recomb - 1
-    println("total number of new genes generated out of recombination? $(total_num_genes_generated_recomb)")
+    println(stderr, "total number of new genes generated out of recombination? $(total_num_genes_generated_recomb)")
     execute(db.meta, ("total_num_genes_generated_recomb", Int64(total_num_genes_generated_recomb)))
 end
 
@@ -247,8 +247,6 @@ end
 
 #function initialize_state(a)
 function initialize_state(rng)
-    println("initialize_state()")
-
     # Initialize gene pool as an (n_loci, n_genes_initial) matrix whose columns
     # are unique randomly generated genes. Initialize gene-to-group-id map as an empty dictionary.
     gene_pool_set = Set()
@@ -335,22 +333,6 @@ function initialize_state(rng)
         infected_ratio = 1.0,
         association_genes_to_var_groups = association_genes_to_var_groups_init
     )
-end
-
-"""
-    Draws host lifetime from a distribution.
-
-    The distribution is an exponential distribution with mean
-    `mean_host_lifetime`, truncated at `max_host_lifetime`.
-"""
-function draw_host_lifetime(rng)
-    dist = Exponential(P.mean_host_lifetime)
-    while true
-        lifetime = rand(rng, dist)
-        if lifetime < P.max_host_lifetime
-            return lifetime
-        end
-    end
 end
 
 function create_empty_infection(id, t)
@@ -577,7 +559,7 @@ function do_biting!(t, s, stats, event_dist)
     end
     
     transmitted_strains = src_host.active_infections[choose_transmit.<p_transmit*infs_transmissibility]
-    #println("t = $(t): originalSize $(src_active_count), newSize $(length(transmitted_strains))")
+    #println(stderr, "t = $(t): originalSize $(src_active_count), newSize $(length(transmitted_strains))")
 
     # The number of transmissions is bounded by the number of source infections
     # and the number of available slots in the destination.
@@ -727,7 +709,7 @@ function do_background_clearance(t, s, stats, event_dist)
         false
     else
         infection = host.active_infections[inf_index]
-        #println("do_background_clearance actually happening")
+        #println(stderr, "do_background_clearance actually happening")
         clear_active_infection!(t, s, host, inf_index)
         true
     end
