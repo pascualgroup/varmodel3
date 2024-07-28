@@ -783,6 +783,9 @@ function get_rate_switching(t, s)
 end
 
 function do_switching!(t, s, stats, event_dist)
+    if s.n_active_infections_per_host_max < 1
+        return false
+    end
     host = rand(s.rng, s.hosts)
     inf_index = rand(s.rng, 1:s.n_active_infections_per_host_max)
     
@@ -914,6 +917,9 @@ function get_rate_mutation(t, s)
 end
 
 function do_mutation!(t, s, stats, event_dist)
+    if s.n_active_infections_per_host_max < 1
+        return false
+    end
     host = rand(s.rng, s.hosts)
     inf_index = rand(s.rng, 1:s.n_active_infections_per_host_max)
 
@@ -962,6 +968,9 @@ end
 
 
 function do_ectopic_recombination!(t, s, stats, event_dist)
+    if s.n_active_infections_per_host_max < 1
+        return false
+    end
     host = rand(s.rng, s.hosts)
     inf_index = rand(s.rng, 1:s.n_active_infections_per_host_max)
 
@@ -1195,6 +1204,9 @@ function get_rate_immunity_loss(t, s)
 end
 
 function do_immunity_loss!(t, s, stats, event_dist)
+    if s.n_immunities_per_host_max < 1
+        return false
+    end
     host = rand(s.rng, s.hosts)
     immunity_index = rand(s.rng, 1:s.n_immunities_per_host_max)
 
