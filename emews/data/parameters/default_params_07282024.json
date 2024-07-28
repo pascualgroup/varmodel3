@@ -254,7 +254,7 @@
   "rng_batch_size": 10000000,
   "calc_summary_statistics_instead_sqlite": true,
   "calc_summary_statistics_times": [
-    71940
+    35940
   ],
   "p_microscopy_detection": 0.47,
   "undersampling_of_var": true,
