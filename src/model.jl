@@ -387,10 +387,10 @@ function initialize_genes_from_pool(rng, gene_pool, infection, association_genes
             end
         end
     else
-        gene_indices = rand(rng, 1:size(s.gene_pool)[2], P.n_genes_per_strain)
-        infection.genes[:,:] = (@view gene_pool[:, gene_indices]),
+        gene_indices = rand(rng, 1:size(gene_pool)[2], P.n_genes_per_strain)
+        infection.genes[:,:] = (@view gene_pool[:, gene_indices])
         for i in 1:size(infection.genes)[2]
-            group_id = association_genes_to_var_groups[infection.genes[:,i]]
+            group_id = association_genes_to_var_groups[Gene(infection.genes[:,i])]
             push!(group_ids, group_id)
         end
     end
