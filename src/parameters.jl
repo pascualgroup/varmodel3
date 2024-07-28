@@ -227,7 +227,7 @@ keyword constructor for the class.
 
     See description in the `immunity` field of struct `State`.
     """
-    immunity_level_max::Union{UInt8, Nothing} = nothing
+    # immunity_level_max::Union{UInt8, Nothing} = nothing
 
     """
     Rate at which immunity is lost, per host, per gene.
@@ -377,6 +377,21 @@ keyword constructor for the class.
         for a ~ 4x RNG speedup in isolated tests.
     """
     rng_batch_size::Int = 10000000
+    
+    
+    """
+        below is the additional parameters tailored for the fitting project. 
+    """
+    calc_summary_statistics_instead_sqlite::Bool = false
+    calc_summary_statistics_times::Union{Vector{Int}, Nothing} = nothing
+    p_microscopy_detection::Union{Float64, Nothing} = nothing
+    undersampling_of_var::Union{Bool, Nothing} = nothing 
+    measurement_error_A::Union{Vector{Int}, Nothing} = nothing
+    measurement_error_BC::Union{Vector{Int}, Nothing} = nothing
+    MOI_aggregate_approach::Union{String, Nothing} = nothing
+    maxMOI::Union{Int, Nothing} = nothing
+    MOI_prior::Union{Vector{Float32}, Nothing} = nothing 
+    p_isolateSize_given_MOI::Union{Vector{Dict{String, Float64}}, Nothing} = nothing 
 end
 
 """
@@ -553,4 +568,27 @@ function validate(p::Params)
     @assert p.irs_duration === nothing || p.irs_duration >= 0 
     @assert p.t_host_sampling_start === nothing || p.t_host_sampling_start >= 0
     # @assert p.t_decimal_advance !== nothing && p.t_decimal_advance > 0.0
+    
+    @assert !isnothing(p.calc_summary_statistics_instead_sqlite)
+    if p.calc_summary_statistics_instead_sqlite
+        @assert all(p.calc_summary_statistics_times.!==nothing)
+        @assert all(p.calc_summary_statistics_times.>=0)
+        @assert p.MOI_aggregate_approach !== nothing
+        @assert p.MOI_aggregate_approach == "pool" || p.MOI_aggregate_approach == "mixtureDist"
+        @assert p.maxMOI !== nothing
+        @assert p.maxMOI >= 0
+        @assert p.MOI_prior !== nothing
+        @assert all(p.MOI_prior.>=0.0)
+        @assert length(p.MOI_prior) == p.maxMOI
+        @assert p.p_isolateSize_given_MOI !== nothing
+        @assert length(p.p_isolateSize_given_MOI) == p.maxMOI
+    end
+    if p.p_microscopy_detection !== nothing
+        @assert p.p_microscopy_detection > 0.0
+    end
+    @assert p.undersampling_of_var !== nothing 
+    if p.undersampling_of_var
+        @assert all(p.measurement_error_A.!==nothing)
+        @assert all(p.measurement_error_BC.!==nothing)
+    end
 end
