@@ -700,6 +700,9 @@ function get_rate_background_clearance(t, s)
 end
 
 function do_background_clearance(t, s, stats, event_dist)
+    if s.n_active_infections_per_host_max < 1
+        return false
+    end
     host = rand(s.rng, P.n_hosts)
     inf_index = rand(s.rng, 1:s.n_active_infections_per_host_max)
 
@@ -723,6 +726,9 @@ function get_rate_liver_progress(t, s)
 end
 
 function do_liver_progress!(t, s, stats, event_dist)
+    if s.n_liver_infections_per_host_max < 1
+        return false
+    end
     host = @fastmath rand(s.rng, s.hosts)
     inf_index = @fastmath rand(s.rng, 1:s.n_liver_infections_per_host_max)
 
