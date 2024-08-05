@@ -11,7 +11,7 @@
   "gene_strain_count_period": 30,
   "verification_period": 7200,
   "t_year": 360,
-  "t_end": 36000,
+  "t_end": 28800,
   "t_burnin": 0,
   "n_hosts": 13333,
   "n_initial_infections": 20,
@@ -247,14 +247,14 @@
   "gene_group_id_association_recomputation_period": 30,
   "irs_start_year": 101,
   "irs_duration": 0,
-  "t_host_sampling_start": 34920,
+  "t_host_sampling_start": 27720,
   "profile_on": false,
   "profile_filename": "profile_data",
   "profile_delay": 0.1,
   "rng_batch_size": 10000000,
   "calc_summary_statistics_instead_sqlite": true,
   "calc_summary_statistics_times": [
-    35940
+    28740
   ],
   "p_microscopy_detection": 0.47,
   "undersampling_of_var": true,
