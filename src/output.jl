@@ -19,11 +19,6 @@ maintainer may want to convert the code.
 
 using SQLite: DB, Stmt
 import SQLite.DBInterface.execute
-if P.calc_summary_statistics_instead_sqlite
-    using DataFrames
-    using LinearAlgebra
-    using Statistics
-end
 
 """
 Database type encapsulating SQLite.DB and prepared insert statements for tables.
@@ -31,7 +26,6 @@ Database type encapsulating SQLite.DB and prepared insert statements for tables.
 Prepared insert statements are used for the sake of performance; they allow
 SQLite to avoid parsing and compiling the statements with every inserted row.
 """
-
 struct VarModelDB
     db::DB
     meta::Stmt
@@ -42,9 +36,7 @@ struct VarModelDB
     sampled_durations::Stmt
     sampled_infection_genes::Stmt
     sampled_immunity::Stmt
-    summary_statistics::Stmt
 end
-
 
 """
 Type encapsulating various summary statistics gathered between summary periods.
@@ -102,8 +94,8 @@ function initialize_database()
     db = DB(P.output_db_filename)
 
     # Note: all of this could be done with the Julia Tables package, which
-    # might make it less cumbersome, but also introduces conceptual overhead. 
-       
+    # might make it less cumbersome, but also introduces conceptual overhead.
+
     execute(db, "CREATE TABLE meta (key, value);")
 
     execute(db, """
@@ -188,21 +180,6 @@ function initialize_database()
         );
     """)
 
-    execute(db, """
-        CREATE TABLE summary_statistics (
-            time INTEGER,
-            prevalence REAL,
-            meanMOIvar REAL,
-            meanPTS REAL,
-            meanPTSGroupA REAL,
-            meanPTSGroupBC REAL,
-            numStrains INTEGER,
-            numGenes INTEGER,
-            numGenesGroupA INTEGER,
-            numGenesGroupBC INTEGER
-        );
-    """)
-
     VarModelDB(
         db,
         make_insert_statement(db, "meta", 2),
@@ -212,8 +189,7 @@ function initialize_database()
         make_insert_statement(db, "sampled_infections", 6),
         make_insert_statement(db, "sampled_durations", 6),
         make_insert_statement(db, "sampled_infection_genes", 2 + 1 + P.n_loci),
-        make_insert_statement(db, "sampled_immunity", 5),
-        make_insert_statement(db, "summary_statistics", 10)
+        make_insert_statement(db, "sampled_immunity", 5)
     )
 end
 
@@ -236,21 +212,6 @@ end
 
 function write_output!(db, t, s, stats)
     if P.t_burnin !== nothing && t < P.t_burnin
-        return
-    end
-
-    if P.calc_summary_statistics_instead_sqlite 
-        if t in P.calc_summary_statistics_times
-            println(stderr, "t = $(t)")
-
-            execute(db, "BEGIN TRANSACTION")
-
-            write_summary_statistics(db, t, s)
-
-            execute(db, "COMMIT")
-            flush(stderr)
-            flush(stdout)
-        end
         return
     end
 
@@ -322,195 +283,6 @@ function write_summary(db, t, s, stats)
 end
 
 """
-Write output to `summary_statistics` table
-"""
-function write_summary_statistics(db, t, s)
-    sampled_hosts = sample(s.hosts, P.host_sample_size, replace = false)
-    sampled_hosts_infected = filter(x -> length(x.active_infections) > 0, sampled_hosts)
-    # println(length(sampled_hosts_infected))
-    if length(sampled_hosts_infected) == 0
-        return false
-    end
-    if P.p_microscopy_detection == nothing
-        sampled_hosts_infected_detected = sampled_hosts_infected
-    else
-        sampled_hosts_infected_detected = filter(x -> rand(s.rng) < P.p_microscopy_detection, sampled_hosts_infected)
-    end
-    # println(length(sampled_hosts_infected_detected))
-    if length(sampled_hosts_infected_detected) == 0
-        return false
-    end
-    # prevalence
-    preval = length(sampled_hosts_infected_detected)/length(sampled_hosts)
-
-    # number of strains and genes for blood-stage infections
-    sampled_infections_detected = DataFrame(host_id = Int[], infection_id = Int[], strain_id = Int[], index = Int[], gene_id = String[], group_id = Int[])
-    if P.undersampling_of_var
-        for host in sampled_hosts_infected_detected
-            for infection in host.active_infections
-                write_infection_df_measurement_error!(sampled_infections_detected, host, infection, s)
-            end
-        end
-    else 
-        for host in sampled_hosts_infected_detected
-            for infection in host.active_infections
-                write_infection_df!(sampled_infections_detected, host, infection, s)
-            end
-        end
-    end
-    sampled_infections_detected_groupA = sampled_infections_detected[isequal.(sampled_infections_detected.group_id, 1),:]
-    sampled_infections_detected_groupBC = sampled_infections_detected[isequal.(sampled_infections_detected.group_id, 2),:]
-
-    nbgene = length(unique(sampled_infections_detected[:,"gene_id"]))
-    nbgeneA = length(unique(sampled_infections_detected_groupA[:,"gene_id"]))
-    nbgeneBC = length(unique(sampled_infections_detected_groupBC[:,"gene_id"]))
-    nbstrain = length(unique(sampled_infections_detected[:,"strain_id"]))
-    
-    MOI = DataFrame(HostID = Int[], MOI = Int[], Prob = Float64[])
-    for host in sampled_hosts_infected_detected
-        # println(host.id)
-        sampled_infections_detected_host = sampled_infections_detected_groupBC[isequal.(sampled_infections_detected_groupBC.host_id, host.id),:]
-        # println(unique(sampled_infections_detected_host[:,"host_id"]))
-        isolateSize = length(unique(sampled_infections_detected_host[:,"gene_id"]))
-        # println(isolateSize)
-        moi = calcMOI(isolateSize, host, P.MOI_aggregate_approach)
-        append!(MOI, moi)
-    end
-    if P.MOI_aggregate_approach == "pool"
-        meanMOIvar = mean(MOI[:, "MOI"])
-    else
-        meanMOIvar = sum(MOI[:, "MOI"].*MOI[:, "Prob"])/length(unique(MOI[:, "HostID"]))
-    end
-
-    sampled_infections_detected_duplicatedGenesRemoved = sampled_infections_detected[.!nonunique(DataFrame(sampled_infections_detected[:,["host_id", "gene_id"]])),:]
-    PTS = calcPTS(sampled_infections_detected_duplicatedGenesRemoved)
-    sampled_infections_detected_groupA_duplicatedGenesRemoved = sampled_infections_detected_groupA[.!nonunique(DataFrame(sampled_infections_detected_groupA[:,["host_id", "gene_id"]])),:]
-    PTSGroupA = calcPTS(sampled_infections_detected_groupA_duplicatedGenesRemoved)
-    sampled_infections_detected_groupBC_duplicatedGenesRemoved = sampled_infections_detected_groupBC[.!nonunique(DataFrame(sampled_infections_detected_groupBC[:,["host_id", "gene_id"]])),:]
-    PTSGroupBC = calcPTS(sampled_infections_detected_groupBC_duplicatedGenesRemoved)
-    meanPTS = mean(offdiag(PTS))
-    meanPTSGroupA = mean(offdiag(PTSGroupA))
-    meanPTSGroupBC = mean(offdiag(PTSGroupBC))
-
-    execute(db.summary_statistics, (
-        t,
-        preval,
-        meanMOIvar,
-        meanPTS,
-        meanPTSGroupA,
-        meanPTSGroupBC,
-        nbstrain,
-        nbgene,
-        nbgeneA,
-        nbgeneBC
-    ))
-end
-
-function write_infection_df_measurement_error!(df, host, infection, s)
-    unique_genes_A = Set()
-    unique_genes_BC = Set()
-    for i in 1:size(infection.genes)[2]
-        gene_group_id = s.association_genes_to_var_groups[Gene(infection.genes[:,i])]
-        if gene_group_id == 1 
-            push!(unique_genes_A, infection.genes[:,i])
-        else
-            push!(unique_genes_BC, infection.genes[:,i])
-        end
-    end
-    num_A_detected = rand(s.rng, P.measurement_error_A)
-    while num_A_detected > length(unique_genes_A)
-        num_A_detected = rand(s.rng, P.measurement_error_A)
-    end 
-    unique_genes_A_detected = sample(collect(unique_genes_A), num_A_detected, replace = false)
-    gene_group_id = 1
-    for i in 1:length(unique_genes_A_detected)
-        # println(unique_genes_A_detected[i])
-        gene_id_rename = join(unique_genes_A_detected[i], "-")
-        # println(gene_id_rename)
-        index = i
-        push!(df, [host.id infection.id infection.strain_id index gene_id_rename gene_group_id])
-    end
-    num_BC_detected = rand(s.rng, P.measurement_error_BC)
-    while num_BC_detected > length(unique_genes_BC)
-        num_BC_detected = rand(s.rng, P.measurement_error_BC)
-    end 
-    unique_genes_BC_detected = sample(collect(unique_genes_BC), num_BC_detected, replace = false)
-    gene_group_id = 2
-    for j in 1:length(unique_genes_BC_detected)
-        gene_id_rename = join(unique_genes_BC_detected[j], "-")
-        index = length(unique_genes_A_detected) + j
-        push!(df, [host.id infection.id infection.strain_id index gene_id_rename gene_group_id])
-    end
-end
-
-function write_infection_df!(df, host, infection, s)
-    unique_genes = Set()
-    for i in 1:size(infection.genes)[2]
-        push!(unique_genes, infection.genes[:,i])
-    end
-    for i in 1:length(unique_genes)
-        gene_id = Gene(unique_genes[i])
-        # @assert haskey(s.association_genes_to_var_groups, gene_id)
-        gene_group_id = s.association_genes_to_var_groups[gene_id]
-        gene_id_rename = join(unique_genes[i], "-") 
-        index = i
-        push!(df, [host.id infection.id infection.strain_id index gene_id_rename gene_group_id])
-    end
-end
-
-function calcMOI(isolateSize, host, MOI_aggregate_approach)
-    denominator = 0.0
-    numerators = []
-    for i in 1:P.maxMOI 
-        prob1_dict = P.p_isolateSize_given_MOI[i]
-        if string(isolateSize) in keys(prob1_dict)
-            prob1 = prob1_dict[string(isolateSize)]
-        else
-            prob1 = 0.0
-        end
-        prob2 = P.MOI_prior[i]
-        denominator_temp = prob1 * prob2
-        push!(numerators, denominator_temp)
-        denominator += denominator_temp
-    end
-    probMOIGivenIsoSize = numerators./denominator
-    if MOI_aggregate_approach == "pool"
-        moi = DataFrame(HostID = host.id, MOI = argmax(probMOIGivenIsoSize), Prob = maximum(probMOIGivenIsoSize))
-    else
-        moi = DataFrame(HostID = host.id, MOI = 1:P.maxMOI, Prob = probMOIGivenIsoSize)
-    end
-    moi
-end
-
-function calcPTS(infections)
-    df1 = unstack(infections, :host_id, :gene_id, :index) # https://dataframes.juliadata.org/stable/man/reshaping_and_pivoting/
-    df2 = select(df1, Not(:host_id))
-    df3 = coalesce.(df2, 0)
-    df4 = df3.>0
-    df5 = df4.*1
-    df6 = Matrix(df5)
-    overlap = df6 * transpose(df6)
-    isolateSize = sum(df6, dims = 2)
-    pts = overlap./isolateSize[:,1]
-    pts
-end
-
-function offdiag(A::Matrix)
-    @assert size(A)[1] == size(A)[2]
-    D = size(A)[1]
-    v = zeros(D*(D-1))
-    for i in 1:D
-        for j in 1:(i-1)
-            v[(i-1)*(D-1)+j] = A[j,i]
-        end
-        for j in (i+1):D
-            v[(i-1)*(D-1)+j-1] = A[j,i]
-        end
-    end
-    v
-end
-
-"""
 Write output for periodically sampled hosts.
 """
 function write_host_samples(db, t, s)
@@ -565,7 +337,7 @@ function write_infection(db, t, host, infection, s)
     )
     for i in 1:P.n_genes_per_strain
         gene_id = Gene(infection.genes[:,i])
-        # @assert haskey(s.association_genes_to_var_groups, gene_id)
+        @assert haskey(s.association_genes_to_var_groups, gene_id)
         gene_group_id = s.association_genes_to_var_groups[gene_id]
         execute(db.sampled_infection_genes, vcat([infection.id, i], gene_group_id, infection.genes[:,i]))
     end
