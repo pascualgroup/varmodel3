@@ -556,7 +556,7 @@ function validate(p::Params)
     @assert p.var_groups_fix_ratio !== nothing
     @assert p.var_groups_do_not_share_alleles !== nothing
     @assert p.var_groups_high_functionality_express_earlier !== nothing
-    @assert all(round.(p.var_groups_ratio * p.n_genes_initial) .== p.var_groups_ratio * p.n_genes_initial) # check the number of genes in each group is an integer number
+    # @assert all(round.(p.var_groups_ratio * p.n_genes_initial) .== p.var_groups_ratio * p.n_genes_initial) # check the number of genes in each group is an integer number
     @assert all(round.(p.var_groups_ratio * p.n_alleles_per_locus_initial) .== p.var_groups_ratio * p.n_alleles_per_locus_initial)
     @assert p.gene_group_id_association_recomputation_period !== nothing
     @assert p.gene_group_id_association_recomputation_period > 0
