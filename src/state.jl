@@ -169,6 +169,9 @@ Infection arrays are dynamically sized but currently limited to
     When the level reaches 0, the allele is removed from the dictionary.
     """
     immunity::ImmuneHistory
+
+    "Generalized immunity level, increase as host accumulates more cleared infections and decrease due to immunity loss."
+    generalized_immunity::UInt32
 end
 
 """

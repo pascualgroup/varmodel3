@@ -23,9 +23,15 @@ include("output.jl")
 import Profile
 import Serialization
 
-const N_EVENTS = 9
-const EVENTS = collect(1:N_EVENTS)
-const (DEATH, BITING, IMMIGRATION, BACKGROUND_CLEARANCE, LIVER_PROGRESS, SWITCHING, MUTATION, ECTOPIC_RECOMBINATION, IMMUNITY_LOSS) = EVENTS
+if P.generalized_immunity_on
+    const N_EVENTS = 10
+    const EVENTS = collect(1:N_EVENTS)
+    const (DEATH, BITING, IMMIGRATION, BACKGROUND_CLEARANCE, LIVER_PROGRESS, SWITCHING, MUTATION, ECTOPIC_RECOMBINATION, IMMUNITY_LOSS, GENERALIZED_IMMUNITY_LOSS) = EVENTS
+else
+    const N_EVENTS = 9
+    const EVENTS = collect(1:N_EVENTS)
+    const (DEATH, BITING, IMMIGRATION, BACKGROUND_CLEARANCE, LIVER_PROGRESS, SWITCHING, MUTATION, ECTOPIC_RECOMBINATION, IMMUNITY_LOSS) = EVENTS
+end
 
 const USE_BITING_RATE_MULTIPLIER_BY_YEAR = P.biting_rate_multiplier_by_year !== nothing
 
@@ -286,6 +292,7 @@ function initialize_state(rng)
             t_birth = 0, # t_death = draw_host_lifetime(),
             liver_infections = [], active_infections = [],
             immunity = ImmuneHistory(),
+            generalized_immunity = 0,
             n_cleared_infections = 0
         )
         for id in 1:P.n_hosts
@@ -450,6 +457,8 @@ function get_rate(t, s, event)
         get_rate_ectopic_recombination(t, s)
     elseif event == IMMUNITY_LOSS
         get_rate_immunity_loss(t, s)
+    elseif event == GENERALIZED_IMMUNITY_LOSS
+        get_rate_generalized_immunity_loss(t, s)
     end
 end
 
@@ -472,6 +481,8 @@ function do_event!(t, s, stats, event, event_dist)
         do_ectopic_recombination!(t, s, stats, event_dist)
     elseif event == IMMUNITY_LOSS
         do_immunity_loss!(t, s, stats, event_dist)
+    elseif event == GENERALIZED_IMMUNITY_LOSS
+        do_generalized_immunity_loss!(t, s, stats, event_dist)
     end
 end
 
@@ -487,6 +498,7 @@ function do_death!(t, s, stats, event_dist)
     host.id = next_host_id!(s)
     host.t_birth = t
     host.n_cleared_infections = 0
+    host.generalized_immunity = 0
     empty!(host.liver_infections)
     empty!(host.active_infections)
     empty!(host.immunity)
@@ -557,8 +569,12 @@ function do_biting!(t, s, stats, event_dist)
         inf_transmissibility = P.var_groups_functionality[gene_temp_group_id]
         push!(infs_transmissibility, inf_transmissibility)
     end
-    
-    transmitted_strains = src_host.active_infections[choose_transmit.<p_transmit*infs_transmissibility]
+    if P.generalized_immunity_on
+        p_transmit_reduction_generalized_immunity = exp(-P.generalized_immunity_transmissibility_param * src_host.generalized_immunity)
+    else
+        p_transmit_reduction_generalized_immunity = 1.0
+    end
+    transmitted_strains = src_host.active_infections[choose_transmit.<p_transmit*infs_transmissibility*p_transmit_reduction_generalized_immunity]
     #println(stderr, "t = $(t): originalSize $(src_active_count), newSize $(length(transmitted_strains))")
 
     # The number of transmissions is bounded by the number of source infections
@@ -1111,6 +1127,7 @@ function clear_active_infection!(t, s, host, inf_index)
     end
     s.n_cleared_infections += 1
     host.n_cleared_infections += 1
+    host.generalized_immunity += 1
     push!(s.old_infections, host.active_infections[inf_index])
     delete_and_swap_with_end!(host.active_infections, inf_index)
 end
@@ -1222,6 +1239,22 @@ function do_immunity_loss!(t, s, stats, event_dist)
     else
         decrement_immunity_at_sampled_index!(host.immunity, immunity_index)
         true
+    end
+end
+
+function get_rate_generalized_immunity_loss(t, s)
+    P.generalized_immunity_loss_rate * P.n_hosts 
+end
+
+function do_generalized_immunity_loss!(t, s, stats, event_dist)
+    host = rand(s.rng, s.hosts)
+
+    # If the immunity index is beyond this host's immunity count, reject this sample.
+    if host.generalized_immunity > 0
+        host.generalized_immunity -= 1
+        true
+    else
+        false
     end
 end
 

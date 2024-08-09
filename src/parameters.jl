@@ -392,6 +392,14 @@ keyword constructor for the class.
     maxMOI::Union{Int, Nothing} = nothing
     MOI_prior::Union{Vector{Float32}, Nothing} = nothing 
     p_isolateSize_given_MOI::Union{Vector{Dict{String, Float64}}, Nothing} = nothing 
+
+    """
+        below is the additional parameters for the simple version of generalized immunity without parasitemia. 
+    """
+    generalized_immunity_on::Bool = false
+    generalized_immunity_loss_rate::Union{Float64, Nothing} = nothing
+    generalized_immunity_transmissibility_param::Union{Float64, Nothing} = nothing
+    generalized_immunity_detectability_param::Union{Float64, Nothing} = nothing
 end
 
 """
@@ -556,8 +564,8 @@ function validate(p::Params)
     @assert p.var_groups_fix_ratio !== nothing
     @assert p.var_groups_do_not_share_alleles !== nothing
     @assert p.var_groups_high_functionality_express_earlier !== nothing
-    # @assert all(round.(p.var_groups_ratio * p.n_genes_initial) .== p.var_groups_ratio * p.n_genes_initial) # check the number of genes in each group is an integer number
-    # @assert all(round.(p.var_groups_ratio * p.n_alleles_per_locus_initial) .== p.var_groups_ratio * p.n_alleles_per_locus_initial)
+    @assert all(round.(p.var_groups_ratio * p.n_genes_initial) .== p.var_groups_ratio * p.n_genes_initial) # check the number of genes in each group is an integer number
+    @assert all(round.(p.var_groups_ratio * p.n_alleles_per_locus_initial) .== p.var_groups_ratio * p.n_alleles_per_locus_initial)
     @assert p.gene_group_id_association_recomputation_period !== nothing
     @assert p.gene_group_id_association_recomputation_period > 0
     
@@ -590,5 +598,14 @@ function validate(p::Params)
     if p.undersampling_of_var
         @assert all(p.measurement_error_A.!==nothing)
         @assert all(p.measurement_error_BC.!==nothing)
+    end
+    
+    if p.generalized_immunity_on
+        @assert p.generalized_immunity_loss_rate !== nothing
+        @assert p.generalized_immunity_loss_rate >= 0.0
+        @assert p.generalized_immunity_transmissibility_param !== nothing
+        @assert p.generalized_immunity_transmissibility_param >= 0.0
+        @assert p.generalized_immunity_detectability_param !== nothing
+        @assert p.generalized_immunity_detectability_param >= 0.0
     end
 end
