@@ -125,7 +125,7 @@
   "var_groups_do_not_share_alleles": true,
   "var_groups_high_functionality_express_earlier": false,
   "gene_group_id_association_recomputation_period": 30,
-  "irs_start_year": 101,
+  "irs_start_year": 81,
   "irs_duration": 0,
   "t_host_sampling_start": 27720,
   "profile_on": false,
