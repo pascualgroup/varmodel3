@@ -127,7 +127,7 @@
   "gene_group_id_association_recomputation_period": 30,
   "irs_start_year": 81,
   "irs_duration": 0,
-  "t_host_sampling_start": 27720,
+  "t_host_sampling_start": 28440,
   "profile_on": false,
   "profile_filename": "profile_data",
   "profile_delay": 0.1,
