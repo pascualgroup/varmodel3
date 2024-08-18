@@ -36,9 +36,9 @@ end
 const USE_BITING_RATE_MULTIPLIER_BY_YEAR = P.biting_rate_multiplier_by_year !== nothing
 
 gene_pair_indices = []
-for i in 1:(P.n_genes_per_strain-1)
-    for j in (i+1):P.n_genes_per_strain
-        push!(gene_pair_indices, (i,j))
+for i in 1:(P.n_genes_per_strain - 1)
+    for j in (i + 1):P.n_genes_per_strain
+        push!(gene_pair_indices, (i, j))
     end
 end
 
@@ -54,7 +54,7 @@ for i in 1:length(P.var_groups_ratio)
     allele_ids_var_group = if i == 1
         1:num_allele_ids_var_groups[i]
     else 
-        (sum(num_allele_ids_var_groups[1:(i-1)])+1):sum(num_allele_ids_var_groups[1:i])
+        (sum(num_allele_ids_var_groups[1:(i - 1)]) + 1):sum(num_allele_ids_var_groups[1:i])
     end
     push!(allele_ids_var_groups, allele_ids_var_group)
 end
@@ -64,7 +64,7 @@ for i in 1:length(P.var_groups_ratio)
     infection_genes_index_var_group = if i == 1
         1:round(Int, P.var_groups_ratio[i] * P.n_genes_per_strain)
     else
-        (sum(round.(Int, P.var_groups_ratio[1:(i-1)] * P.n_genes_per_strain)) + 1):sum(round.(Int, P.var_groups_ratio[1:i] * P.n_genes_per_strain))
+        (sum(round.(Int, P.var_groups_ratio[1:(i - 1)] * P.n_genes_per_strain)) + 1):sum(round.(Int, P.var_groups_ratio[1:i] * P.n_genes_per_strain))
     end
     push!(infection_genes_index_var_groups, infection_genes_index_var_group)
 end
