@@ -382,7 +382,7 @@ keyword constructor for the class.
     """
         below is the additional parameters tailored for the fitting project. 
     """
-    calc_summary_statistics_instead_sqlite::Bool = false
+    calc_summary_statistics_instead_sqlite::Union{Bool, Nothing} = nothing
     calc_summary_statistics_times::Union{Vector{Int}, Nothing} = nothing
     p_microscopy_detection::Union{Float64, Nothing} = nothing
     undersampling_of_var::Union{Bool, Nothing} = nothing 
@@ -396,10 +396,11 @@ keyword constructor for the class.
     """
         below is the additional parameters for the simple version of generalized immunity without parasitemia. 
     """
-    generalized_immunity_on::Bool = false
+    generalized_immunity_on::Union{Bool, Nothing} = nothing
     generalized_immunity_loss_rate::Union{Float64, Nothing} = nothing
     generalized_immunity_transmissibility_param::Union{Float64, Nothing} = nothing
     generalized_immunity_detectability_param::Union{Float64, Nothing} = nothing
+    generalized_immunity_detectability_on::Union{Bool, Nothing} = nothing
 end
 
 """
@@ -577,8 +578,7 @@ function validate(p::Params)
     @assert p.t_host_sampling_start === nothing || p.t_host_sampling_start >= 0
     # @assert p.t_decimal_advance !== nothing && p.t_decimal_advance > 0.0
     
-    @assert !isnothing(p.calc_summary_statistics_instead_sqlite)
-    if p.calc_summary_statistics_instead_sqlite
+    if !isnothing(p.calc_summary_statistics_instead_sqlite) && p.calc_summary_statistics_instead_sqlite
         @assert all(p.calc_summary_statistics_times.!==nothing)
         @assert all(p.calc_summary_statistics_times.>=0)
         @assert p.MOI_aggregate_approach !== nothing
@@ -594,18 +594,18 @@ function validate(p::Params)
     if p.p_microscopy_detection !== nothing
         @assert p.p_microscopy_detection > 0.0
     end
-    @assert p.undersampling_of_var !== nothing 
-    if p.undersampling_of_var
+    if !isnothing(p.undersampling_of_var) && p.undersampling_of_var
         @assert all(p.measurement_error_A.!==nothing)
         @assert all(p.measurement_error_BC.!==nothing)
     end
     
-    if p.generalized_immunity_on
+    if !isnothing(p.generalized_immunity_on) && p.generalized_immunity_on
         @assert p.generalized_immunity_loss_rate !== nothing
         @assert p.generalized_immunity_loss_rate >= 0.0
         @assert p.generalized_immunity_transmissibility_param !== nothing
         @assert p.generalized_immunity_transmissibility_param >= 0.0
         @assert p.generalized_immunity_detectability_param !== nothing
         @assert p.generalized_immunity_detectability_param >= 0.0
+        @assert p.generalized_immunity_detectability_on !== nothing
     end
 end

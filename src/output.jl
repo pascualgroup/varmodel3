@@ -19,7 +19,7 @@ maintainer may want to convert the code.
 
 using SQLite: DB, Stmt
 import SQLite.DBInterface.execute
-if P.calc_summary_statistics_instead_sqlite
+if P.calc_summary_statistics_instead_sqlite !== nothing && P.calc_summary_statistics_instead_sqlite
     using DataFrames
     using LinearAlgebra
     using Statistics
@@ -141,7 +141,9 @@ function initialize_database()
             birth_time REAL,
             death_time REAL,
             n_infections_liver INTEGER,
-            n_infections_active INTEGER
+            n_infections_active INTEGER,
+            n_cleared_infections INTEGER,
+            generalized_immunity INTEGER
         )
     """)
 
@@ -208,7 +210,7 @@ function initialize_database()
         make_insert_statement(db, "meta", 2),
         make_insert_statement(db, "summary", 13),
         make_insert_statement(db, "gene_strain_counts", 5),
-        make_insert_statement(db, "sampled_hosts", 6),
+        make_insert_statement(db, "sampled_hosts", 8),
         make_insert_statement(db, "sampled_infections", 6),
         make_insert_statement(db, "sampled_durations", 6),
         make_insert_statement(db, "sampled_infection_genes", 2 + 1 + P.n_loci),
@@ -239,7 +241,7 @@ function write_output!(db, t, s, stats)
         return
     end
 
-    if P.calc_summary_statistics_instead_sqlite 
+    if P.calc_summary_statistics_instead_sqlite !== nothing && P.calc_summary_statistics_instead_sqlite 
         if t in P.calc_summary_statistics_times
             println(stderr, "t = $(t)")
 
@@ -259,7 +261,7 @@ function write_output!(db, t, s, stats)
 
         execute(db, "BEGIN TRANSACTION")
 
-        if P.generalized_immunity_on && t % P.summary_period == 0 && ((P.t_host_sampling_start !== nothing && t >= P.t_host_sampling_start) || P.t_host_sampling_start === nothing) && t % P.t_year in P.host_sampling_period
+        if (P.generalized_immunity_detectability_on !== nothing && P.generalized_immunity_detectability_on) && t % P.summary_period == 0 && ((P.t_host_sampling_start !== nothing && t >= P.t_host_sampling_start) || P.t_host_sampling_start === nothing) && t % P.t_year in P.host_sampling_period
             hosts_GI_impact = Dict(host.id => Int[] for host in s.hosts)
             for host in s.hosts
                 if length(host.active_infections) > 0
@@ -270,7 +272,7 @@ function write_output!(db, t, s, stats)
         end        
 
         if t % P.summary_period == 0
-            if P.generalized_immunity_on && ((P.t_host_sampling_start !== nothing && t >= P.t_host_sampling_start) || P.t_host_sampling_start === nothing) && t % P.t_year in P.host_sampling_period 
+            if (P.generalized_immunity_detectability_on !== nothing && P.generalized_immunity_detectability_on) && ((P.t_host_sampling_start !== nothing && t >= P.t_host_sampling_start) || P.t_host_sampling_start === nothing) && t % P.t_year in P.host_sampling_period 
                 write_summary(db, t, s, stats, hosts_GI_impact)
             else
                 write_summary(db, t, s, stats)
@@ -279,7 +281,7 @@ function write_output!(db, t, s, stats)
         end
 
         if t % P.gene_strain_count_period  == 0 
-            if P.generalized_immunity_on && ((P.t_host_sampling_start !== nothing && t >= P.t_host_sampling_start) || P.t_host_sampling_start === nothing) && t % P.t_year in P.host_sampling_period 
+            if (P.generalized_immunity_detectability_on !== nothing && P.generalized_immunity_detectability_on) && ((P.t_host_sampling_start !== nothing && t >= P.t_host_sampling_start) || P.t_host_sampling_start === nothing) && t % P.t_year in P.host_sampling_period 
                 write_gene_strain_counts(db, t, s, hosts_GI_impact)
             else
                 write_gene_strain_counts(db, t, s)
@@ -287,7 +289,7 @@ function write_output!(db, t, s, stats)
         end    
         
         if ((P.t_host_sampling_start !== nothing && t >= P.t_host_sampling_start) || P.t_host_sampling_start === nothing) && t % P.t_year in P.host_sampling_period
-            if P.generalized_immunity_on
+            if P.generalized_immunity_detectability_on !== nothing && P.generalized_immunity_detectability_on
                 write_host_samples(db, t, s, hosts_GI_impact)
             else
                 write_host_samples(db, t, s)
@@ -355,9 +357,9 @@ function write_summary(db, t, s, stats, hosts_GI_impact)
 
     # Compute number of individuals with infections (liver, active, or either).
     n_infected_liver = sum(length(host.liver_infections) > 0 for host in s.hosts)
-    n_infected_active = sum(any(hosts_GI_impact[host.id] >. 0) for host in s.hosts)
+    n_infected_active = sum(any(hosts_GI_impact[host.id] .> 0) for host in s.hosts)
     n_infected = sum(
-        length(host.liver_infections) > 0 || any(hosts_GI_impact[host.id] >. 0)
+        length(host.liver_infections) > 0 || any(hosts_GI_impact[host.id] .> 0)
         for host in s.hosts
     )
 
@@ -396,12 +398,26 @@ function write_summary_statistics(db, t, s)
     if length(sampled_hosts_infected) == 0
         return false
     end
-    if P.generalized_immunity_on
+    if P.generalized_immunity_detectability_on !== nothing && P.generalized_immunity_detectability_on
         sampled_hosts_infected_GI_impact = Dict(shi.id => Int[] for shi in sampled_hosts_infected)
         sampled_hosts_infected_GI = []
         for shi in sampled_hosts_infected
-            GI_impact_vector = rand(s.rng, Float64, length(shi.active_infections)) .< exp(-shi.generalized_immunity * P.generalized_immunity_detectability_param)
+            # println("host!")
+            # println(shi.generalized_immunity)
+            p_detect = rand(s.rng, Float64, length(shi.active_infections))
+            # println(p_detect)
+            # println(-Int32(shi.generalized_immunity))
+            # println(P.generalized_immunity_detectability_param)
+            # println(-Int32(shi.generalized_immunity) * P.generalized_immunity_detectability_param)
+            # println(float(-Int32(shi.generalized_immunity) * P.generalized_immunity_detectability_param))
+            # println(-shi.generalized_immunity * P.generalized_immunity_detectability_param)
+            # println(exp(float(-Int32(shi.generalized_immunity) * P.generalized_immunity_detectability_param)))
+            # println(exp(-shi.generalized_immunity * P.generalized_immunity_detectability_param))
+            GI_impact_vector = p_detect .< exp(-Int32(shi.generalized_immunity) * P.generalized_immunity_detectability_param)
+            # println(GI_impact_vector)
             sampled_hosts_infected_GI_impact[shi.id] = Int.(GI_impact_vector)
+            # println(Int.(GI_impact_vector))
+            # println(any(GI_impact_vector .> 0))
             if any(GI_impact_vector .> 0)
                 push!(sampled_hosts_infected_GI, shi)
             end
@@ -418,7 +434,7 @@ function write_summary_statistics(db, t, s)
     else
         sampled_hosts_infected_GI_detected = filter(x -> rand(s.rng) < P.p_microscopy_detection, sampled_hosts_infected_GI)
     end
-    # println(length(sampled_hosts_infected_detected))
+    # println(length(sampled_hosts_infected_GI_detected))
     if length(sampled_hosts_infected_GI_detected) == 0
         return false
     end
@@ -427,8 +443,8 @@ function write_summary_statistics(db, t, s)
 
     # number of strains and genes for blood-stage infections
     sampled_infections_detected = DataFrame(host_id = Int[], infection_id = Int[], strain_id = Int[], index = Int[], gene_id = String[], group_id = Int[])
-    if P.generalized_immunity_on
-        if P.undersampling_of_var
+    if P.generalized_immunity_detectability_on !== nothing && P.generalized_immunity_detectability_on
+        if P.undersampling_of_var !== nothing && P.undersampling_of_var
             for host in sampled_hosts_infected_GI_detected
                 GI_impact_vector = sampled_hosts_infected_GI_impact[host.id]
                 for infection_index in 1:length(host.active_infections)
@@ -450,7 +466,7 @@ function write_summary_statistics(db, t, s)
             end
         end
     else 
-        if P.undersampling_of_var
+        if P.undersampling_of_var !== nothing && P.undersampling_of_var
             for host in sampled_hosts_infected_GI_detected
                 for infection in host.active_infections
                     write_infection_df_measurement_error!(sampled_infections_detected, host, infection, s)
@@ -473,7 +489,7 @@ function write_summary_statistics(db, t, s)
     nbstrain = length(unique(sampled_infections_detected[:,"strain_id"]))
     
     MOI = DataFrame(HostID = Int[], MOI = Int[], Prob = Float64[])
-    for host in sampled_hosts_infected_detected
+    for host in sampled_hosts_infected_GI_detected
         # println(host.id)
         sampled_infections_detected_host = sampled_infections_detected_groupBC[isequal.(sampled_infections_detected_groupBC.host_id, host.id),:]
         # println(unique(sampled_infections_detected_host[:,"host_id"]))
@@ -632,7 +648,7 @@ function write_host_samples(db, t, s)
         db.sampled_hosts,
         (
             t, Int64(host.id), host.t_birth, missing, # host.t_death, # Cannot know t_death
-            length(host.liver_infections), length(host.active_infections)
+            length(host.liver_infections), length(host.active_infections), Int64(host.n_cleared_infections), Int64(host.generalized_immunity)
         )
         )
 
@@ -666,7 +682,7 @@ function write_host_samples(db, t, s, hosts_GI_impact)
             db.sampled_hosts,
             (
                 t, Int64(host.id), host.t_birth, missing, # host.t_death, # Cannot know t_death
-                length(host.liver_infections), sum(host_GI_impact)
+                length(host.liver_infections), sum(host_GI_impact), Int64(host.n_cleared_infections), Int64(host.generalized_immunity)
             )
             )
 
@@ -772,7 +788,7 @@ function write_gene_strain_counts(db, t, s, hosts_GI_impact)
         host_GI_impact = hosts_GI_impact[host.id]
         for infection_index in 1:length(host.active_infections)
             if host_GI_impact[infection_index] > 0
-                count_genes_and_strains!(genesBlood, strainsBlood, host.active_infections[infection_index])
+                count_genes_and_strains!(genesBlood, strainsBlood, [host.active_infections[infection_index]])
             end
         end
     end

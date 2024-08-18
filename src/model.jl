@@ -482,6 +482,8 @@ function do_event!(t, s, stats, event, event_dist)
     elseif event == IMMUNITY_LOSS
         do_immunity_loss!(t, s, stats, event_dist)
     elseif event == GENERALIZED_IMMUNITY_LOSS
+        # println("GI immunity loss event queued!")
+        # println(t)
         do_generalized_immunity_loss!(t, s, stats, event_dist)
     end
 end
@@ -560,6 +562,7 @@ function do_biting!(t, s, stats, event_dist)
     
     # Find out the currently expressed gene, and its group id, which impacts the transmissibility of the infection.
     infs_transmissibility = []
+    gene_temp_group_ids = []
     for inf_temp in src_host.active_infections
         gene_index = inf_temp.expression_index
         # @assert 1 <= gene_index <= P.n_genes_per_strain
@@ -568,6 +571,7 @@ function do_biting!(t, s, stats, event_dist)
         gene_temp_group_id = s.association_genes_to_var_groups[gene_temp]
         inf_transmissibility = P.var_groups_functionality[gene_temp_group_id]
         push!(infs_transmissibility, inf_transmissibility)
+        push!(gene_temp_group_ids, gene_temp_group_id)
     end
     if P.generalized_immunity_on
         p_transmit_reduction_generalized_immunity = exp(-P.generalized_immunity_transmissibility_param * src_host.generalized_immunity)
@@ -575,7 +579,21 @@ function do_biting!(t, s, stats, event_dist)
         p_transmit_reduction_generalized_immunity = 1.0
     end
     transmitted_strains = src_host.active_infections[choose_transmit.<p_transmit*infs_transmissibility*p_transmit_reduction_generalized_immunity]
-    #println(stderr, "t = $(t): originalSize $(src_active_count), newSize $(length(transmitted_strains))")
+    # println("biting event!")
+    # println(choose_transmit)
+    # println("group_id")
+    # println(gene_temp_group_ids)
+    # println("transmissibility")
+    # println(infs_transmissibility)
+    # println("p_transmit")
+    # println(p_transmit)
+    # println("GI immunity")
+    # println(src_host.generalized_immunity)
+    # println("GI reduction")
+    # println(p_transmit_reduction_generalized_immunity)
+    # println("Combined")
+    # println(p_transmit*infs_transmissibility*p_transmit_reduction_generalized_immunity)
+    # println(stderr, "t = $(t): originalSize $(src_active_count), newSize $(length(transmitted_strains))")
 
     # The number of transmissions is bounded by the number of source infections
     # and the number of available slots in the destination.
@@ -1248,14 +1266,19 @@ end
 
 function do_generalized_immunity_loss!(t, s, stats, event_dist)
     host = rand(s.rng, s.hosts)
-
+    # println("before generalized_immunity_loss event")
+    # println(host.generalized_immunity)
     # If the immunity index is beyond this host's immunity count, reject this sample.
     if host.generalized_immunity > 0
         host.generalized_immunity -= 1
+        # println(host.generalized_immunity)
+        # println("after generalized_immunity_loss event")
         true
     else
         false
     end
+    # println(host.generalized_immunity)
+    # println("after generalized_immunity_loss event")
 end
 
 ### MISCELLANEOUS FUNCTIONS ###
