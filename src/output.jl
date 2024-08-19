@@ -266,7 +266,7 @@ function write_output!(db, t, s, stats)
             for host in s.hosts
                 if length(host.active_infections) > 0
                     GI_impact_vector = rand(s.rng, Float64, length(host.active_infections)) .< exp(-Int32(host.generalized_immunity) * P.generalized_immunity_detectability_param)
-                    println(exp(-Int32(host.generalized_immunity) * P.generalized_immunity_detectability_param))
+                    # println(exp(-Int32(host.generalized_immunity) * P.generalized_immunity_detectability_param))
                     hosts_GI_impact[host.id] = Int.(GI_impact_vector)
                     # println(Int.(GI_impact_vector))
                 end
