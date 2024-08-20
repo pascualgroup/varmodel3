@@ -534,7 +534,8 @@ function init_base_params()
         undersampling_of_var = false,
         measurement_error_A = nothing,
         measurement_error_BC = nothing,
-        
+
+        # parameters for generalized immunity
         generalized_immunity_on = false,
         generalized_immunity_loss_rate = 0.001,
         generalized_immunity_transmissibility_param = 0.02,
