@@ -245,7 +245,7 @@ function generate_runs(db)
             generalized_immunity_loss_rate = nothing
             generalized_immunity_transmissibility_param = nothing
             generalized_immunity_detectability_param = nothing
-            generalized_immunity_detectability_on = nothing
+            generalized_immunity_detectability_on = false
         end
 
         println("Processing c$(combo_id): No = $(No)")
