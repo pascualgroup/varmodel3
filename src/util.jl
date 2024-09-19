@@ -81,9 +81,7 @@ end
 
 
 function sample_columns_from_two_matrices_to_util2!(rng, dst, src1, src2, P, s, infection_genes_index_var_groups)
-    if !P.var_groups_fix_ratio
-        sample_columns_from_two_matrices_to_util!(rng, dst, src1, src2)
-    else
+    if P.var_groups_fix_ratio
         # extract genes of the specific group from two source strains.
         src1_genes_all_groups = []
         src2_genes_all_groups = []
@@ -123,6 +121,8 @@ function sample_columns_from_two_matrices_to_util2!(rng, dst, src1, src2, P, s, 
             sample_columns_from_two_matrices_to_util!(rng, dst_genes_group_id, src1_genes_group_id, src2_genes_group_id)
             dst[:, dst_index] = dst_genes_group_id
         end
+    else
+        sample_columns_from_two_matrices_to_util!(rng, dst, src1, src2)
     end
     nothing
 end
