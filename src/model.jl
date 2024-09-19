@@ -30,25 +30,25 @@ const (DEATH, BITING, IMMIGRATION, BACKGROUND_CLEARANCE, LIVER_PROGRESS, SWITCHI
 const USE_BITING_RATE_MULTIPLIER_BY_YEAR = P.biting_rate_multiplier_by_year !== nothing
 
 gene_pair_indices = []
-for i in 1:(P.n_genes_per_strain-1)
-    for j in (i+1):P.n_genes_per_strain
-        push!(gene_pair_indices, (i,j))
+for i in 1:(P.n_genes_per_strain - 1)
+    for j in (i + 1):P.n_genes_per_strain
+        push!(gene_pair_indices, (i, j))
     end
 end
 
 num_genes_var_groups = []
-for i in 1:length(P.var_groups_ratio)
-    num_genes_var_group = round(Int, P.var_groups_ratio[i] * P.n_genes_initial) 
+for i in 1:length(P.var_groups_ratio_regional_pool)
+    num_genes_var_group = round(Int, P.var_groups_ratio_regional_pool[i] * P.n_genes_initial) 
     push!(num_genes_var_groups, num_genes_var_group)
 end
 
 allele_ids_var_groups = []
-num_allele_ids_var_groups = round.(Int, P.var_groups_ratio * P.n_alleles_per_locus_initial)
-for i in 1:length(P.var_groups_ratio)
+num_allele_ids_var_groups = round.(Int, P.var_groups_ratio_regional_pool * P.n_alleles_per_locus_initial)
+for i in 1:length(P.var_groups_ratio_regional_pool)
     allele_ids_var_group = if i == 1
         1:num_allele_ids_var_groups[i]
     else 
-        (sum(num_allele_ids_var_groups[1:(i-1)])+1):sum(num_allele_ids_var_groups[1:i])
+        (sum(num_allele_ids_var_groups[1:(i - 1)]) + 1):sum(num_allele_ids_var_groups[1:i])
     end
     push!(allele_ids_var_groups, allele_ids_var_group)
 end
@@ -58,7 +58,7 @@ for i in 1:length(P.var_groups_ratio)
     infection_genes_index_var_group = if i == 1
         1:round(Int, P.var_groups_ratio[i] * P.n_genes_per_strain)
     else
-        (sum(round.(Int, P.var_groups_ratio[1:(i-1)] * P.n_genes_per_strain)) + 1):sum(round.(Int, P.var_groups_ratio[1:i] * P.n_genes_per_strain))
+        (sum(round.(Int, P.var_groups_ratio[1:(i - 1)] * P.n_genes_per_strain)) + 1):sum(round.(Int, P.var_groups_ratio[1:i] * P.n_genes_per_strain))
     end
     push!(infection_genes_index_var_groups, infection_genes_index_var_group)
 end
@@ -251,7 +251,7 @@ function initialize_state(rng)
     # are unique randomly generated genes. Initialize gene-to-group-id map as an empty dictionary.
     gene_pool_set = Set()
     association_genes_to_var_groups_init = Dict{Gene, GeneGroupId}()
-    for group_id in 1:length(P.var_groups_ratio) # Create genes for each group
+    for group_id in 1:length(P.var_groups_ratio_regional_pool) # Create genes for each group
         num_genes_var_group = num_genes_var_groups[group_id] 
         if num_genes_var_group > 0
             counter = sum(num_genes_var_groups[1:group_id])
