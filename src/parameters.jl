@@ -342,6 +342,7 @@ keyword constructor for the class.
     """
     var_groups_functionality::Union{Vector{Float32}, Nothing} = nothing
     var_groups_ratio::Union{Vector{Float32}, Nothing} = nothing
+    var_groups_ratio_regional_pool::Union{Vector{Float32}, Nothing} = nothing
     var_groups_fix_ratio::Union{Bool, Nothing} = nothing
     var_groups_do_not_share_alleles::Union{Bool, Nothing} = nothing
     var_groups_high_functionality_express_earlier::Union{Bool, Nothing} = nothing
@@ -562,6 +563,8 @@ function validate(p::Params)
     @assert all(p.var_groups_functionality .>= 0) && all(p.var_groups_functionality .<= 1)
     @assert p.var_groups_ratio !== nothing
     @assert all(p.var_groups_ratio .>= 0) && all(p.var_groups_ratio .<= 1)
+    @assert p.var_groups_ratio_regional_pool !== nothing
+    @assert all(p.var_groups_ratio_regional_pool .>= 0) && all(p.var_groups_ratio_regional_pool .<= 1)
     @assert p.var_groups_fix_ratio !== nothing
     @assert p.var_groups_do_not_share_alleles !== nothing
     @assert p.var_groups_high_functionality_express_earlier !== nothing
