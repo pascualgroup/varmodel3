@@ -448,6 +448,7 @@ function write_infection_df!(df, host, infection, s)
     for i in 1:size(infection.genes)[2]
         push!(unique_genes, infection.genes[:,i])
     end
+    unique_genes = collect(unique_genes)
     for i in 1:length(unique_genes)
         gene_id = Gene(unique_genes[i])
         # @assert haskey(s.association_genes_to_var_groups, gene_id)
