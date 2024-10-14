@@ -342,8 +342,8 @@ keyword constructor for the class.
     """
     var_groups_functionality::Union{Vector{Float32}, Nothing} = nothing
     var_groups_ratio::Union{Vector{Float32}, Nothing} = nothing
-    var_groups_ratio_regional_pool::Union{Vector{Float32}, Nothing} = nothing
     var_groups_fix_ratio::Union{Bool, Nothing} = nothing
+    var_groups_ratio_regional_pool::Union{Vector{Float32}, Nothing} = nothing
     var_groups_do_not_share_alleles::Union{Bool, Nothing} = nothing
     var_groups_high_functionality_express_earlier::Union{Bool, Nothing} = nothing
     gene_group_id_association_recomputation_period::Union{Int, Nothing} = nothing
