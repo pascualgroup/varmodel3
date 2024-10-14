@@ -198,7 +198,6 @@ function initialize_database()
             meanPTS REAL,
             meanPTSGroupA REAL,
             meanPTSGroupBC REAL,
-            numStrains INTEGER,
             numGenes INTEGER,
             numGenesGroupA INTEGER,
             numGenesGroupBC INTEGER
@@ -215,7 +214,7 @@ function initialize_database()
         make_insert_statement(db, "sampled_durations", 6),
         make_insert_statement(db, "sampled_infection_genes", 2 + 1 + P.n_loci),
         make_insert_statement(db, "sampled_immunity", 5),
-        make_insert_statement(db, "summary_statistics", 10)
+        make_insert_statement(db, "summary_statistics", 9)
     )
 end
 
@@ -488,7 +487,6 @@ function write_summary_statistics(db, t, s)
     nbgene = length(unique(sampled_infections_detected[:,"gene_id"]))
     nbgeneA = length(unique(sampled_infections_detected_groupA[:,"gene_id"]))
     nbgeneBC = length(unique(sampled_infections_detected_groupBC[:,"gene_id"]))
-    nbstrain = length(unique(sampled_infections_detected[:,"strain_id"]))
     
     MOI = DataFrame(HostID = Int[], MOI = Int[], Prob = Float64[])
     for host in sampled_hosts_infected_GI_detected
@@ -523,7 +521,6 @@ function write_summary_statistics(db, t, s)
         meanPTS,
         meanPTSGroupA,
         meanPTSGroupBC,
-        nbstrain,
         nbgene,
         nbgeneA,
         nbgeneBC
