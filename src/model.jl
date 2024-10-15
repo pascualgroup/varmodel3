@@ -44,11 +44,11 @@ end
 
 allele_ids_var_groups = []
 num_allele_ids_var_groups = round.(Int, P.var_groups_ratio_regional_pool * P.n_alleles_per_locus_initial)
-while num_allele_ids_var_groups[1]^2 < num_genes_var_groups[1]
+while num_allele_ids_var_groups[1]^2 <= num_genes_var_groups[1]
     num_allele_ids_var_groups[1] = num_allele_ids_var_groups[1] + 5
     num_allele_ids_var_groups[2] = num_allele_ids_var_groups[2] - 5
 end
-@assert all(num_allele_ids_var_groups.^2 > num_genes_var_groups)
+@assert all(num_allele_ids_var_groups.^2 .> num_genes_var_groups)
 for i in 1:length(P.var_groups_ratio_regional_pool)
     allele_ids_var_group = if i == 1
         1:num_allele_ids_var_groups[i]
