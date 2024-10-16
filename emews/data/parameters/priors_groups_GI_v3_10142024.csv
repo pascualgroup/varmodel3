@@ -1,5 +1,5 @@
 "parameter_name","dist_base_name","density_fn","min","max","a","b","mean","sd"
-"biting_rate","unif",NA,7.5e-06,8e-05,NA,NA,NA,NA
+"biting_rate","unif",NA,7.5e-06,1e-04,NA,NA,NA,NA
 "immigration_rate_fraction","unif",NA,3e-04,0.04,NA,NA,NA,NA
 "immunity_loss_rate","unif",NA,2e-04,0.003,NA,NA,NA,NA
 "n_genes_initial","unif",NA,5000,42000,NA,NA,NA,NA
