@@ -2,7 +2,7 @@
 "biting_rate","unif",NA,7.5e-06,1e-04,NA,NA,NA,NA
 "immigration_rate_fraction","unif",NA,3e-04,0.04,NA,NA,NA,NA
 "immunity_loss_rate","unif",NA,2e-04,0.003,NA,NA,NA,NA
-"n_genes_initial","unif",NA,5000,46000,NA,NA,NA,NA
+"n_genes_initial","unif",NA,5000,48000,NA,NA,NA,NA
 "switching_rate_A","unif",NA,0.1,0.375,NA,NA,NA,NA
 "switching_rate_BC","unif",NA,0.1,0.375,NA,NA,NA,NA
 "ectopic_recombination_rate_A","unif",NA,2e-05,5e-04,NA,NA,NA,NA
