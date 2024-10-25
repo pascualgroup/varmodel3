@@ -321,7 +321,7 @@ end
 Verify that various pieces of state are consistent with each other.
 """
 function verify(t, s::State)
-    println("verify($(t), s)")
+    println(stderr, "verify($(t), s)")
 
     # Verify that gene pool consists of all unique genes
     gene_pool_set = Set()
