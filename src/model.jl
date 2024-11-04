@@ -284,7 +284,7 @@ function initialize_state(rng)
         end
     end
 
-    gene_pool = zeros(AlleleId, P.n_loci, P.n_genes_initial)
+    gene_pool = zeros(AlleleId, P.n_loci, length(gene_pool_set))
     for (i, gene) in enumerate(gene_pool_set)
         gene_pool[:,i] = gene
     end
