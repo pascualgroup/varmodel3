@@ -44,7 +44,7 @@ end
 
 num_genes_var_groups = []
 for i in 1:length(P.var_groups_ratio_regional_pool)
-    num_genes_var_group = round(Int, P.var_groups_ratio_regional_pool[i] * P.n_genes_initial) 
+    num_genes_var_group = round(Int, ceil(P.var_groups_ratio_regional_pool[i] * P.n_genes_initial)) 
     push!(num_genes_var_groups, num_genes_var_group)
 end
 
