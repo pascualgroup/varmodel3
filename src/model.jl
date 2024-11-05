@@ -38,7 +38,7 @@ end
 
 num_genes_var_groups = []
 for i in 1:length(P.var_groups_ratio_regional_pool)
-    num_genes_var_group = round(Int, P.var_groups_ratio_regional_pool[i] * P.n_genes_initial) 
+    num_genes_var_group = round(Int, ceil(P.var_groups_ratio_regional_pool[i] * P.n_genes_initial)) 
     push!(num_genes_var_groups, num_genes_var_group)
 end
 
@@ -278,7 +278,7 @@ function initialize_state(rng)
         end
     end
 
-    gene_pool = zeros(AlleleId, P.n_loci, P.n_genes_initial)
+    gene_pool = zeros(AlleleId, P.n_loci, length(gene_pool_set))
     for (i, gene) in enumerate(gene_pool_set)
         gene_pool[:,i] = gene
     end
