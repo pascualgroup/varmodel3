@@ -101,10 +101,12 @@ function main()
                                             t_host_sampling_start_year INTEGER, n_genes_initial INTEGER,
                                             n_genes_per_strain INTEGER, n_alleles_per_locus_initial INTEGER,
                                             var_groups_do_not_share_alleles INTEGER, var_groups_ratio_A REAL, var_groups_ratio_BC REAL,
+                                            var_groups_ratio_regional_pool_A REAL, var_groups_ratio_regional_pool_BC REAL,
                                             var_groups_fix_ratio INTEGER, var_groups_functionality_A REAL, var_groups_functionality_BC REAL,
                                             ectopic_recombination_rate_A REAL, ectopic_recombination_rate_BC REAL, ectopic_recombination_generates_new_alleles INTEGER,
                                             p_ectopic_recombination_generates_new_allele REAL, var_groups_high_functionality_express_earlier INTGER,
-                                            biting_rate_mean REAL, immigration_rate_fraction REAL, switching_rate_A REAL, switching_rate_BC REAL)") 
+                                            biting_rate_mean REAL, immigration_rate_fraction REAL, switching_rate_A REAL, switching_rate_BC REAL,
+                                            smc_on INTEGER, smc_age INTEGER)") 
     execute(db, "CREATE TABLE runs (run_id INTEGER, combo_id INTEGER, replicate INTEGER, rng_seed INTEGER, run_dir TEXT, params TEXT)")
     execute(db, "CREATE TABLE jobs (job_id INTEGER, job_dir TEXT)")
     execute(db, "CREATE TABLE job_runs (job_id INTEGER, run_id INTEGER)")
@@ -149,6 +151,9 @@ function generate_runs(db)
         var_groups_ratio_A = paramstxt[row, "var_groups_ratio_A"] 
         var_groups_ratio_BC = paramstxt[row, "var_groups_ratio_BC"] 
         var_groups_ratio = [var_groups_ratio_A, var_groups_ratio_BC]
+        var_groups_ratio_regional_pool_A = paramstxt[row, "var_groups_ratio_regional_pool_A"]
+        var_groups_ratio_regional_pool_BC = paramstxt[row, "var_groups_ratio_regional_pool_BC"]
+        var_groups_ratio_regional_pool = [var_groups_ratio_regional_pool_A, var_groups_ratio_regional_pool_BC]
         var_groups_fix_ratio = paramstxt[row, "var_groups_fix_ratio"]=="True"
         var_groups_functionality_A = paramstxt[row, "var_groups_functionality_A"]
         var_groups_functionality_BC = paramstxt[row, "var_groups_functionality_BC"]
@@ -247,9 +252,18 @@ function generate_runs(db)
             generalized_immunity_detectability_param = nothing
             generalized_immunity_detectability_on = false
         end
+        smc_on = paramstxt[row, "smc_on"]
+        if smc_on
+            smc_age = paramstxt[row, "smc_age"]
+        else
+            smc_age = nothing
+        end
 
         println("Processing c$(combo_id): No = $(No)")
-        execute(db, "INSERT INTO param_combos VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", (combo_id, No, daily_biting_rate_multiplier_file, irs_start_year, irs_duration, biting_rate_factor, t_end_years, t_host_sampling_start_year, n_genes_initial, n_genes_per_strain, n_alleles_per_locus_initial, var_groups_do_not_share_alleles, var_groups_ratio_A, var_groups_ratio_BC, var_groups_fix_ratio, var_groups_functionality_A, var_groups_functionality_BC, ectopic_recombination_rate_A, ectopic_recombination_rate_BC, ectopic_recombination_generates_new_alleles, p_ectopic_recombination_generates_new_allele, var_groups_high_functionality_express_earlier, biting_rate_mean, immigration_rate_fraction, switching_rate_A, switching_rate_BC))
+        execute(db, "INSERT INTO param_combos VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", (combo_id, No, daily_biting_rate_multiplier_file, irs_start_year, irs_duration, biting_rate_factor, t_end_years, t_host_sampling_start_year, n_genes_initial, n_genes_per_strain, n_alleles_per_locus_initial, var_groups_do_not_share_alleles,
+        var_groups_ratio_A, var_groups_ratio_BC, var_groups_ratio_regional_pool_A, var_groups_ratio_regional_pool_BC, var_groups_fix_ratio, var_groups_functionality_A,
+        var_groups_functionality_BC, ectopic_recombination_rate_A, ectopic_recombination_rate_BC, ectopic_recombination_generates_new_alleles, p_ectopic_recombination_generates_new_allele,
+        var_groups_high_functionality_express_earlier, biting_rate_mean, immigration_rate_fraction, switching_rate_A, switching_rate_BC, smc_on, smc_age))
 
         for replicate in 1:N_REPLICATES
             output_db_filename = "sim_" * string(No) * "_r" * string(replicate) * "_sd.sqlite" 
@@ -274,6 +288,7 @@ function generate_runs(db)
 
                 var_groups_do_not_share_alleles = var_groups_do_not_share_alleles,
                 var_groups_ratio = var_groups_ratio,
+                var_groups_ratio_regional_pool = var_groups_ratio_regional_pool,
                 var_groups_fix_ratio = var_groups_fix_ratio,
                 var_groups_functionality = var_groups_functionality,
                 ectopic_recombination_rate = ectopic_recombination_rate,
@@ -310,7 +325,9 @@ function generate_runs(db)
                 generalized_immunity_loss_rate = generalized_immunity_loss_rate,
                 generalized_immunity_transmissibility_param = generalized_immunity_transmissibility_param,
                 generalized_immunity_detectability_param = generalized_immunity_detectability_param,
-                generalized_immunity_detectability_on = generalized_immunity_detectability_on
+                generalized_immunity_detectability_on = generalized_immunity_detectability_on,
+                smc_on = smc_on,
+                smc_age = smc_age
             ))
 
             run_dir = joinpath("runs", "c$(combo_id)", "r$(replicate)")
@@ -518,6 +535,7 @@ function init_base_params()
         # parameters for var groups implementation
         var_groups_functionality = [1.0,1.0],
         var_groups_ratio = [1.0,0.0],
+        var_groups_ratio_regional_pool = [0.2,0.8],
         var_groups_fix_ratio = false,
         var_groups_do_not_share_alleles = false,
         var_groups_high_functionality_express_earlier = false,
@@ -541,6 +559,10 @@ function init_base_params()
         generalized_immunity_transmissibility_param = 0.02,
         generalized_immunity_detectability_param = 0.02,
         generalized_immunity_detectability_on = false,
+
+        # parameters for SMC
+        smc_on = false,
+        smc_age = 15
     ))
 end
 

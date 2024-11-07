@@ -402,6 +402,13 @@ keyword constructor for the class.
     generalized_immunity_transmissibility_param::Union{Float64, Nothing} = nothing
     generalized_immunity_detectability_param::Union{Float64, Nothing} = nothing
     generalized_immunity_detectability_on::Union{Bool, Nothing} = nothing
+
+
+    """
+        below are the additional parameters for the (extended) SMC intervention
+    """
+    smc_on::Union{Bool, Nothing} = nothing
+    smc_age::Union{Int, Nothing} = nothing
 end
 
 """
@@ -610,5 +617,10 @@ function validate(p::Params)
         @assert p.generalized_immunity_detectability_param !== nothing
         @assert p.generalized_immunity_detectability_param >= 0.0
         @assert p.generalized_immunity_detectability_on !== nothing
+    end
+
+    if !isnothing(p.smc_on) && p.smc_on
+        @assert p.smc_age !== nothing
+        @assert p.smc_age >= 0
     end
 end

@@ -44,7 +44,7 @@ end
 
 num_genes_var_groups = []
 for i in 1:length(P.var_groups_ratio_regional_pool)
-    num_genes_var_group = round(Int, ceil(P.var_groups_ratio_regional_pool[i] * P.n_genes_initial)) 
+    num_genes_var_group = round(Int, P.var_groups_ratio_regional_pool[i] * P.n_genes_initial) 
     push!(num_genes_var_groups, num_genes_var_group)
 end
 
@@ -284,7 +284,7 @@ function initialize_state(rng)
         end
     end
 
-    gene_pool = zeros(AlleleId, P.n_loci, length(gene_pool_set))
+    gene_pool = zeros(AlleleId, P.n_loci, P.n_genes_initial)
     for (i, gene) in enumerate(gene_pool_set)
         gene_pool[:,i] = gene
     end
@@ -535,6 +535,13 @@ function do_biting!(t, s, stats, event_dist)
     src_host = rand(s.rng, s.hosts)
     dst_host = rand(s.rng, s.hosts)
 
+    # If source or destination host age is in SMC range (during high transmission season and while IRS is active), they cannot give or get infections
+    if P.smc_on && (t % P.t_year >= P.host_sampling_period[1] && t % P.t_year <= P.host_sampling_period[2]) && (t >= P.t_year * P.irs_start_year && t <= P.t_year * (P.irs_start_year + P.irs_duration))
+        if (t - src_host.t_birth) / P.t_year <= P.smc_age || (t - dst_host.t_birth) / P.t_year <= P.smc_age
+            return false
+        end
+    end
+
     # The source host must be infected in order to transmit.
     src_active_count = length(src_host.active_infections)
     if src_active_count == 0
@@ -703,6 +710,13 @@ function do_immigration!(t, s, stats, event_dist)
 
     # Sample a random host and advance it (rebirth or infection activation).
     host = rand(s.rng, s.hosts)
+
+    # SMC: If host age is in SMC range (during high transmission season), they cannot give or get infections
+    if P.smc_on && (t % P.t_year >= P.host_sampling_period[1] && t % P.t_year <= P.host_sampling_period[2]) && (t >= P.t_year * P.irs_start_year && t <= P.t_year * (P.irs_start_year + P.irs_duration)) 
+        if (t - host.t_birth) / P.t_year <= P.smc_age || (t - host.t_birth) / P.t_year <= P.smc_age
+            return false
+        end
+    end
 
     # If host doesn't have an available infection slot, reject this sample.
     if !isnothing(P.n_infections_liver_max)

@@ -1,9 +1,11 @@
 # varmodel3
 
-Qi Zhan
+Qi Zhan and Aelita Klausmeier
 
 *Var* gene evolution model(s), implemented in Julia.
 Based on previous C++ implementations ([varmodel](https://github.com/pascualgroup/varmodel) and [varmodel2](https://github.com/pascualgroup/varmodel2) by [Ed Baskerville](https://cobeylab.uchicago.edu/people/ed-baskerville/) and [Qixin He](https://www.qixinhe.net/?_ga=2.130167695.167565966.1656355847-504625709.1649177406). This code implements a model of malaria *var* gene evolution within an individual-based disease transmission model. Malaria strains are represented as unordered sets of *var* genes, which are in turn composed of abstract loci. A number of alleles can appear at each locus, and the allelic composition of a gene across loci governs immune dynamics in the host. Individual hosts are infected by strains, and infections can be transmitted between hosts. Each infection expresses a single *var* gene at a time, and the sequence of expressions is explicitly represented in the simulation. The simulation also includes immigration of new strains into the population, recombination during transmission and during an infection, and mutation. The simulation is modeled as a sequence of discrete events (state changes) that happen in continuous time. Model details are described inline in comments in the code; see *Code Organization* below to get oriented.
+
+This branch also includes an implementation for extended seasonal malaria chemoprevention (SMC). In particular, when the parameter for SMC is turned on and an upper age limit is provided, hosts under the age limit cannot give or receive infections during high transmission season and while the indoor residual spraying (IRS) intervention is also active.
 
 ## Contents
 
@@ -93,6 +95,8 @@ The parameter names should match the variables defined in `src/parameters.jl`, a
 | `rho_recombination_tolerance` | `Float64` | Recombination tolerance, rho, Drummond et al |
 | `rng_seed` | `Int` | Seed for random number generator |
 | `sample_infection_duration_every` | `Int` | Sample an infection duration every `sample_infection_duration_every` clearances |
+| `smc_age` | `Int` | Upper age limit for hosts receiving SMC intervention |
+| `smc_on` | `Bool` | Whether extended SMC intervention is active during high-transmission season and IRS |
 | `snp_linkage_disequilibrium` | `Bool` | Whether the SNPs (or some SNPs) are in linkage disequilibrium (LD) |
 | `snp_pairwise_ld` | `Array{Float32, 2}` | Pairwise linkage disequilibrium (LD) matrix |
 | `summary_period` | `Int` | How often to write summary output |
