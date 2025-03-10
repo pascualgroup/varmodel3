@@ -179,6 +179,11 @@ keyword constructor for the class.
     coinfection_reduces_transmission::Union{Bool, Nothing} = nothing
 
     """
+    Use exponential decay to model the impact of coinfection on transmissibility.
+    """
+    coinfection_reduces_transmission_exponential_decay_param::Union{Float64, Nothing} = nothing
+    
+    """
     Ectopic recombination rate parameter.
 
     The number of recombinations, per active infection, per unit time
@@ -493,6 +498,7 @@ function validate(p::Params)
     @assert 0.0 <= p.transmissibility <= 1.0
 
     @assert p.coinfection_reduces_transmission !== nothing
+    @assert p.coinfection_reduces_transmission_exponential_decay_param !== nothing
 
     @assert p.ectopic_recombination_rate !== nothing
     # @assert p.ectopic_recombination_rate >= 0.0

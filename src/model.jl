@@ -76,6 +76,8 @@ end
 
 func_rank = ordinalrank(P.var_groups_functionality, rev = true)
 
+T0 = exp(P.coinfection_reduces_transmission_exponential_decay_param)
+
 function run()
     if P.profile_on
         profile()
@@ -555,12 +557,20 @@ function do_biting!(t, s, stats, event_dist)
     stats.n_infected_bites_with_space += 1
 
     # Compute probability of each transmission.
+    # p_transmit = if P.coinfection_reduces_transmission
+    #     P.transmissibility / src_active_count
+    # else
+    #     P.transmissibility
+    # end
     p_transmit = if P.coinfection_reduces_transmission
-        P.transmissibility / src_active_count
+        P.transmissibility * T0*exp(-P.coinfection_reduces_transmission_exponential_decay_param * src_active_count)
+        # P.transmissibility / ceil(Int, src_active_count/2)
     else
         P.transmissibility
     end
-
+    println(src_active_count)
+    println(p_transmit)
+    
     # First choose the active strains from the host that will be transmitted to mosquito.
     # This is determined by the transmissibility.
     choose_transmit = rand(s.rng, Float64, src_active_count)
