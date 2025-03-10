@@ -568,8 +568,8 @@ function do_biting!(t, s, stats, event_dist)
     else
         P.transmissibility
     end
-    println(src_active_count)
-    println(p_transmit)
+    # println(src_active_count)
+    # println(p_transmit)
     
     # First choose the active strains from the host that will be transmitted to mosquito.
     # This is determined by the transmissibility.
