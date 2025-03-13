@@ -51,7 +51,7 @@ keyword constructor for the class.
 
     To turn off host sampling, set this to `nothing` (`null` in JSON).
     """
-    host_sampling_period::Union{Vector{Int}, Nothing} = nothing
+    host_sampling_times::Union{Vector{Int}, Nothing} = nothing
     
     """
     Number of hosts to sample at each sampling period.
@@ -179,7 +179,7 @@ keyword constructor for the class.
     coinfection_reduces_transmission::Union{Bool, Nothing} = nothing
 
     """
-    Use exponential decay to model the impact of coinfection on transmissibility.
+    Use exponential decay to model the impact of coinfection on the transmissibility of individual co-infecting strains.
     """
     coinfection_reduces_transmission_exponential_decay_param::Union{Float64, Nothing} = nothing
     
@@ -340,10 +340,10 @@ keyword constructor for the class.
     migration_rate_update_period::Union{Int, Nothing} = nothing
 
     """
-        below is the parameters added for implementing different var groups 
-        in this Julia code; also modified switching_rate paremeter above from 
-        a single value to a vector with elements corresponding to different
-        groups.
+        below is the parameters added for implementing different var groups; 
+        also modified the switching_rate and the ectopic_recombination_rate 
+        paremeters above from a single value to a vector with elements 
+        corresponding to different groups.
     """
     var_groups_functionality::Union{Vector{Float32}, Nothing} = nothing
     var_groups_ratio::Union{Vector{Float32}, Nothing} = nothing
@@ -352,14 +352,6 @@ keyword constructor for the class.
     var_groups_do_not_share_alleles::Union{Bool, Nothing} = nothing
     var_groups_high_functionality_express_earlier::Union{Bool, Nothing} = nothing
     gene_group_id_association_recomputation_period::Union{Int, Nothing} = nothing
-    
-    """
-        below is the additional parameters. 
-    """
-    irs_start_year::Union{Int, Nothing} = nothing
-    irs_duration::Union{Int, Nothing} = nothing
-    t_host_sampling_start::Union{Int, Nothing} = nothing 
-    # t_decimal_advance::Union{Float64, Nothing} = nothing
 
     """
         Whether to gather a sampling performance profile from this run.
@@ -386,27 +378,39 @@ keyword constructor for the class.
     
     
     """
-        below is the additional parameters tailored for the fitting project. 
+        below are the additional parameters specifying whether to calculate summary statistics 
+        or write host samples or both, tailed for the fitting project. 
     """
-    calc_summary_statistics_instead_sqlite::Union{Bool, Nothing} = nothing
-    calc_summary_statistics_times::Union{Vector{Int}, Nothing} = nothing
+    calc_targets::Union{Bool, Nothing} = nothing
+    calc_targets_times::Union{Vector{Int}, Nothing} = nothing
+    output_host_samples::Union{Bool, Nothing} = nothing
     p_microscopy_detection::Union{Float64, Nothing} = nothing
     undersampling_of_var::Union{Bool, Nothing} = nothing 
-    measurement_error_A::Union{Vector{Int}, Nothing} = nothing
-    measurement_error_BC::Union{Vector{Int}, Nothing} = nothing
     MOI_aggregate_approach::Union{String, Nothing} = nothing
     maxMOI::Union{Int, Nothing} = nothing
     MOI_prior::Union{Vector{Float32}, Nothing} = nothing 
-    p_isolateSize_given_MOI::Union{Vector{Dict{String, Float64}}, Nothing} = nothing 
 
     """
-        below is the additional parameters for the simple version of generalized immunity without parasitemia. 
+        below are the additional parameters for the simple version of generalized immunity without parasitemia. 
     """
     generalized_immunity_on::Union{Bool, Nothing} = nothing
     generalized_immunity_loss_rate::Union{Float64, Nothing} = nothing
     generalized_immunity_transmissibility_param::Union{Float64, Nothing} = nothing
     generalized_immunity_detectability_param::Union{Float64, Nothing} = nothing
     generalized_immunity_detectability_on::Union{Bool, Nothing} = nothing
+
+    """
+        below are parameters for different measurement errors and related information 
+        for MOI estimation at various thresholds.
+    """
+    thresholds::Union{Vector{Int}, Nothing} = nothing
+    measurement_error_file_loc::Union{String, Nothing} = nothing
+    MOI_estimation_info_file_loc::Union{String, Nothing} = nothing
+
+    """
+        Parameter for different sensitivity levels of PCR detection
+    """
+    PCR_sensitivity_levels::Union{Vector{Float64}, Nothing} = nothing
 end
 
 """
@@ -443,8 +447,8 @@ function validate(p::Params)
     output_dir = dirname(p.output_db_filename)
     @assert output_dir == "" || isdir(output_dir)
 
-    @assert all(p.host_sampling_period.!==nothing)
-    @assert all(p.host_sampling_period.>=0)
+    @assert all(p.host_sampling_times.!==nothing)
+    @assert all(p.host_sampling_times.>=0)
 
     @assert p.host_sample_size !== nothing
     @assert p.host_sample_size >= 0
@@ -562,34 +566,21 @@ function validate(p::Params)
         @assert p.migration_rate_update_period !== nothing
     end
 
-    """
-    check the parameters for different var groups implementation.
-    """
     @assert p.var_groups_functionality !== nothing
-    @assert all(p.var_groups_functionality .>= 0) && all(p.var_groups_functionality .<= 1)
+    @assert all(p.var_groups_functionality .>= 0.0) && all(p.var_groups_functionality .<= 1.0)
     @assert p.var_groups_ratio !== nothing
-    @assert all(p.var_groups_ratio .>= 0) && all(p.var_groups_ratio .<= 1)
+    @assert all(p.var_groups_ratio .>= 0.0) && all(p.var_groups_ratio .<= 1.0)
     @assert p.var_groups_ratio_regional_pool !== nothing
-    @assert all(p.var_groups_ratio_regional_pool .>= 0) && all(p.var_groups_ratio_regional_pool .<= 1)
+    @assert all(p.var_groups_ratio_regional_pool .>= 0.0) && all(p.var_groups_ratio_regional_pool .<= 1.0)
     @assert p.var_groups_fix_ratio !== nothing
     @assert p.var_groups_do_not_share_alleles !== nothing
     @assert p.var_groups_high_functionality_express_earlier !== nothing
-    # @assert all(round.(p.var_groups_ratio * p.n_genes_initial) .== p.var_groups_ratio * p.n_genes_initial) # check the number of genes in each group is an integer number
-    # @assert all(round.(p.var_groups_ratio * p.n_alleles_per_locus_initial) .== p.var_groups_ratio * p.n_alleles_per_locus_initial)
     @assert p.gene_group_id_association_recomputation_period !== nothing
     @assert p.gene_group_id_association_recomputation_period > 0
     
-    """
-    check additional params
-    """
-    @assert p.irs_start_year === nothing || p.irs_start_year >= 0 
-    @assert p.irs_duration === nothing || p.irs_duration >= 0 
-    @assert p.t_host_sampling_start === nothing || p.t_host_sampling_start >= 0
-    # @assert p.t_decimal_advance !== nothing && p.t_decimal_advance > 0.0
-    
-    if !isnothing(p.calc_summary_statistics_instead_sqlite) && p.calc_summary_statistics_instead_sqlite
-        @assert all(p.calc_summary_statistics_times.!==nothing)
-        @assert all(p.calc_summary_statistics_times.>=0)
+    if !isnothing(p.calc_targets) && p.calc_targets
+        @assert all(p.calc_targets_times.!==nothing)
+        @assert all(p.calc_targets_times.>=0)
         @assert p.MOI_aggregate_approach !== nothing
         @assert p.MOI_aggregate_approach == "pool" || p.MOI_aggregate_approach == "mixtureDist"
         @assert p.maxMOI !== nothing
@@ -597,15 +588,18 @@ function validate(p::Params)
         @assert p.MOI_prior !== nothing
         @assert all(p.MOI_prior.>=0.0)
         @assert length(p.MOI_prior) == p.maxMOI
-        @assert p.p_isolateSize_given_MOI !== nothing
-        @assert length(p.p_isolateSize_given_MOI) == p.maxMOI
+        @assert p.MOI_estimation_info_file_loc !== nothing
     end
+
+    @assert p.output_host_samples !== nothing
+
     if p.p_microscopy_detection !== nothing
-        @assert p.p_microscopy_detection > 0.0
+        @assert 0.0 <= p.p_microscopy_detection <= 1.0
     end
+
     if !isnothing(p.undersampling_of_var) && p.undersampling_of_var
-        @assert all(p.measurement_error_A.!==nothing)
-        @assert all(p.measurement_error_BC.!==nothing)
+        @assert all(p.thresholds.!==nothing) 
+        @assert p.measurement_error_file_loc !== nothing
     end
     
     if !isnothing(p.generalized_immunity_on) && p.generalized_immunity_on
@@ -616,5 +610,9 @@ function validate(p::Params)
         @assert p.generalized_immunity_detectability_param !== nothing
         @assert p.generalized_immunity_detectability_param >= 0.0
         @assert p.generalized_immunity_detectability_on !== nothing
+    end  
+
+    if p.PCR_sensitivity_levels !== nothing
+        @assert all(x -> 0.0 <= x <= 1.0, p.PCR_sensitivity_levels)
     end
 end
