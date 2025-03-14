@@ -208,7 +208,8 @@ function initialize_database()
             inverseSimpsonIndex REAL,
             inverseSimpsonIndexGroupA REAL,
             inverseSimpsonIndexGroupBC REAL,
-            threshold INTEGER
+            threshold INTEGER,
+            PCR_sensitivity_level REAL
         );
     """)
 
@@ -222,7 +223,7 @@ function initialize_database()
         make_insert_statement(db, "sampled_durations", 6),
         make_insert_statement(db, "sampled_infection_genes", 2 + 1 + P.n_loci),
         make_insert_statement(db, "sampled_immunity", 5),
-        make_insert_statement(db, "targets", 16)
+        make_insert_statement(db, "targets", 17)
     )
 end
 
@@ -338,8 +339,11 @@ end
 Write output to `targets` table
 """
 function write_targets(db, t, s, threshold, hosts_GI_impact, PCR_sensitivity_level, sampled_hosts)
-    sampled_hosts_infected, sampled_hosts_infected_GI, sampled_hosts_infected_GI_PCR_detected, sampled_hosts_infected_GI_microscopy_detected = sampleHosts(s, sampled_hosts)
-
+    sampled_hosts_infected, sampled_hosts_infected_GI, sampled_hosts_infected_GI_PCR_detected, sampled_hosts_infected_GI_microscopy_detected = sampleHosts(s, sampled_hosts, hosts_GI_impact, PCR_sensitivity_level)
+    # println("sampled_hosts_infected = $(sampled_hosts_infected)")
+    # println("sampled_hosts_infected_GI = $(sampled_hosts_infected_GI)")
+    # println("sampled_hosts_infected_GI_PCR_detected = $(sampled_hosts_infected_GI_PCR_detected)")
+    # println("sampled_hosts_infected_GI_microscopy_detected = $(sampled_hosts_infected_GI_microscopy_detected)")
     if length(sampled_hosts_infected) == 0
         return false
     end
@@ -461,7 +465,8 @@ function write_targets(db, t, s, threshold, hosts_GI_impact, PCR_sensitivity_lev
         ISIgene,
         ISIgeneA,
         ISIgeneBC,
-        threshold
+        threshold,
+        PCR_sensitivity_level
     ))
 end
 
@@ -687,7 +692,7 @@ end
 
 """
 """
-function sampleHosts(s, sampled_hosts)
+function sampleHosts(s, sampled_hosts, hosts_GI_impact, PCR_sensitivity_level)
     sampled_hosts_infected = filter(x -> length(x.active_infections) > 0, sampled_hosts)
 
     if P.generalized_immunity_detectability_on !== nothing && P.generalized_immunity_detectability_on
