@@ -564,6 +564,7 @@ function do_biting!(t, s, stats, event_dist)
     # end
     p_transmit = if P.coinfection_reduces_transmission
         P.transmissibility * T0*exp(-P.coinfection_reduces_transmission_exponential_decay_param * src_active_count)
+        # P.transmissibility / src_active_count
         # P.transmissibility / ceil(Int, src_active_count/2)
     else
         P.transmissibility

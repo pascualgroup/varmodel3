@@ -267,6 +267,8 @@ function write_output!(db, t, s, stats)
 
         if P.generalized_immunity_detectability_on !== nothing && P.generalized_immunity_detectability_on && ((P.calc_targets !== nothing && P.calc_targets && t in P.calc_targets_times) || P.output_host_samples !== nothing && P.output_host_samples && t in P.host_sampling_times) 
             hosts_GI_impact = hostsGIImpactCalc(s)
+        else 
+            hosts_GI_impact = nothing
         end
         
         if (P.calc_targets !== nothing && P.calc_targets && t in P.calc_targets_times) || (P.output_host_samples !== nothing && P.output_host_samples && t in P.host_sampling_times)
@@ -619,35 +621,6 @@ function write_gene_strain_counts(db, t, s)
 
     execute(db.gene_strain_counts, (t, length(genesLiver), length(strainsLiver), length(genesBlood), length(strainsBlood)))
 end
-
-"""
-Write gene and strain counts to the `gene_strain_counts` table.
-
-Counts are not maintained dynamically during the simulation; this function
-simply scans all host infections and assembles sets of all genes and all
-strains.
-
-Generalized immunity is on.
-"""
-function write_gene_strain_counts(db, t, s, hosts_GI_impact)
-    genesLiver::Set{Gene} = Set()
-    strainsLiver::BitSet = BitSet()
-    genesBlood::Set{Gene} = Set()
-    strainsBlood::BitSet = BitSet()
-
-    for host in s.hosts
-        count_genes_and_strains!(genesLiver, strainsLiver, host.liver_infections)
-        host_GI_impact = hosts_GI_impact[host.id]
-        for infection_index in 1:length(host.active_infections)
-            if host_GI_impact[infection_index] > 0
-                count_genes_and_strains!(genesBlood, strainsBlood, [host.active_infections[infection_index]])
-            end
-        end
-    end
-
-    execute(db.gene_strain_counts, (t, length(genesLiver), length(strainsLiver), length(genesBlood), length(strainsBlood)))
-end
-
 
 """
 Count genes and strains for a particular list of infections in a particular host.
