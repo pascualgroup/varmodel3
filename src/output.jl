@@ -265,7 +265,7 @@ function write_output!(db, t, s, stats)
             write_gene_strain_counts(db, t, s)
         end
 
-        if P.generalized_immunity_detectability_on !== nothing && P.generalized_immunity_detectability_on && ((P.calc_targets !== nothing && P.calc_targets && t in P.calc_targets_times) || P.output_host_samples !== nothing && P.output_host_samples && t in P.host_sampling_times) 
+        if P.generalized_immunity_detectability_on !== nothing && P.generalized_immunity_detectability_on && (P.calc_targets !== nothing && P.calc_targets && t in P.calc_targets_times) 
             hosts_GI_impact = hostsGIImpactCalc(s)
         else 
             hosts_GI_impact = nothing
@@ -526,13 +526,8 @@ end
 Write output for periodically sampled hosts.
 """
 function write_host_samples(db, t, s, sampled_hosts)
-    if ismissing(sampled_hosts)
-        hosts = sample(s.hosts, P.host_sample_size, replace = false)
-    else 
-        hosts = sampled_hosts 
-    end
     # For each host, write out birth/death time and each infection.
-    for host in hosts
+    for host in sampled_hosts
         write_immunity(db, t, host)
 
         execute(
@@ -671,7 +666,6 @@ function sampleHosts(s, sampled_hosts, hosts_GI_impact, PCR_sensitivity_level)
     if P.generalized_immunity_detectability_on !== nothing && P.generalized_immunity_detectability_on
         sampled_hosts_infected_GI = []
         for sampled_host_infected in sampled_hosts_infected
-            p_detect = rand(s.rng, Float64, length(sampled_host_infected.active_infections))
             GI_impact_vector = hosts_GI_impact[sampled_host_infected.id] 
             if any(GI_impact_vector .> 0)
                 push!(sampled_hosts_infected_GI, sampled_host_infected)
