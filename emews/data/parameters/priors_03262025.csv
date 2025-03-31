@@ -9,4 +9,4 @@
 "var_groups_ratio_regional_pool_A","unif",NA,0.008,0.1,NA,NA,NA,NA
 "generalized_immunity_transmissibility_param","unif",NA,1e-04,0.012,NA,NA,NA,NA
 "generalized_immunity_detectability_param","unif",NA,1e-04,0.012,NA,NA,NA,NA
-"coinfection_reduces_transmission_exponential_decay_param","unif",NA,0.14,0.39,NA,NA,NA,NA
+"coinfection_reduces_transmission_exponential_decay_param","unif",NA,0.13,0.4,NA,NA,NA,NA
