@@ -54,6 +54,12 @@ keyword constructor for the class.
     host_sampling_times::Union{Vector{Int}, Nothing} = nothing
     
     """
+    The end of high and low transmission season.
+    """
+    high_season_end::Union{Int, Nothing} = nothing
+    low_season_end::Union{Int, Nothing} = nothing
+    
+    """
     Proportion of hosts to sample at each sampling time point.
     """
     host_sample_proportion::Union{Float64, Nothing} = nothing
@@ -465,6 +471,9 @@ function validate(p::Params)
 
     @assert all(p.host_sampling_times.!==nothing)
     @assert all(p.host_sampling_times.>=0)
+
+    @assert 0 <= p.high_season_end <= p.t_year
+    @assert 0 <= p.low_season_end <= p.t_year
 
     @assert p.host_sample_proportion !== nothing
     @assert 0.0 <= p.host_sample_proportion <= 1.0
