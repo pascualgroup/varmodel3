@@ -54,9 +54,9 @@ keyword constructor for the class.
     host_sampling_times::Union{Vector{Int}, Nothing} = nothing
     
     """
-    Number of hosts to sample at each sampling period.
+    Proportion of hosts to sample at each sampling time point.
     """
-    host_sample_size::Union{Int, Nothing} = nothing
+    host_sample_proportion::Union{Float64, Nothing} = nothing
 
     """
     How often to write summary output.
@@ -101,7 +101,7 @@ keyword constructor for the class.
     """
     Number of hosts.
 
-    Currently constant through a simulation; deaths are coupled to births.
+    If population growth is off, this stays constant through a simulation; deaths are coupled to births. Otherwise, it can increase.
     """
     n_hosts::Union{Int, Nothing} = nothing
 
@@ -378,7 +378,7 @@ keyword constructor for the class.
     
     
     """
-        below are the additional parameters specifying whether to calculate summary statistics 
+        Below are the additional parameters specifying whether to calculate summary statistics 
         or write host samples or both, tailed for the fitting project. 
     """
     calc_targets::Union{Bool, Nothing} = nothing
@@ -391,7 +391,7 @@ keyword constructor for the class.
     MOI_prior::Union{Vector{Float32}, Nothing} = nothing 
 
     """
-        below are the additional parameters for the simple version of generalized immunity without parasitemia. 
+        Below are the additional parameters for the simple version of generalized immunity without parasitemia. 
     """
     generalized_immunity_on::Union{Bool, Nothing} = nothing
     generalized_immunity_loss_rate::Union{Float64, Nothing} = nothing
@@ -400,7 +400,7 @@ keyword constructor for the class.
     generalized_immunity_detectability_on::Union{Bool, Nothing} = nothing
 
     """
-        below are parameters for different measurement errors and related information 
+        Below are the parameters for different measurement errors and related information 
         for MOI estimation at various thresholds.
     """
     thresholds::Union{Vector{Int}, Nothing} = nothing
@@ -408,9 +408,21 @@ keyword constructor for the class.
     MOI_estimation_info_file_loc::Union{String, Nothing} = nothing
 
     """
-        Parameter for different sensitivity levels of PCR detection
+        Below is the parameter for different sensitivity levels of PCR detection.
     """
     PCR_sensitivity_levels::Union{Vector{Float64}, Nothing} = nothing
+
+    """
+        Below are the additional parameters for the (extended) SMC.
+    """
+    smc_on::Union{Bool, Nothing} = nothing
+    smc_age::Union{Float32, Nothing} = nothing
+
+    """
+        Below are the additional parameters for population growth.
+    """
+    pop_growth_on::Union{Bool, Nothing} = nothing
+    pop_growth_annual_rate::Union{Float64, Nothing} = nothing
 end
 
 """
@@ -450,8 +462,8 @@ function validate(p::Params)
     @assert all(p.host_sampling_times.!==nothing)
     @assert all(p.host_sampling_times.>=0)
 
-    @assert p.host_sample_size !== nothing
-    @assert p.host_sample_size >= 0
+    @assert p.host_sample_proportion !== nothing
+    @assert 0.0 <= p.host_sample_proportion <= 1.0
 
     @assert p.gene_strain_count_period !== nothing
     @assert p.gene_strain_count_period > 0
@@ -614,5 +626,13 @@ function validate(p::Params)
 
     if p.PCR_sensitivity_levels !== nothing
         @assert all(x -> 0.0 <= x <= 1.0, p.PCR_sensitivity_levels)
+    end
+
+    if !isnothing(p.smc_on) && p.smc_on
+        @assert p.smc_age > 0
+    end
+
+    if !isnothing(p.population_growth_on) && p.population_growth_on
+        @assert p.pop_growth_annual_rate > 0.0
     end
 end
