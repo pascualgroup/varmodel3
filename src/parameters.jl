@@ -129,7 +129,11 @@ keyword constructor for the class.
     Dimensions: (t_end / t_year, )
     """
     biting_rate_multiplier_by_year::Union{Array{Float64}, Nothing} = nothing
-
+    
+    """
+    Below is the parameter for indoor residual spraying (IRS). 
+    """
+    irs_start_year::Union{Int, Nothing} = nothing
 
     """
     Number of genes in strain.
@@ -416,7 +420,7 @@ keyword constructor for the class.
         Below are the additional parameters for the (extended) SMC.
     """
     smc_on::Union{Bool, Nothing} = nothing
-    smc_age::Union{Float32, Nothing} = nothing
+    smc_age::Union{Int, Nothing} = nothing
 
     """
         Below are the additional parameters for population growth.
@@ -495,6 +499,8 @@ function validate(p::Params)
         @assert length(p.biting_rate_multiplier_by_year) == Int(p.t_end / p.t_year)
         @assert all(0.0 .<= p.biting_rate_multiplier_by_year .<= 1.0)
     end
+
+    @assert p.irs_start_year === nothing || p.irs_start_year >= 0 
 
     @assert p.n_genes_initial !== nothing
     @assert p.n_genes_initial > 0
