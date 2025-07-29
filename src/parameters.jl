@@ -140,8 +140,8 @@ keyword constructor for the class.
     Below are the parameters for indoor residual spraying (IRS). 
     """
     irs_on::Union{Bool, Nothing} = nothing
-    irs_start_year::Union{Int, Nothing} = nothing
-    irs_end_year::Union{Int, Nothing} = nothing
+    irs_start::Union{Int, Nothing} = nothing
+    irs_end::Union{Int, Nothing} = nothing
 
     """
     Number of genes in strain.
@@ -428,9 +428,9 @@ keyword constructor for the class.
         Below are the additional parameters for the (extended) SMC.
     """
     smc_on::Union{Bool, Nothing} = nothing
-    smc_age::Union{Int, Nothing} = nothing
-    smc_start_year::Union{Int, Nothing} = nothing
-    smc_end_year::Union{Int, Nothing} = nothing
+    smc_age::Union{Float32, Nothing} = nothing
+    smc_start::Union{Int, Nothing} = nothing
+    smc_end::Union{Int, Nothing} = nothing
 
     """
         Below are the additional parameters for population growth.
@@ -515,7 +515,7 @@ function validate(p::Params)
 
     @assert p.irs_on !== nothing 
     if p.irs_on
-        @assert 0 <= p.irs_start_year <= p.irs_end_year <= p.t_end / p.t_year
+        @assert 0 <= p.irs_start <= p.irs_end <= p.t_end 
     end
 
     @assert p.n_genes_initial !== nothing
@@ -650,12 +650,14 @@ function validate(p::Params)
         @assert all(x -> 0.0 <= x <= 1.0, p.PCR_sensitivity_levels)
     end
 
-    if !isnothing(p.smc_on) && p.smc_on
-        @assert p.smc_age > 0
-        @assert 0 <= p.smc_start_year <= p.smc_end_year <= p.t_end / p.t_year
+    @assert p.smc_on !== nothing
+    if p.smc_on
+        @assert p.smc_age > 0.0
+        @assert 0 <= p.smc_start <= p.smc_end <= p.t_end 
     end
 
-    if !isnothing(p.population_growth_on) && p.population_growth_on
+    @assert p.population_growth_on !== nothing
+    if p.population_growth_on
         @assert p.pop_growth_annual_rate > 0.0
     end
 end

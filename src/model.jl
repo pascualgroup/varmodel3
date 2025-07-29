@@ -24,14 +24,27 @@ import Profile
 import Serialization
 
 if P.generalized_immunity_on
-    const N_EVENTS = 10
-    const EVENTS = collect(1:N_EVENTS)
-    const (DEATH, BITING, IMMIGRATION, BACKGROUND_CLEARANCE, LIVER_PROGRESS, SWITCHING, MUTATION, ECTOPIC_RECOMBINATION, IMMUNITY_LOSS, GENERALIZED_IMMUNITY_LOSS) = EVENTS
+    if P.pop_growth_on
+        const N_EVENTS = 11
+        const EVENTS = collect(1:N_EVENTS)
+        const (DEATH, BITING, IMMIGRATION, BACKGROUND_CLEARANCE, LIVER_PROGRESS, SWITCHING, MUTATION, ECTOPIC_RECOMBINATION, IMMUNITY_LOSS, GENERALIZED_IMMUNITY_LOSS, POPULATION_GROWTH) = EVENTS
+    else
+        const N_EVENTS = 10
+        const EVENTS = collect(1:N_EVENTS)
+        const (DEATH, BITING, IMMIGRATION, BACKGROUND_CLEARANCE, LIVER_PROGRESS, SWITCHING, MUTATION, ECTOPIC_RECOMBINATION, IMMUNITY_LOSS, GENERALIZED_IMMUNITY_LOSS) = EVENTS
+    end
 else
-    const N_EVENTS = 9
-    const EVENTS = collect(1:N_EVENTS)
-    const (DEATH, BITING, IMMIGRATION, BACKGROUND_CLEARANCE, LIVER_PROGRESS, SWITCHING, MUTATION, ECTOPIC_RECOMBINATION, IMMUNITY_LOSS) = EVENTS
+    if P.pop_growth_on
+        const N_EVENTS = 10
+        const EVENTS = collect(1:N_EVENTS)
+        const (DEATH, BITING, IMMIGRATION, BACKGROUND_CLEARANCE, LIVER_PROGRESS, SWITCHING, MUTATION, ECTOPIC_RECOMBINATION, IMMUNITY_LOSS, POPULATION_GROWTH) = EVENTS
+    else 
+        const N_EVENTS = 9
+        const EVENTS = collect(1:N_EVENTS)
+        const (DEATH, BITING, IMMIGRATION, BACKGROUND_CLEARANCE, LIVER_PROGRESS, SWITCHING, MUTATION, ECTOPIC_RECOMBINATION, IMMUNITY_LOSS) = EVENTS
+    end
 end
+const EVENTSSUB = filter(x -> x != POPULATION_GROWTH, EVENTS)
 
 const USE_BITING_RATE_MULTIPLIER_BY_YEAR = P.biting_rate_multiplier_by_year !== nothing
 
@@ -162,8 +175,12 @@ function run_inner()
                 recompute_gene_group_id_association!(s)
             end
 
+            if t_next_integer % P.t_year == 0 && t_next_integer >= P.irs_start
+                update_rate!(t_next_integer, s, event_dist, POPULATION_GROWTH)
+            end
+
             # Update all rates & reset rate total to prevent error accumulation
-            for event in EVENTS
+            for event in EVENTSSUB
                 update_rate!(t_next_integer, s, event_dist, event)
             end
             recompute_total_weight!(event_dist)
@@ -466,6 +483,8 @@ function get_rate(t, s, event)
         get_rate_immunity_loss(t, s)
     elseif event == GENERALIZED_IMMUNITY_LOSS
         get_rate_generalized_immunity_loss(t, s)
+    elseif event == POPULATION_GROWTH
+        get_rate_population_growth(t, s)
     end
 end
 
@@ -489,9 +508,9 @@ function do_event!(t, s, stats, event, event_dist)
     elseif event == IMMUNITY_LOSS
         do_immunity_loss!(t, s, stats, event_dist)
     elseif event == GENERALIZED_IMMUNITY_LOSS
-        # println("GI immunity loss event queued!")
-        # println(t)
         do_generalized_immunity_loss!(t, s, stats, event_dist)
+    elseif event == POPULATION_GROWTH
+        do_population_growth(t, s, stats, event_dist)
     end
 end
 
@@ -542,6 +561,14 @@ function do_biting!(t, s, stats, event_dist)
     if src_active_count == 0
         return false
     end
+
+    # If either the source or the destination host is within the SMC age range and SMC is implemented during the high-transmission season, it cannot transmit or receive infections.
+    if P.smc_on && (P.low_season_end <= t % P.t_year <= P.high_season_end) && (P.smc_start <= t <= P.smc_end) 
+        if (t - src_host.t_birth <= P.smc_age) || (t - dst_host.t_birth <= P.smc_age)
+            return false
+        end
+    end
+
     stats.n_infected_bites += 1
     s.n_transmitting_bites_for_migration_rate += 1
 
@@ -715,6 +742,13 @@ function do_immigration!(t, s, stats, event_dist)
 
     # Sample a random host and advance it (rebirth or infection activation).
     host = rand(s.rng, s.hosts)
+
+    # SMC: If the host's age is within the SMC range (during high transmission season), it cannot get infections.
+    if P.smc_on && (P.low_season_end <= t % P.t_year <= P.high_season_end) && (P.smc_start <= t <= P.smc_end) 
+        if t - host.t_birth <= P.smc_age
+            return false
+        end
+    end
 
     # If host doesn't have an available infection slot, reject this sample.
     if !isnothing(P.n_infections_liver_max)
@@ -1297,6 +1331,38 @@ function do_generalized_immunity_loss!(t, s, stats, event_dist)
     # println(host.generalized_immunity)
     # println("after generalized_immunity_loss event")
 end
+
+
+### POPULATION GROWTH FUNCTIONS
+
+function get_rate_population_growth(t, s)
+    P.n_hosts * P.pop_growth_annual_rate / P.t_year
+end
+
+function do_population_growth(t, s, stats, event_dist)
+    # do population growth after IRS
+    if t >= P.irs_start
+        # create new host (empty struct with some values initialized)
+        host = Host(
+            id = next_host_id!(s),
+            t_birth = t,
+            liver_infections = [], active_infections = [],
+            immunity = ImmuneHistory(),
+            generalized_immunity = 0,
+            n_cleared_infections = 0
+        )
+        # add new host to s.hosts
+        push!(s.hosts, host)
+        P.n_hosts += 1
+        for event in EVENTSSUB 
+            update_rate!(t_next_integer, s, event_dist, event)
+        end
+        recompute_total_weight!(event_dist)
+    else
+        return false
+    end
+end
+
 
 ### MISCELLANEOUS FUNCTIONS ###
 
