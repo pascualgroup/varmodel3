@@ -137,9 +137,11 @@ keyword constructor for the class.
     biting_rate_multiplier_by_year::Union{Array{Float64}, Nothing} = nothing
     
     """
-    Below is the parameter for indoor residual spraying (IRS). 
+    Below are the parameters for indoor residual spraying (IRS). 
     """
+    irs_on::Union{Bool, Nothing} = nothing
     irs_start_year::Union{Int, Nothing} = nothing
+    irs_end_year::Union{Int, Nothing} = nothing
 
     """
     Number of genes in strain.
@@ -427,6 +429,8 @@ keyword constructor for the class.
     """
     smc_on::Union{Bool, Nothing} = nothing
     smc_age::Union{Int, Nothing} = nothing
+    smc_start_year::Union{Int, Nothing} = nothing
+    smc_end_year::Union{Int, Nothing} = nothing
 
     """
         Below are the additional parameters for population growth.
@@ -509,7 +513,10 @@ function validate(p::Params)
         @assert all(0.0 .<= p.biting_rate_multiplier_by_year .<= 1.0)
     end
 
-    @assert p.irs_start_year === nothing || p.irs_start_year >= 0 
+    @assert p.irs_on !== nothing 
+    if p.irs_on
+        @assert 0 <= p.irs_start_year <= p.irs_end_year <= p.t_end / p.t_year
+    end
 
     @assert p.n_genes_initial !== nothing
     @assert p.n_genes_initial > 0
@@ -645,6 +652,7 @@ function validate(p::Params)
 
     if !isnothing(p.smc_on) && p.smc_on
         @assert p.smc_age > 0
+        @assert 0 <= p.smc_start_year <= p.smc_end_year <= p.t_end / p.t_year
     end
 
     if !isnothing(p.population_growth_on) && p.population_growth_on
