@@ -28,6 +28,7 @@ if P.generalized_immunity_on
         const N_EVENTS = 11
         const EVENTS = collect(1:N_EVENTS)
         const (DEATH, BITING, IMMIGRATION, BACKGROUND_CLEARANCE, LIVER_PROGRESS, SWITCHING, MUTATION, ECTOPIC_RECOMBINATION, IMMUNITY_LOSS, GENERALIZED_IMMUNITY_LOSS, POPULATION_GROWTH) = EVENTS
+        const EVENTSSUB = setdiff(EVENTS, POPULATION_GROWTH)
     else
         const N_EVENTS = 10
         const EVENTS = collect(1:N_EVENTS)
@@ -38,13 +39,13 @@ else
         const N_EVENTS = 10
         const EVENTS = collect(1:N_EVENTS)
         const (DEATH, BITING, IMMIGRATION, BACKGROUND_CLEARANCE, LIVER_PROGRESS, SWITCHING, MUTATION, ECTOPIC_RECOMBINATION, IMMUNITY_LOSS, POPULATION_GROWTH) = EVENTS
+        const EVENTSSUB = setdiff(EVENTS, POPULATION_GROWTH)
     else 
         const N_EVENTS = 9
         const EVENTS = collect(1:N_EVENTS)
         const (DEATH, BITING, IMMIGRATION, BACKGROUND_CLEARANCE, LIVER_PROGRESS, SWITCHING, MUTATION, ECTOPIC_RECOMBINATION, IMMUNITY_LOSS) = EVENTS
     end
 end
-const EVENTSSUB = filter(x -> x != POPULATION_GROWTH, EVENTS)
 
 const USE_BITING_RATE_MULTIPLIER_BY_YEAR = P.biting_rate_multiplier_by_year !== nothing
 
@@ -141,7 +142,7 @@ function run_inner()
 
     # Initialize event rates.
     # total_rate = sum(rates)
-    #weights = Weights(rates, total_rate)
+    # weights = Weights(rates, total_rate)
     event_dist = WeightedDiscreteDistribution(10.0, [get_rate(t, s, event) for event in EVENTS])
 
     # Loop events until end of simulation.
@@ -175,12 +176,8 @@ function run_inner()
                 recompute_gene_group_id_association!(s)
             end
 
-            if t_next_integer % P.t_year == 0 && t_next_integer >= P.irs_start
-                update_rate!(t_next_integer, s, event_dist, POPULATION_GROWTH)
-            end
-
             # Update all rates & reset rate total to prevent error accumulation
-            for event in EVENTSSUB
+            for event in EVENTS
                 update_rate!(t_next_integer, s, event_dist, event)
             end
             recompute_total_weight!(event_dist)
@@ -562,8 +559,8 @@ function do_biting!(t, s, stats, event_dist)
         return false
     end
 
-    # If either the source or the destination host is within the SMC age range and SMC is implemented during the high-transmission season, it cannot transmit or receive infections.
-    if P.smc_on && (P.low_season_end <= t % P.t_year <= P.high_season_end) && (P.smc_start <= t <= P.smc_end) 
+    # If either the source or the destination host is under SMC, it cannot give or receive infections.
+    if P.smc_on && (P.smc_start <= t <= P.smc_end) && (P.low_season_end <= t % P.t_year <= P.high_season_end)
         if (t - src_host.t_birth <= P.smc_age) || (t - dst_host.t_birth <= P.smc_age)
             return false
         end
@@ -744,7 +741,7 @@ function do_immigration!(t, s, stats, event_dist)
     host = rand(s.rng, s.hosts)
 
     # SMC: If the host's age is within the SMC range (during high transmission season), it cannot get infections.
-    if P.smc_on && (P.low_season_end <= t % P.t_year <= P.high_season_end) && (P.smc_start <= t <= P.smc_end) 
+    if P.smc_on && (P.smc_start <= t <= P.smc_end) && (P.low_season_end <= t % P.t_year <= P.high_season_end)  
         if t - host.t_birth <= P.smc_age
             return false
         end
@@ -1336,30 +1333,28 @@ end
 ### POPULATION GROWTH FUNCTIONS
 
 function get_rate_population_growth(t, s)
-    P.n_hosts * P.pop_growth_annual_rate / P.t_year
+    if P.pop_growth_on && t >= P.irs_start && t % P.t_year == 0 
+        P.n_hosts * P.pop_growth_annual_rate / P.t_year
+    else
+        0.0
+    end
 end
 
 function do_population_growth(t, s, stats, event_dist)
-    # do population growth after IRS
-    if t >= P.irs_start
-        # create new host (empty struct with some values initialized)
-        host = Host(
-            id = next_host_id!(s),
-            t_birth = t,
-            liver_infections = [], active_infections = [],
-            immunity = ImmuneHistory(),
-            generalized_immunity = 0,
-            n_cleared_infections = 0
-        )
-        # add new host to s.hosts
-        push!(s.hosts, host)
-        P.n_hosts += 1
-        for event in EVENTSSUB 
-            update_rate!(t_next_integer, s, event_dist, event)
-        end
-        recompute_total_weight!(event_dist)
-    else
-        return false
+    # create new host (empty struct with some values initialized)
+    host = Host(
+        id = next_host_id!(s),
+        t_birth = t,
+        liver_infections = [], active_infections = [],
+        immunity = ImmuneHistory(),
+        generalized_immunity = 0,
+        n_cleared_infections = 0
+    )
+    # add new host to s.hosts
+    push!(s.hosts, host)
+    P.n_hosts += 1
+    for event in EVENTSSUB 
+        update_rate!(t_next_integer, s, event_dist, event)
     end
 end
 
