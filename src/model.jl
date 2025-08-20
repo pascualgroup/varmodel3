@@ -1354,6 +1354,7 @@ function do_population_growth!(t, s, stats, event_dist)
     for event in EVENTS 
         update_rate!(t_next_integer, s, event_dist, event)
     end
+    recompute_total_weight!(event_dist)
 end
 
 
