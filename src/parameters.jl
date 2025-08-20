@@ -656,8 +656,8 @@ function validate(p::Params)
         @assert 0 <= p.smc_start <= p.smc_end <= p.t_end 
     end
 
-    @assert p.population_growth_on !== nothing
-    if p.population_growth_on
+    @assert p.pop_growth_on !== nothing
+    if p.pop_growth_on
         @assert p.pop_growth_annual_percentage > 0.0
     end
 end
