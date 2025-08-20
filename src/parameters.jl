@@ -436,7 +436,7 @@ keyword constructor for the class.
         Below are the additional parameters for population growth.
     """
     pop_growth_on::Union{Bool, Nothing} = nothing
-    pop_growth_annual_rate::Union{Float64, Nothing} = nothing
+    pop_growth_annual_percentage::Union{Float64, Nothing} = nothing
 end
 
 """
@@ -658,6 +658,6 @@ function validate(p::Params)
 
     @assert p.population_growth_on !== nothing
     if p.population_growth_on
-        @assert p.pop_growth_annual_rate > 0.0
+        @assert p.pop_growth_annual_percentage > 0.0
     end
 end

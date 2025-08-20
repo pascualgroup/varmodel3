@@ -28,7 +28,6 @@ if P.generalized_immunity_on
         const N_EVENTS = 11
         const EVENTS = collect(1:N_EVENTS)
         const (DEATH, BITING, IMMIGRATION, BACKGROUND_CLEARANCE, LIVER_PROGRESS, SWITCHING, MUTATION, ECTOPIC_RECOMBINATION, IMMUNITY_LOSS, GENERALIZED_IMMUNITY_LOSS, POPULATION_GROWTH) = EVENTS
-        const EVENTSSUB = setdiff(EVENTS, POPULATION_GROWTH)
     else
         const N_EVENTS = 10
         const EVENTS = collect(1:N_EVENTS)
@@ -39,7 +38,6 @@ else
         const N_EVENTS = 10
         const EVENTS = collect(1:N_EVENTS)
         const (DEATH, BITING, IMMIGRATION, BACKGROUND_CLEARANCE, LIVER_PROGRESS, SWITCHING, MUTATION, ECTOPIC_RECOMBINATION, IMMUNITY_LOSS, POPULATION_GROWTH) = EVENTS
-        const EVENTSSUB = setdiff(EVENTS, POPULATION_GROWTH)
     else 
         const N_EVENTS = 9
         const EVENTS = collect(1:N_EVENTS)
@@ -507,7 +505,7 @@ function do_event!(t, s, stats, event, event_dist)
     elseif event == GENERALIZED_IMMUNITY_LOSS
         do_generalized_immunity_loss!(t, s, stats, event_dist)
     elseif event == POPULATION_GROWTH
-        do_population_growth(t, s, stats, event_dist)
+        do_population_growth!(t, s, stats, event_dist)
     end
 end
 
@@ -1333,14 +1331,14 @@ end
 ### POPULATION GROWTH FUNCTIONS
 
 function get_rate_population_growth(t, s)
-    if P.pop_growth_on && t >= P.irs_start && t % P.t_year == 0 
-        P.n_hosts * P.pop_growth_annual_rate / P.t_year
+    if P.pop_growth_on && t >= P.irs_start 
+        P.n_hosts * log(1 + P.pop_growth_annual_percentage) / P.t_year
     else
         0.0
     end
 end
 
-function do_population_growth(t, s, stats, event_dist)
+function do_population_growth!(t, s, stats, event_dist)
     # create new host (empty struct with some values initialized)
     host = Host(
         id = next_host_id!(s),
@@ -1353,7 +1351,7 @@ function do_population_growth(t, s, stats, event_dist)
     # add new host to s.hosts
     push!(s.hosts, host)
     P.n_hosts += 1
-    for event in EVENTSSUB 
+    for event in EVENTS 
         update_rate!(t_next_integer, s, event_dist, event)
     end
 end
