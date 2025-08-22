@@ -23,27 +23,27 @@ include("output.jl")
 import Profile
 import Serialization
 
-if P.generalized_immunity_on
-    if P.pop_growth_on
-        const N_EVENTS = 11
-        const EVENTS = collect(1:N_EVENTS)
-        const (DEATH, BITING, IMMIGRATION, BACKGROUND_CLEARANCE, LIVER_PROGRESS, SWITCHING, MUTATION, ECTOPIC_RECOMBINATION, IMMUNITY_LOSS, GENERALIZED_IMMUNITY_LOSS, POPULATION_GROWTH) = EVENTS
+const N_EVENTS_ALL = 11
+const EVENTS_ALL = collect(1:N_EVENTS_ALL)
+const (DEATH, BITING, IMMIGRATION, BACKGROUND_CLEARANCE, LIVER_PROGRESS, SWITCHING, MUTATION, ECTOPIC_RECOMBINATION, IMMUNITY_LOSS, GENERALIZED_IMMUNITY_LOSS, POPULATION_GROWTH) = EVENTS_ALL
+function define_exlcuded_events(; generalized_immunity_on::Bool=true, pop_growth_on::Bool=true)
+    if generalized_immunity_on
+        if pop_growth_on
+          EVENTS_EXCLUDE = []
+        else 
+          EVENTS_EXCLUDE = [POPULATION_GROWTH]
+        end
     else
-        const N_EVENTS = 10
-        const EVENTS = collect(1:N_EVENTS)
-        const (DEATH, BITING, IMMIGRATION, BACKGROUND_CLEARANCE, LIVER_PROGRESS, SWITCHING, MUTATION, ECTOPIC_RECOMBINATION, IMMUNITY_LOSS, GENERALIZED_IMMUNITY_LOSS) = EVENTS
+        if pop_growth_on
+          EVENTS_EXCLUDE = [GENERALIZED_IMMUNITY_LOSS]
+        else
+          EVENTS_EXCLUDE = [GENERALIZED_IMMUNITY_LOSS, POPULATION_GROWTH]
+        end
     end
-else
-    if P.pop_growth_on
-        const N_EVENTS = 10
-        const EVENTS = collect(1:N_EVENTS)
-        const (DEATH, BITING, IMMIGRATION, BACKGROUND_CLEARANCE, LIVER_PROGRESS, SWITCHING, MUTATION, ECTOPIC_RECOMBINATION, IMMUNITY_LOSS, POPULATION_GROWTH) = EVENTS
-    else 
-        const N_EVENTS = 9
-        const EVENTS = collect(1:N_EVENTS)
-        const (DEATH, BITING, IMMIGRATION, BACKGROUND_CLEARANCE, LIVER_PROGRESS, SWITCHING, MUTATION, ECTOPIC_RECOMBINATION, IMMUNITY_LOSS) = EVENTS
-    end
+    return EVENTS_EXCLUDE
 end
+EVENTS_EXCLUDE = define_exlcuded_events(generalized_immunity_on = P.generalized_immunity_on, pop_growth_on = P.pop_growth_on) 
+EVENTS = filter(x -> !(x in EVENTS_EXCLUDE), EVENTS_ALL)
 
 const USE_BITING_RATE_MULTIPLIER_BY_YEAR = P.biting_rate_multiplier_by_year !== nothing
 
