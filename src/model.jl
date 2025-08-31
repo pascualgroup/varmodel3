@@ -1340,12 +1340,10 @@ end
 
 function get_rate_population_growth(t, s)
     if P.pop_growth_on && t >= P.irs_start 
-        rate = length(s.hosts) * log(1 + P.pop_growth_annual_percentage) / P.t_year
+        length(s.hosts) * log(1 + P.pop_growth_annual_percentage) / P.t_year
     else
-        rate = 0.0
+        0.0
     end
-    println(rate)
-    return rate
 end
 
 function do_population_growth!(t, s, stats, event_dist)
@@ -1359,9 +1357,7 @@ function do_population_growth!(t, s, stats, event_dist)
         n_cleared_infections = 0
     )
     # add new host to s.hosts
-    println(length(s.hosts))
     push!(s.hosts, host)
-    println(length(s.hosts))
     for event in EVENTS 
         update_rate!(t, s, event_dist, event)
     end
