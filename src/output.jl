@@ -273,7 +273,7 @@ function write_output!(db, t, s, stats)
         
         if (P.calc_targets !== nothing && P.calc_targets && t in P.calc_targets_times) || (P.output_host_samples !== nothing && P.output_host_samples && t in P.host_sampling_times)
             # Sample `host_sample_proportion * n_hosts` hosts randomly (without replacement).
-            sampled_hosts = sample(s.hosts, Int(floor(P.host_sample_proportion * P.n_hosts)), replace = false)
+            sampled_hosts = sample(s.hosts, Int(floor(P.host_sample_proportion * length(s.hosts))), replace = false)
         
             if P.calc_targets !== nothing && P.calc_targets && t in P.calc_targets_times
                 for threshold in P.thresholds

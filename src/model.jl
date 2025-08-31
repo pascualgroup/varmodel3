@@ -23,27 +23,31 @@ include("output.jl")
 import Profile
 import Serialization
 
-const N_EVENTS_ALL = 11
-const EVENTS_ALL = collect(1:N_EVENTS_ALL)
-const (DEATH, BITING, IMMIGRATION, BACKGROUND_CLEARANCE, LIVER_PROGRESS, SWITCHING, MUTATION, ECTOPIC_RECOMBINATION, IMMUNITY_LOSS, GENERALIZED_IMMUNITY_LOSS, POPULATION_GROWTH) = EVENTS_ALL
-function define_exlcuded_events(; generalized_immunity_on::Bool=true, pop_growth_on::Bool=true)
-    if generalized_immunity_on
-        if pop_growth_on
-          EVENTS_EXCLUDE = []
-        else 
-          EVENTS_EXCLUDE = [POPULATION_GROWTH]
-        end
-    else
-        if pop_growth_on
-          EVENTS_EXCLUDE = [GENERALIZED_IMMUNITY_LOSS]
-        else
-          EVENTS_EXCLUDE = [GENERALIZED_IMMUNITY_LOSS, POPULATION_GROWTH]
-        end
+if P.generalized_immunity_on
+    if P.pop_growth_on
+        const N_EVENTS = 11
+        const EVENTS = collect(1:N_EVENTS)
+        const (DEATH, BITING, IMMIGRATION, BACKGROUND_CLEARANCE, LIVER_PROGRESS, SWITCHING, MUTATION, ECTOPIC_RECOMBINATION, IMMUNITY_LOSS, GENERALIZED_IMMUNITY_LOSS, POPULATION_GROWTH) = EVENTS
+    else 
+        const N_EVENTS = 10
+        const EVENTS = collect(1:N_EVENTS)
+        const (DEATH, BITING, IMMIGRATION, BACKGROUND_CLEARANCE, LIVER_PROGRESS, SWITCHING, MUTATION, ECTOPIC_RECOMBINATION, IMMUNITY_LOSS, GENERALIZED_IMMUNITY_LOSS) = EVENTS
+        const POPULATION_GROWTH = nothing
     end
-    return EVENTS_EXCLUDE
+else
+    if P.pop_growth_on
+        const N_EVENTS = 10
+        const EVENTS = collect(1:N_EVENTS)
+        const (DEATH, BITING, IMMIGRATION, BACKGROUND_CLEARANCE, LIVER_PROGRESS, SWITCHING, MUTATION, ECTOPIC_RECOMBINATION, IMMUNITY_LOSS, POPULATION_GROWTH) = EVENTS
+        const GENERALIZED_IMMUNITY_LOSS = nothing
+    else
+        const N_EVENTS = 9
+        const EVENTS = collect(1:N_EVENTS)
+        const (DEATH, BITING, IMMIGRATION, BACKGROUND_CLEARANCE, LIVER_PROGRESS, SWITCHING, MUTATION, ECTOPIC_RECOMBINATION, IMMUNITY_LOSS) = EVENTS
+        const GENERALIZED_IMMUNITY_LOSS = nothing
+        const POPULATION_GROWTH = nothing
+    end
 end
-EVENTS_EXCLUDE = define_exlcuded_events(generalized_immunity_on = P.generalized_immunity_on, pop_growth_on = P.pop_growth_on) 
-EVENTS = filter(x -> !(x in EVENTS_EXCLUDE), EVENTS_ALL)
 
 const USE_BITING_RATE_MULTIPLIER_BY_YEAR = P.biting_rate_multiplier_by_year !== nothing
 
@@ -187,6 +191,10 @@ function run_inner()
         # event = direct_sample_linear_scan(rates, total_rate)
         # event = sample(weights)
         event = @fastmath rand(rng, event_dist)
+        # if P.irs_start < t < P.irs_start + 30
+        #     println(event_dist)
+        #     println(event)
+        # end
         t = t_next
         if @fastmath do_event!(t, s, stats, event, event_dist)
             stats.n_events += 1
@@ -513,7 +521,7 @@ end
 ### DEATH EVENT ###
 
 function get_rate_death(t, s)
-    P.n_hosts / P.mean_host_lifetime
+    length(s.hosts) / P.mean_host_lifetime
 end
 
 function do_death!(t, s, stats, event_dist)
@@ -539,7 +547,7 @@ function get_rate_biting(t, s)
     else
         P.biting_rate[day_index]
     end
-    biting_rate * P.n_hosts
+    biting_rate * length(s.hosts)
 end
 
 function do_biting!(t, s, stats, event_dist)
@@ -776,14 +784,14 @@ end
 ### RANDOM BACKGROUND CLEARANCE EVENT ###
 
 function get_rate_background_clearance(t, s)
-    P.background_clearance_rate * P.n_hosts * s.n_active_infections_per_host_max
+    P.background_clearance_rate * length(s.hosts) * s.n_active_infections_per_host_max
 end
 
 function do_background_clearance(t, s, stats, event_dist)
     if s.n_active_infections_per_host_max < 1
         return false
     end
-    host = rand(s.rng, P.n_hosts)
+    host = rand(s.rng, s.hosts)
     inf_index = rand(s.rng, 1:s.n_active_infections_per_host_max)
 
     # If the infection index is out of range, this is a rejected sample.
@@ -802,7 +810,7 @@ end
 ### LIVER PROGRESS EVENT ###
 
 function get_rate_liver_progress(t, s)
-    P.n_hosts * s.n_liver_infections_per_host_max * P.liver_erlang_shape / P.t_liver_stage
+    length(s.hosts) * s.n_liver_infections_per_host_max * P.liver_erlang_shape / P.t_liver_stage
 end
 
 function do_liver_progress!(t, s, stats, event_dist)
@@ -862,9 +870,9 @@ function get_rate_switching(t, s)
     # Rejection sampling is used to effect the correct rate.
     if !P.whole_gene_immune
         # Switching rate set by total number of alleles.
-        (maximum(P.switching_rate) * P.n_loci) * P.n_hosts * s.n_active_infections_per_host_max
+        (maximum(P.switching_rate) * P.n_loci) * length(s.hosts) * s.n_active_infections_per_host_max
     else
-        maximum(P.switching_rate) * P.n_hosts * s.n_active_infections_per_host_max
+        maximum(P.switching_rate) * length(s.hosts) * s.n_active_infections_per_host_max
     end
 end
 
@@ -999,7 +1007,7 @@ function get_rate_mutation(t, s)
     # The total rate includes both active and liver infections because host state may not be fully up to date,
     # and a liver infection may be activated when host state is updated to the current time.
     # Rejection sampling is used to effect the correct rate.
-    P.mutation_rate * P.n_hosts * s.n_active_infections_per_host_max * P.n_genes_per_strain * P.n_loci
+    P.mutation_rate * length(s.hosts) * s.n_active_infections_per_host_max * P.n_genes_per_strain * P.n_loci
 end
 
 function do_mutation!(t, s, stats, event_dist)
@@ -1047,7 +1055,7 @@ function get_rate_ectopic_recombination(t, s)
     # and a liver infection may be activated when host state is updated to the current time.
     # Rejection sampling is used to effect the correct rate.
     maximum(P.ectopic_recombination_rate)^2 *
-        P.n_hosts * s.n_active_infections_per_host_max *
+        length(s.hosts) * s.n_active_infections_per_host_max *
         P.n_genes_per_strain * (P.n_genes_per_strain - 1) / 2.0
 end
 
@@ -1287,7 +1295,7 @@ end
 ### IMMUNITY LOSS EVENT ###
 
 function get_rate_immunity_loss(t, s)
-    P.immunity_loss_rate * P.n_hosts * s.n_immunities_per_host_max
+    P.immunity_loss_rate * length(s.hosts) * s.n_immunities_per_host_max
 end
 
 function do_immunity_loss!(t, s, stats, event_dist)
@@ -1307,7 +1315,7 @@ function do_immunity_loss!(t, s, stats, event_dist)
 end
 
 function get_rate_generalized_immunity_loss(t, s)
-    P.generalized_immunity_loss_rate * P.n_hosts 
+    P.generalized_immunity_loss_rate * length(s.hosts) 
 end
 
 function do_generalized_immunity_loss!(t, s, stats, event_dist)
@@ -1332,10 +1340,12 @@ end
 
 function get_rate_population_growth(t, s)
     if P.pop_growth_on && t >= P.irs_start 
-        P.n_hosts * log(1 + P.pop_growth_annual_percentage) / P.t_year
+        rate = length(s.hosts) * log(1 + P.pop_growth_annual_percentage) / P.t_year
     else
-        0.0
+        rate = 0.0
     end
+    println(rate)
+    return rate
 end
 
 function do_population_growth!(t, s, stats, event_dist)
@@ -1349,12 +1359,14 @@ function do_population_growth!(t, s, stats, event_dist)
         n_cleared_infections = 0
     )
     # add new host to s.hosts
+    println(length(s.hosts))
     push!(s.hosts, host)
-    P.n_hosts += 1
+    println(length(s.hosts))
     for event in EVENTS 
-        update_rate!(t_next_integer, s, event_dist, event)
+        update_rate!(t, s, event_dist, event)
     end
     recompute_total_weight!(event_dist)
+    true
 end
 
 
