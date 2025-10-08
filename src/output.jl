@@ -44,6 +44,7 @@ struct VarModelDB
     sampled_infection_genes::Stmt
     sampled_immunity::Stmt
     targets::Stmt
+    quantiles_long::Stmt
 end
 
 
@@ -213,6 +214,17 @@ function initialize_database()
         );
     """)
 
+    execute(db, """
+        CREATE TABLE quantiles_long (
+            time INTEGER,
+            dist_name TEXT,
+            percentile INTEGER,
+            value REAL,
+            threshold INTEGER,
+            PCR_sensitivity_level REAL
+        );
+    """)
+
     VarModelDB(
         db,
         make_insert_statement(db, "meta", 2),
@@ -223,7 +235,8 @@ function initialize_database()
         make_insert_statement(db, "sampled_durations", 6),
         make_insert_statement(db, "sampled_infection_genes", 2 + 1 + P.n_loci),
         make_insert_statement(db, "sampled_immunity", 5),
-        make_insert_statement(db, "targets", 17)
+        make_insert_statement(db, "targets", 17),
+        make_insert_statement(db, "quantiles_long", 6)
     )
 end
 
@@ -470,6 +483,80 @@ function write_targets(db, t, s, threshold, hosts_GI_impact, PCR_sensitivity_lev
         threshold,
         PCR_sensitivity_level
     ))
+
+    df_all = DataFrame(dist_name = String[], percentile = Int[], value = Float64[])
+    qs = 0.01:0.01:1.0
+    percentiles = Int.(qs .* 100)
+
+    if P.MOI_aggregate_approach == "pool"
+        MOI_dict = countmap(MOI[:, "MOI"])
+        distMOI = DataFrame(MOI = collect(keys(MOI_dict)), Prob = collect(values(MOI_dict))/sum(collect(values(MOI_dict))))
+    else
+        distMOI = MOI[:, ["MOI", "Prob"]]
+    end
+    distMOI_sort = sort(distMOI, :MOI)
+    distMOI.cumprob = cumsum(distMOI.Prob)
+    rename!(distMOI, :MOI => :value)
+    vals = [discrete_quantile(distMOI, q) for q in qs]
+    df_tmp = DataFrame(
+        dist_name = fill("MOI_distribution", length(qs)),
+        percentile = percentiles,
+        value = vals
+    )
+    append!(df_all, df_tmp)
+
+    distPTS = offdiag(PTS)
+    distPTSGroupA = offdiag(PTSGroupA)
+    distPTSGroupBC = offdiag(PTSGroupBC)
+    dists = Dict("distPTS" => distPTS, "distPTSGroupA" => distPTSGroupA, "distPTSGroupBC" => distPTSGroupBC)
+    for (name, dist) in dists
+        vals = quantile(dist, qs)
+        df_tmp = DataFrame(
+            dist_name = fill(name, length(qs)),
+            percentile = percentiles,
+            value = vals
+        )
+        append!(df_all, df_tmp)
+    end
+
+    geneCount_dict = countmap(sampled_infections_detected[:,"gene_id"])
+    GeneCount = collect(values(geneCount_dict))
+    distGeneCount_dict = countmap(GeneCount)
+    distGeneCount = DataFrame(value = collect(keys(distGeneCount_dict)), Prob = collect(values(distGeneCount_dict))/sum(collect(values(distGeneCount_dict))))
+    distGeneCount_sort = sort(distGeneCount, :value)
+    geneCountGroupA_dict = countmap(sampled_infections_detected_groupA[:,"gene_id"])
+    GeneCountGroupA = collect(values(geneCountGroupA_dict))
+    distGeneCountGroupA_dict = countmap(GeneCountGroupA)
+    distGeneCountGroupA = DataFrame(value = collect(keys(distGeneCountGroupA_dict)), Prob = collect(values(distGeneCountGroupA_dict))/sum(collect(values(distGeneCountGroupA_dict))))
+    distGeneCountGroupA_sort = sort(distGeneCountGroupA, :value)
+    geneCountGroupBC_dict = countmap(sampled_infections_detected_groupBC[:,"gene_id"])
+    GeneCountGroupBC = collect(values(geneCountGroupBC_dict))
+    distGeneCountGroupBC_dict = countmap(GeneCountGroupBC)
+    distGeneCountGroupBC = DataFrame(value = collect(keys(distGeneCountGroupBC_dict)), Prob = collect(values(distGeneCountGroupBC_dict))/sum(collect(values(distGeneCountGroupBC_dict))))
+    distGeneCountGroupBC_sort = sort(distGeneCountGroupBC, :value)
+
+    dists = Dict("distGeneCount" => distGeneCount_sort, "distGeneCountGroupA" => distGeneCountGroupA_sort, "distGeneCountGroupBC" => distGeneCountGroupBC_sort)
+
+    for (name, dist) in dists
+        [discrete_quantile(dist, q) for q in qs]
+        df_tmp = DataFrame(
+            dist_name = fill(name, length(qs)),
+            percentile = percentiles,
+            value = vals
+        )
+        append!(df_all, df_tmp)
+    end
+
+    for row in eachrow(df_all)
+        execute(db.quantiles_long, (
+            t,
+            row.dist_name, 
+            row.percentile, 
+            row.value,
+            threshold,
+            PCR_sensitivity_level
+        ))
+    end
 end
 
 function write_infection_df_measurement_error!(df, host, infection, s, measurement_error_A, measurement_error_BC)
@@ -759,6 +846,11 @@ function offdiag(A::Matrix)
         end
     end
     v
+end
+
+function discrete_quantile(df::DataFrame, q::Float64)
+    idx = findfirst(x -> x >= q, df.cumprob)
+    return df.value[idx]
 end
 
             
