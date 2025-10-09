@@ -492,12 +492,14 @@ function write_targets(db, t, s, threshold, hosts_GI_impact, PCR_sensitivity_lev
         MOI_dict = countmap(MOI[:, "MOI"])
         distMOI = DataFrame(MOI = collect(keys(MOI_dict)), Prob = collect(values(MOI_dict))/sum(collect(values(MOI_dict))))
     else
-        distMOI = MOI[:, ["MOI", "Prob"]]
+        distMOI_all = MOI[:, ["MOI", "Prob"]]
+        distMOI = combine(groupby(distMOI_all, :MOI), :Prob => sum => :Prob)
+        distMOI.Prob = distMOI.Prob ./ sum(distMOI.Prob)
     end
     distMOI_sort = sort(distMOI, :MOI)
-    distMOI.cumprob = cumsum(distMOI.Prob)
-    rename!(distMOI, :MOI => :value)
-    vals = [discrete_quantile(distMOI, q) for q in qs]
+    distMOI_sort.cumprob = cumsum(distMOI_sort.Prob)
+    rename!(distMOI_sort, :MOI => :value)
+    vals = [discrete_quantile(distMOI_sort, q) for q in qs]
     df_tmp = DataFrame(
         dist_name = fill("MOI_distribution", length(qs)),
         percentile = percentiles,
@@ -536,9 +538,8 @@ function write_targets(db, t, s, threshold, hosts_GI_impact, PCR_sensitivity_lev
     distGeneCountGroupBC_sort = sort(distGeneCountGroupBC, :value)
 
     dists = Dict("distGeneCount" => distGeneCount_sort, "distGeneCountGroupA" => distGeneCountGroupA_sort, "distGeneCountGroupBC" => distGeneCountGroupBC_sort)
-
     for (name, dist) in dists
-        [discrete_quantile(dist, q) for q in qs]
+        vals = [discrete_quantile(dist, q) for q in qs]
         df_tmp = DataFrame(
             dist_name = fill(name, length(qs)),
             percentile = percentiles,
