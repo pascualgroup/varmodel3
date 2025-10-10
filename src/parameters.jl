@@ -395,6 +395,8 @@ keyword constructor for the class.
     """
     calc_targets::Union{Bool, Nothing} = nothing
     calc_targets_times::Union{Vector{Int}, Nothing} = nothing
+    calc_quantiles::Union{Bool, Nothing} = nothing
+    calc_quantiles_times::Union{Vector{Int}, Nothing} = nothing
     output_host_samples::Union{Bool, Nothing} = nothing
     p_microscopy_detection::Union{Float64, Nothing} = nothing
     undersampling_of_var::Union{Bool, Nothing} = nothing 
@@ -623,6 +625,11 @@ function validate(p::Params)
         @assert all(p.MOI_prior.>=0.0)
         @assert length(p.MOI_prior) == p.maxMOI
         @assert p.MOI_estimation_info_file_loc !== nothing
+    end
+
+    if !isnothing(p.calc_quantiles) && p.calc_quantiles
+        @assert all(p.calc_quantiles_times.!==nothing)
+        @assert all(p.calc_quantiles_times.>=0)
     end
 
     @assert p.output_host_samples !== nothing
