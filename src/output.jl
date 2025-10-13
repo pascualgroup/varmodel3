@@ -499,6 +499,7 @@ function write_targets(db, t, s, threshold, hosts_GI_impact, PCR_sensitivity_lev
     distMOI_sort = sort(distMOI, :MOI)
     distMOI_sort.cumprob = cumsum(distMOI_sort.Prob)
     rename!(distMOI_sort, :MOI => :value)
+    println(distMOI_sort)
     vals = [discrete_quantile(distMOI_sort, q) for q in qs]
     df_tmp = DataFrame(
         dist_name = fill("MOI_distribution", length(qs)),
@@ -539,7 +540,8 @@ function write_targets(db, t, s, threshold, hosts_GI_impact, PCR_sensitivity_lev
     distGeneCountGroupBC = DataFrame(value = collect(keys(distGeneCountGroupBC_dict)), Prob = collect(values(distGeneCountGroupBC_dict))/sum(collect(values(distGeneCountGroupBC_dict))))
     distGeneCountGroupBC_sort = sort(distGeneCountGroupBC, :value)
     distGeneCountGroupBC_sort.cumprob = cumsum(distGeneCountGroupBC_sort.Prob)
-
+    println(distGeneCountGroupA_sort)
+    
     dists = Dict("distGeneCount" => distGeneCount_sort, "distGeneCountGroupA" => distGeneCountGroupA_sort, "distGeneCountGroupBC" => distGeneCountGroupBC_sort)
     for (name, dist) in dists
         vals = [discrete_quantile(dist, q) for q in qs]
