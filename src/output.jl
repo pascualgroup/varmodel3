@@ -857,6 +857,9 @@ end
 function discrete_quantile(df::DataFrame, q::Float64)
     q = max(0.0, min(1.0, q))
     idx = findfirst(x -> x >= q, df.cumprob)
+    if idx === nothing
+        idx = nrow(df)  # fallback to last row
+    end
     return df.value[idx]
 end
 
