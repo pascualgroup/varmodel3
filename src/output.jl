@@ -855,6 +855,7 @@ function offdiag(A::Matrix)
 end
 
 function discrete_quantile(df::DataFrame, q::Float64)
+    q = max(0.0, min(1.0, q))
     idx = findfirst(x -> x >= q, df.cumprob)
     return df.value[idx]
 end
