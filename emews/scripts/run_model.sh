@@ -31,6 +31,7 @@ VARMODEL_X=$1
 INSTANCE_DIR=$2
 
 cd $INSTANCE_DIR
+echo $INSTANCE_DIR
 
 arg_array=( "$VARMODEL_X" 
             "parameters.json" )

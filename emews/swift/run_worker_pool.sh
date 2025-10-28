@@ -26,8 +26,11 @@ echo "WALLTIME:              $CFG_WALLTIME"
 echo "PROCS:                 $CFG_PROCS"
 echo "PPN:                   $CFG_PPN"
 echo "QUEUE:                 $CFG_QUEUE"
-echo "UPF:                   $CFG_UPF"
 echo "PROJECT:               $CFG_PROJECT"
+echo "DB_HOST:               $CFG_DB_HOST"
+echo "DB_USER:               $CFG_DB_USER"
+echo "TASK_TYPE:             $CFG_TASK_TYPE"
+echo "WORKER_POOL_ID:        $CFG_POOL_ID"
 echo "--------------------------"
 
 export PROCS=$CFG_PROCS
@@ -67,6 +70,20 @@ export PYTHONPATH=$VARMODEL_PP:$EMEWS_PROJECT_ROOT/python:$EQSQL
 
 export SITE=midway3
 
+# Resident task workers and ranks
+export TURBINE_RESIDENT_WORK_WORKERS=1
+export RESIDENT_WORK_RANK=$(( PROCS - 2 ))
+
+# EQSQ DB variables, set from the CFG file.
+# To change, these edit the CFG file.
+export DB_HOST=$CFG_DB_HOST
+export DB_USER=$CFG_DB_USER
+export DB_PORT=${CFG_DB_PORT:-}
+export DB_NAME=$CFG_DB_NAME
+export EQ_DB_RETRY_THRESHOLD=$CFG_DB_RETRY_THRESHOLD
+
+# 24 hours = 86400
+export EQ_QUERY_TASK_TIMEOUT=3600
 
 # TODO: Set MACHINE to your schedule type (e.g. pbs, slurm, cobalt etc.),
 # or empty for an immediate non-queued unscheduled run
@@ -98,11 +115,6 @@ MEAS_FILE_SOURCE=$CFG_MEASUREMENT_FILE
 MEAS_FILE=$TURBINE_OUTPUT/measurement.txt
 cp $MEAS_FILE_SOURCE $MEAS_FILE
 
-UPF_SOURCE=$EMEWS_PROJECT_ROOT/data/upfs/$CFG_UPF
-UPF_TARGET=$TURBINE_OUTPUT/upf.txt
-cp $UPF_SOURCE $UPF_TARGET
-
-
 MISC=$TURBINE_OUTPUT/misc
 mkdir -p $MISC
 cp -r $CFG_MEAS_ERROR $MISC
@@ -114,7 +126,8 @@ CMD_LINE_ARGS="$*  -varmodel_x=$VARMODEL_X "
 CMD_LINE_ARGS+="-default_params_file=$DST_DEFAULT_PARAMS "
 CMD_LINE_ARGS+="-biting_rate_multiplier_file=$DST_BRMS_FILE -measurement_file=$MEAS_FILE "
 CMD_LINE_ARGS+="-result_at=$CFG_RESULT_AT "
-CMD_LINE_ARGS+="-f=$UPF_TARGET"
+CMD_LINE_ARGS+="--task_type=$CFG_TASK_TYPE --batch_size=$CFG_BATCH_SIZE "
+CMD_LINE_ARGS+="--batch_threshold=$CFG_BATCH_THRESHOLD --worker_pool_id=$CFG_POOL_ID"
 
 # CMD_LINE_ARGS can be extended with +=:
 # CMD_LINE_ARGS+="-another_arg=$ANOTHER_VAR"
@@ -141,7 +154,7 @@ USER_VARS=()
 log_script
 # echo's anything following this to standard out
 set -x
-SWIFT_FILE=lhs_sweep.swift
+SWIFT_FILE=worker_pool_py_launch.swift
 swift-t -n $PROCS $MACHINE -p -I $EQSQL -r $EQSQL \
     -I $EMEWS_EXT -r $EMEWS_EXT \
     -e TURBINE_MPI_THREAD \
@@ -152,7 +165,14 @@ swift-t -n $PROCS $MACHINE -p -I $EQSQL -r $EQSQL \
     -e TURBINE_APP_RETRIES_REPUT \
     -e EMEWS_PROJECT_ROOT \
     -e SITE \
+    -e DB_HOST \
+    -e DB_USER \
+    -e DB_PORT \
+    -e DB_NAME \
+    -e EQ_DB_RETRY_THRESHOLD \
     -e PYTHONPATH \
+    -e RESIDENT_WORK_RANK \
+    -e EQ_QUERY_TASK_TIMEOUT \
     -e PYTHONHOME \
     -e LD_LIBRARY_PATH \
     $EMEWS_PROJECT_ROOT/swift/$SWIFT_FILE \

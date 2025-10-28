@@ -1,0 +1,12 @@
+parameter_name,dist_base_name,min,max
+biting_rate,unif,8e-06,1e-04
+immigration_rate_fraction,unif,0.0025,0.04
+immunity_loss_rate,unif,0.000505050505050505,0.00252525252525253
+n_genes_initial,unif,5000,50000
+switching_rate_A,unif,0.125,0.3
+switching_rate_BC,unif,0.1,0.3
+ectopic_recombination_rate_BC,unif,0.00015,6e-04
+var_groups_ratio_regional_pool_A,unif,0.008,0.1
+generalized_immunity_transmissibility_param,unif,1e-04,0.012
+generalized_immunity_detectability_param,unif,1e-04,0.012
+coinfection_reduces_transmission_exponential_decay_param,unif,0.13,0.4

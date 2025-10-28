@@ -1,0 +1,8 @@
+targets: /project/jozik/ncollier/repos/varmodel3/emews/data/parameters/dummy_targets_for_LHS_03262025.csv
+priors: /project/jozik/ncollier/repos/varmodel3/emews/data/parameters/gi_on_priors_03262025.csv
+algo_param_file: /project/jozik/ncollier/repos/varmodel3/emews/data/algo_params/imabc_params.R
+
+output_directory: /project/jozik/ncollier/repos/varmodel3/emews/scratch/gi_on_032025_lhs
+# results_file: /project/jozik/ncollier/repos/varmodel3_emews/results/iter_2_8_targets_11262024_targets_only.csv
+
+end_iter: 1
