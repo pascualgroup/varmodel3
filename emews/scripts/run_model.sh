@@ -38,7 +38,7 @@ arg_array=( "$VARMODEL_X"
 
 # MODEL_CMD="python -u ${arg_array[@]}"
 
-
+echo $( which julia )
 julia --check-bounds=no -O3 "${arg_array[@]}"
 
 #$TIMEOUT_CMD $COMMAND

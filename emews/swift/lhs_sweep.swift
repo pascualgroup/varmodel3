@@ -20,6 +20,7 @@ app (void o) rm_dirs(file dirnames[]) {
 
 string emews_root = getenv("EMEWS_PROJECT_ROOT");
 string turbine_output = getenv("TURBINE_OUTPUT");
+string site = getenv("SITE");
 
 file upf = input(argv("f"));
 string varmodel_x = argv("varmodel_x");
@@ -83,8 +84,6 @@ string stage_params = """
 import json
 import os
 import pandas as pd
-import pyarrow
-import fastparquet
 import subprocess
 
 replicate = %d
@@ -98,31 +97,28 @@ params['rng_seed'] = params['rng_seed'] + replicate
 with open(f'{instance_dir}/parameters.json', 'w') as f_out:
     json.dump(params, f_out)
 
-model_sh = "/project/jozik/ncollier/repos/varmodel3/emews/scripts/run_model.sh"
+os.environ['SITE'] = "%s"
+emews_project_root = "%s"
+os.environ['EMEWS_PROJECT_ROOT'] = emews_project_root
+
+model_sh = f"{emews_project_root}/scripts/run_model.sh"
 #  "bash" model_sh varmodel_x instance_dir @stdout=out @stderr=err;
 varmodel_x = "%s"
 cmd = ["bash", model_sh, varmodel_x, instance_dir]
-os.environ['SITE'] = "midway3"
-os.environ['EMEWS_PROJECT_ROOT'] = "/project/jozik/ncollier/repos/varmodel3/emews"
-attempts = 0
-completed = False
-while attempts < 10 and not completed:
-    attempts += 1
-    try:
-        proc = subprocess.run(cmd, cwd=instance_dir, capture_output=True, text=True)
-        with open(f'{instance_dir}/out.txt', 'w') as fout:
-            fout.write(proc.stdout)
-        with open(f'{instance_dir}/err.txt', 'w') as fout:
-            fout.write(proc.stderr)
-        completed = True
-    except subprocess.CalledProcessError as e:
-        with open(f'{instance_dir}/out.txt', 'w') as fout:
-            fout.write(e.stdout)
-        with open(f'{instance_dir}/err.txt', 'w') as fout:
-            fout.write(e.stderr)
-        completed = True
-    except OSError as e:
-        print(f"Attempts: {attempts}, OSError: {e}", flush=True)
+
+try:
+    proc = subprocess.run(cmd, cwd=instance_dir, capture_output=True, text=True)
+    with open(f'{instance_dir}/out.txt', 'w') as fout:
+        fout.write(proc.stdout)
+    with open(f'{instance_dir}/err.txt', 'w') as fout:
+        fout.write(proc.stderr)
+except subprocess.CalledProcessError as e:
+    with open(f'{instance_dir}/out.txt', 'w') as fout:
+        fout.write(e.stdout)
+    with open(f'{instance_dir}/err.txt', 'w') as fout:
+        fout.write(e.stderr)
+except OSError as e:
+    print(f"OSError: {e}", flush=True)
 
 sql_output = f"{instance_dir}/output.sqlite"
 """;
@@ -138,7 +134,7 @@ sql_output = f"{instance_dir}/output.sqlite"
   // submission script should create this directory
   string instance_root = "%s/instances/instance_%s" % (turbine_output, instance);
   int i = 1;
-  string stage_code = stage_params % (i, instance_root, params, varmodel_x);
+  string stage_code = stage_params % (i, instance_root, params, site, emews_root, varmodel_x);
   result = python_persist(stage_code, "sql_output");
   // string db = "%s/output.sqlite" % instance_dir =>
   // string result_code = compute_result_code % (db, out_f, err_f);

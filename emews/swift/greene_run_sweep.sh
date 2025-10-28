@@ -1,0 +1,157 @@
+#! /usr/bin/env bash
+set -eu
+
+if [ "$#" -ne 2 ]; then
+  script_name=$(basename $0)
+  echo "Usage: ${script_name} exp_id cfg_file"
+  exit 1
+fi
+
+# Uncomment to turn on swift/t logging. Can also set TURBINE_LOG,
+# TURBINE_DEBUG, and ADLB_DEBUG to 0 to turn off logging
+# export TURBINE_LOG=1 TURBINE_DEBUG=1 ADLB_DEBUG=1
+export EMEWS_PROJECT_ROOT=$( cd $( dirname $0 )/.. ; /bin/pwd )
+# source some utility functions used by EMEWS in this script
+source "${EMEWS_PROJECT_ROOT}/etc/emews_utils.sh"
+
+export EXPID=$1
+export TURBINE_OUTPUT=$EMEWS_PROJECT_ROOT/experiments/$EXPID
+check_directory_exists
+
+CFG_FILE=$2
+source $CFG_FILE
+
+echo "--------------------------"
+echo "WALLTIME:              $CFG_WALLTIME"
+echo "PROCS:                 $CFG_PROCS"
+echo "PPN:                   $CFG_PPN"
+echo "UPF:                   $CFG_UPF"
+echo "--------------------------"
+
+export PROCS=$CFG_PROCS
+# export QUEUE=$CFG_QUEUE
+# export PROJECT=$CFG_PROJECT
+export WALLTIME=$CFG_WALLTIME
+export PPN=$CFG_PPN
+export TURBINE_JOBNAME="${EXPID}_job"
+export TURBINE_MPI_THREAD=1
+
+# If your HPC system aborts with a fork() related error when trying to run the job,
+# uncomment this export, and add "-e RDMAV_FORK_SAFE" to the swift-t arguments
+# at the end this file.
+export RDMAV_FORK_SAFE=1
+
+
+# TODO: If R cannot be found, then these will need to be
+# uncommented and set correctly.
+# export R_HOME=/path/to/R
+# export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$R_HOME/lib
+
+# EQSQL swift extension location
+EQSQL=$EMEWS_PROJECT_ROOT/ext/EQ-SQL
+EMEWS_EXT=$EMEWS_PROJECT_ROOT/ext/emews
+
+# TODO: if Python cannot be found then uncomment
+# and edit this line.
+# export PYTHONHOME=/path/to/python
+
+# TODO: if there are "Cannot find 
+# X package" type Python errors then append
+# the missing package's path to the PYTHONPATH
+# variable below, separating the entries with ":"
+# export PYTHONHOME="/scratch/cgsb/pascual/venv/swift-py3.11"
+# export VARMODEL_PP="/project/jozik/ncollier/repos/varmodel3/post_analysis"
+export PYTHONPATH=$EMEWS_PROJECT_ROOT:/scratch/cgsb/pascual/venv/swift-py3.11/lib64/python3.11/site-packages
+
+export SITE=greene
+
+
+# TODO: Set MACHINE to your schedule type (e.g. pbs, slurm, cobalt etc.),
+# or empty for an immediate non-queued unscheduled run
+MACHINE="slurm"
+
+export SLURM_OPENMPI=1
+
+if [ -n "$MACHINE" ]; then
+  MACHINE="-m $MACHINE"
+else
+  echo "Logging output and errors to $TURBINE_OUTPUT/output.txt"
+  # Redirect stdout and stderr to output.txt
+  # if running without a scheduler.
+  exec &> "$TURBINE_OUTPUT/output.txt"
+fi
+
+mkdir -p $TURBINE_OUTPUT/instances
+cp $CFG_FILE $TURBINE_OUTPUT/cfg.cfg
+
+SRC_DEFAULT_PARAMS=$CFG_DEFAULT_PARAMS
+DST_DEFAULT_PARAMS=$TURBINE_OUTPUT/default_parameters.json
+cp $SRC_DEFAULT_PARAMS $DST_DEFAULT_PARAMS
+
+SRC_BRMS_FILE=$CFG_BITING_RATE_MULTIPLIERS
+DST_BRMS_FILE=$TURBINE_OUTPUT/biting_rate_multipliers.txt
+cp $SRC_BRMS_FILE $DST_BRMS_FILE
+
+MEAS_FILE_SOURCE=$CFG_MEASUREMENT_FILE
+MEAS_FILE=$TURBINE_OUTPUT/measurement.txt
+cp $MEAS_FILE_SOURCE $MEAS_FILE
+
+UPF_SOURCE=$EMEWS_PROJECT_ROOT/data/upfs/$CFG_UPF
+UPF_TARGET=$TURBINE_OUTPUT/upf.txt
+cp $UPF_SOURCE $UPF_TARGET
+
+
+MISC=$TURBINE_OUTPUT/misc
+mkdir -p $MISC
+cp -r $CFG_MEAS_ERROR $MISC
+cp -r $CFG_MOI_INFO $MISC
+
+VARMODEL_X=$CFG_VARMODEL_X
+
+CMD_LINE_ARGS="$*  -varmodel_x=$VARMODEL_X "
+CMD_LINE_ARGS+="-default_params_file=$DST_DEFAULT_PARAMS "
+CMD_LINE_ARGS+="-biting_rate_multiplier_file=$DST_BRMS_FILE -measurement_file=$MEAS_FILE "
+CMD_LINE_ARGS+="-result_at=$CFG_RESULT_AT "
+CMD_LINE_ARGS+="-f=$UPF_TARGET"
+
+# CMD_LINE_ARGS can be extended with +=:
+# CMD_LINE_ARGS+="-another_arg=$ANOTHER_VAR"
+
+# TODO: Some slurm machines may expect jobs to be run
+# with srun, rather than mpiexec (for example). If
+# so, uncomment this export.
+
+export TURBINE_LAUNCHER=srun
+
+export TURBINE_SBATCH_ARGS=$CFG_SBATCH_ARGS
+export TURBINE_APP_RETRIES_LOCAL=2
+export TURBINE_APP_RETRIES_REPUT=2
+export TURBINE_LOG=0
+
+export LD_PRELOAD="/share/apps/openmpi/4.1.6/gcc/lib/libmpi.so"
+# "/software/openmpi-5.0.2-el8-x86_64+gcc-12.2.0/lib/libmpi.so"
+# export LD_LIBRARY_PATH="/project/ahotton/sfw/gcc-12.2.0/R-4.3.3/lib64/R/lib:$LD_LIBRARY_PATH"
+
+
+# TODO: Add any script variables that you want to log as
+# part of the experiment meta data to the USER_VARS array,
+# for example, USER_VARS=("VAR_1" "VAR_2")
+USER_VARS=()
+# log variables and script to to TURBINE_OUTPUT directory
+log_script
+# echo's anything following this to standard out
+set -x
+SWIFT_FILE=lhs_sweep.swift
+swift-t -n $PROCS $MACHINE -p -I $EQSQL -r $EQSQL \
+    -I $EMEWS_EXT -r $EMEWS_EXT \
+    -e TURBINE_MPI_THREAD \
+    -e RDMAV_FORK_SAFE \
+    -e TURBINE_OUTPUT \
+    -e TURBINE_LOG \
+    -e TURBINE_APP_RETRIES_LOCAL \
+    -e TURBINE_APP_RETRIES_REPUT \
+    -e EMEWS_PROJECT_ROOT \
+    -e SITE \
+    -e LD_LIBRARY_PATH \
+    $EMEWS_PROJECT_ROOT/swift/$SWIFT_FILE \
+    $CMD_LINE_ARGS
