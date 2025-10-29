@@ -108,6 +108,7 @@ cmd = ["bash", model_sh, varmodel_x, instance_dir]
 
 try:
     proc = subprocess.run(cmd, cwd=instance_dir, capture_output=True, text=True)
+    proc.check_returncode()
     with open(f'{instance_dir}/out.txt', 'w') as fout:
         fout.write(proc.stdout)
     with open(f'{instance_dir}/err.txt', 'w') as fout:
