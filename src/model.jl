@@ -669,8 +669,24 @@ function do_biting!(t, s, stats, event_dist)
             dst_inf = recycle_or_create_infection(t, s)
             # Recycle the old infection id to prevent excess memory allocation.
             dst_inf.strain_id = transmitted_strain_from_mosquito_to_dst_host.strain_id
+            
             # The new infection has the source infection genes with expression order shuffled.
             shuffle_columns_to!(s.rng, dst_inf.genes, transmitted_strain_from_mosquito_to_dst_host.genes)
+            
+            # Add this infection to the destination host
+            if P.var_groups_high_functionality_express_earlier
+                group_ids = []
+                for i in 1:size(dst_inf.genes)[2]
+                    gene_temp_alleles = dst_inf.genes[:,i]
+                    gene_temp = Gene(gene_temp_alleles)
+                    # @assert haskey(s.association_genes_to_var_groups, gene_temp)
+                    gene_temp_group_id = s.association_genes_to_var_groups[gene_temp]
+                    push!(group_ids, gene_temp_group_id)
+                end
+
+                dst_inf.genes = reorder_genes_by_functionality(group_ids, dst_inf.genes)
+            end
+
             push!(dst_host.liver_infections, dst_inf)
             # Update population wide host liver max
             should_update_rates = should_update_rates || update_n_liver_infections_per_host_max(s, dst_host)
