@@ -1,0 +1,169 @@
+
+# Restarting from saved targets #
+1. Run imabc_one_shot to create the directory to continue from.
+   b_fun should read the result file and return a data frame.
+2. Comment out the result file reading, and set prev_dir in imabc
+   params.
+3. Run imabc_one shot to create a directory with a parms_to_run.
+4. params_to_run to csv
+
+library(data.table)
+dt <- readRDS("parms_to_run_2.RDS")
+dt <- as.data.table(dt)
+dt[, c("iter", "draw", "step", "scaled_dist", "sample_wt") := list(NULL, NULL, NULL, NULL, NULL)]
+fwrite(dt, "parms_to_run.csv")
+
+or R/parms_rds2csv.R
+
+5. params_to_run to upf -- see notebook.
+6. upf into DB with type of -1
+7. Update task type using notebook code.
+
+
+## Runtime Tests ##
+
+*  runtime_tests_priors_03262025_1.0 *
+
+- emews/scratch/runtime_tests_priors_03262025_upf.txt
+- non-GI parameters 
+- task type 42
+- 81 runs
+
+* GI *
+- emews/scratch/runtime_tests_priors_gi_03262025_upf.txt
+- GI parameters
+- task type 43
+- 243 runs
+
+## IMABC Runs ##
+
+Starting April 3rd
+
+* GI OFF
+
+LHS -
+
+gi_off_032025_lhs_40x_1.0
+
+400: 2510 - 25 PPN 12N - 1431, 1079
+401: 1950 - 25 PPN 12N - 641, 1309
+402: 1273 - 15 PPN 15N - 360, 913
+403: 2267 - 10 PPN 20N - 0 - crashed trying to launch julia
+
+gi_off_032025_lhs_40x_2.0
+
+400: 1079 - 25 PPN 12N - 0 "A request was made to bind to that would result
+                            in binding more processes than cpus available in
+                            your allocation"
+401: 1309 - 25 PPN 12N - 933, 376
+402: 913 - 15 PPN 15N - 0, EXCEPTION: [Errno 14] Bad address: 'bash'
+403: 2267 - 10 PPN 20N - 0, EXCEPTION: [Errno 14] Bad address: 'bash'
+
+gi_off_032025_lhs_40x_3.0
+
+400: 1079 - 24 PPN 12N - db down
+401: 376 - 24 PPN 12N - db down
+402: 913 - 15 PPN 15N - queued
+403: 2267 - 10 PPN 20N - db down
+
+gi_off_032025_lhs_40x_4.0
+
+400: 1079 - 24 PPN 12N - 
+401: 376 - 24 PPN 12N - 
+402: 913 - 15 PPN 15N - waiting for 3.0 to finish
+403: 2267 - 10 PPN 20N - 
+
+* GI ON
+
+gi_on_032025_lhs_50x_1.0
+
+500: 3104 - 25 PPN 12N - 1787, 1317
+501: 2794 - 25 PPN 12N - 878, 1916
+502: 784 - 15 PPN 8N - 257, 527
+503: 1318 - 10 PPN 20N - 0
+
+gi_on_032025_lhs_50x_2.0
+
+500: 1317 - 25 PPN 12N - 0, "A request was made to bind to that would result
+                             in binding more processes than cpus available in
+                             your allocation"
+501: 1916 - 25 PPN 12N - 0, binding request
+502: 527 - 15 PPN 8N - 245, 282
+503: 1318 - 10 PPN 20N - 0, EXCEPTION: [Errno 14] Bad address: 'bash'
+
+gi_on_032025_lhs_50x_3.0
+
+500: 1317 - 24 PPN 12N - ran, db failed
+501: 1916 - 24 PPN 12N - ran, db failed
+502: 282 - 15 PPN 8N - ran, db failed
+503: 1318 - 10 PPN 20N - queued
+
+gi_on_032025_lhs_50x_4.0
+
+500: 545 - 24 PPN 12N - (accidentlty ran in gi_off dir)
+501: 1566 - 24 PPN 12N - 
+502: 282 - 15 PPN 8N - 
+503: 1318 - 10 PPN 20N - waiting for 3.0 to finish
+
+-- UPF SCHEME --
+
+Started on May 10 2025
+
+Create the upf with "Create UPF" notebook code
+
+After running, run the notebook sections
+
+1. Find finished runs in UPF sweep
+2. Add results to DB
+
+
+gi_off_032025_lhs_40x_sweep_1.0
+
+x 400: 1079 - 24 PPN 12N - complete
+x 401: 376 - 24 PPN 12N - 346
+x 402: 913 - 15 PPN 15N - 504
+x 403: 2080 - 10 PPN 20N - 482
+
+gi_on_032025_lhs_50x_sweep_1.0
+
+x 500: 545 - 24 PPN 12N - complete
+x 501: 1566 - 24 PPN 12N - 1347
+x 502: 282 - 15 PPN 8N - complete
+x 503: 1318 - 10 PPN 20N - 491
+
+- 2.0 -
+
+gi_off_032025_lhs_40x_sweep_2.0
+
+x 401: 30 - 24 PPN 2N - 25
+x 402: 409 - 15 PPN 15N - 384
+x 403: 1591 - 10 PPN 30N - 422
+
+gi_on_032025_lhs_50x_sweep_2.0
+
+x 501: 219 - 24 PPN 10N - 219
+x 503: 827 - 10 PPN 20N - 480
+
+- 3.0 -
+
+gi_off_032025_lhs_40x_sweep_3.0
+
+x 401: 5 - 10 PPN 1N - 3 (2 didn't start which doesn't make sense)
+x 402: 25 - 15 PPN 2N - 10
+x 403: 1169 - 10 PPN 40N - 543
+
+gi_on_032025_lhs_50x_sweep_3.0
+
+x 503: 347 - 10 PPN 36N - 347
+
+- 4.0 - 
+
+gi_off_032025_lhs_40x_sweep_4.0
+
+401: 2 - 10 PPN 1N - 1
+402: 15 - 15 PPN 1N - 0
+403: 626 - 10 PPN 30 - 359
+
+gi_off_032025_lhs_40x_sweep_5.0
+
+Gave to Qi to run.
