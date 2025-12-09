@@ -51,12 +51,14 @@ b_fun <- function(params, all_parm_names, target_fun, other_inputs) {
   # saveRDS(Ynew, file=paste0(turbine_output, "/Ynew_", current.iter, ".RDS"))
   # return(as.data.frame(Ynew))
   if (current.iter == end_iter) {
+    print("DONE")
     return()
   } else {
-    results_file <- paste0("/project/jozik/ncollier/repos/varmodel3_emews/results/0728_", current.iter, "i", "_",
-                           n_targets, "t_targets_only.csv")
-    print(results_file)
-    Ynew = read.csv(results_file)
+    results_file <- cfg$results_files[current.iter]
+    Ynew <- read.csv(results_file)
+    Ynew <- Ynew %>% arrange(instance)
+    Ynew <- Ynew[, !(names(Ynew) %in% "instance")]
+    print(head(Ynew))
     return(Ynew)
   }
 }
@@ -74,8 +76,20 @@ priors.df <- data.frame(read_csv(priors.path))
 priors <- as.priors(priors.df)
 
 targets.path <- cfg$targets
-targets_df <- data.frame(read_csv(targets.path))
+raw_df <- data.frame(read_csv(targets.path))
+if (cfg$n_targets == 4) {
+  # "prevalence","meanMOIvar","meanPTS","inverseSimpsonIndex"
+  targets_df = subset(raw_df, target_names %in% c("prevalence","meanMOIvar","meanPTS","inverseSimpsonIndex"))
+} else if (cfg$n_targets == 6) {
+  targets_df = subset(raw_df, target_names %in% c("prevalence","meanMOIvar","meanPTS","meanPTSGroupBC","inverseSimpsonIndex","inverseSimpsonIndexBC"))
+} else {
+  stop("Bad number of targets")
+}
 targets <- as.targets(targets_df)
+print(targets)
+
+print(cfg$results_files)
+
 
 target_suffix <- tools::file_path_sans_ext(basename(targets.path))
 # output_dir <- paste0(cfg$output_directory, "_", target_suffix)
@@ -85,7 +99,7 @@ output_dir <- cfg$output_directory
 setwd(output_dir)
 end_iter <- cfg$end_iter
 
-
+algo.params$imabc.args$max_iter = cfg$end_iter
 # use modifyList to override items in algo.params$imabc.args
 imabc.args <- modifyList(algo.params$imabc.args, list(output_directory = output_dir,
                          targets=targets, priors = priors, backend_fun = b_fun))
