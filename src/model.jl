@@ -617,50 +617,82 @@ function do_biting!(t, s, stats, event_dist)
     n_transmissions_max = min(length(transmitted_strains), dst_available_count)
     transmitted = false
     should_update_rates = false
-    for i in 1:n_transmissions_max
-        stats.n_transmissions += 1
-        transmitted = true
+    if P.recomb_strain_transmitted
+        for i in 1:n_transmissions_max
+            stats.n_transmissions += 1
+            transmitted = true
 
-        # Randomly sample two source infections within transmitted_strains to recombine.
-        src_inf_1 = rand(s.rng, transmitted_strains)
-        src_inf_2 = rand(s.rng, transmitted_strains)
+            # Randomly sample two source infections within transmitted_strains to recombine.
+            src_inf_1 = rand(s.rng, transmitted_strains)
+            src_inf_2 = rand(s.rng, transmitted_strains)
 
-        # Get a new infection struct, or recycle an old infection
-        # to prevent excess memory allocation.
-        dst_inf = recycle_or_create_infection(t, s)
+            # Get a new infection struct, or recycle an old infection
+            # to prevent excess memory allocation.
+            dst_inf = recycle_or_create_infection(t, s)
 
-        # Construct strain for new infection.
-        if src_inf_1.strain_id == src_inf_2.strain_id
-            # If both infections have the same strain, then the new infection
-            # is given infection 1's genes with expression order shuffled.
-            dst_inf.strain_id = src_inf_1.strain_id
-            shuffle_columns_to!(s.rng, dst_inf.genes, src_inf_1.genes)
-        else
-            # Otherwise, the new infection is given a new strain constructed by
-            # taking a random sample of the genes in the two source infections.
-            dst_inf.strain_id = next_strain_id!(s)
-            sample_columns_from_two_matrices_to_util2!(s.rng, dst_inf.genes, src_inf_1.genes, src_inf_2.genes, P, s, infection_genes_index_var_groups)
-        end
-
-        # Add this infection to the destination host.
-        if P.var_groups_high_functionality_express_earlier
-            group_ids = []
-            for i in 1:size(dst_inf.genes)[2]
-                gene_temp_alleles = dst_inf.genes[:,i]
-                gene_temp = Gene(gene_temp_alleles)
-                # @assert haskey(s.association_genes_to_var_groups, gene_temp)
-                gene_temp_group_id = s.association_genes_to_var_groups[gene_temp]
-                push!(group_ids, gene_temp_group_id)
+            # Construct strain for new infection.
+            if src_inf_1.strain_id == src_inf_2.strain_id
+                # If both infections have the same strain, then the new infection
+                # is given infection 1's genes with expression order shuffled.
+                dst_inf.strain_id = src_inf_1.strain_id
+                shuffle_columns_to!(s.rng, dst_inf.genes, src_inf_1.genes)
+            else
+                # Otherwise, the new infection is given a new strain constructed by
+                # taking a random sample of the genes in the two source infections.
+                dst_inf.strain_id = next_strain_id!(s)
+                sample_columns_from_two_matrices_to_util2!(s.rng, dst_inf.genes, src_inf_1.genes, src_inf_2.genes, P, s, infection_genes_index_var_groups)
             end
 
-            dst_inf.genes = reorder_genes_by_functionality(group_ids, dst_inf.genes)
+            # Add this infection to the destination host.
+            if P.var_groups_high_functionality_express_earlier
+                group_ids = []
+                for i in 1:size(dst_inf.genes)[2]
+                    gene_temp_alleles = dst_inf.genes[:,i]
+                    gene_temp = Gene(gene_temp_alleles)
+                    # @assert haskey(s.association_genes_to_var_groups, gene_temp)
+                    gene_temp_group_id = s.association_genes_to_var_groups[gene_temp]
+                    push!(group_ids, gene_temp_group_id)
+                end
+
+                dst_inf.genes = reorder_genes_by_functionality(group_ids, dst_inf.genes)
+            end
+            push!(dst_host.liver_infections, dst_inf)
+
+            # Update population wide host liver max
+            should_update_rates = should_update_rates || update_n_liver_infections_per_host_max(s, dst_host)
         end
-        push!(dst_host.liver_infections, dst_inf)
+    else
+        # If recombinant strains are not transmitted, then randomly sample from the source of infections.
+        transmitted_strains_from_mosquito_to_dst_host = sample(transmitted_strains, n_transmissions_max, replace = false)
+        for transmitted_strain_from_mosquito_to_dst_host in transmitted_strains_from_mosquito_to_dst_host
+            # Add this infection to the destination host.
+            dst_inf = recycle_or_create_infection(t, s)
+            # Recycle the old infection id to prevent excess memory allocation.
+            dst_inf.strain_id = transmitted_strain_from_mosquito_to_dst_host.strain_id
+            
+            # The new infection has the source infection genes with expression order shuffled.
+            shuffle_columns_to!(s.rng, dst_inf.genes, transmitted_strain_from_mosquito_to_dst_host.genes)
+            
+            # Add this infection to the destination host
+            if P.var_groups_high_functionality_express_earlier
+                group_ids = []
+                for i in 1:size(dst_inf.genes)[2]
+                    gene_temp_alleles = dst_inf.genes[:,i]
+                    gene_temp = Gene(gene_temp_alleles)
+                    # @assert haskey(s.association_genes_to_var_groups, gene_temp)
+                    gene_temp_group_id = s.association_genes_to_var_groups[gene_temp]
+                    push!(group_ids, gene_temp_group_id)
+                end
 
-        # Update population wide host liver max
-        should_update_rates = should_update_rates || update_n_liver_infections_per_host_max(s, dst_host)
+                dst_inf.genes = reorder_genes_by_functionality(group_ids, dst_inf.genes)
+            end
+
+            push!(dst_host.liver_infections, dst_inf)
+            # Update population wide host liver max
+            should_update_rates = should_update_rates || update_n_liver_infections_per_host_max(s, dst_host)
+        end
     end
-
+    
     if should_update_rates
         # Only one event depends on n_liver_infections_per_host_max
         update_rate!(t, s, event_dist, LIVER_PROGRESS)
@@ -805,11 +837,12 @@ function do_liver_progress!(t, s, stats, event_dist)
             end
             push!(host.active_infections, infection)
             infection.t_expression = t
-            (should_update_immunity_loss_rate, expression_ended) = advance_immune_genes!(t, s, host, length(host.active_infections))
-            if should_update_immunity_loss_rate
-                update_rate!(t, s, event_dist, IMMUNITY_LOSS)
-            end
-
+            if P.selection_mode == "specific_immunity"
+                (should_update_immunity_loss_rate, expression_ended) = advance_immune_genes!(t, s, host, length(host.active_infections)) 
+                if should_update_immunity_loss_rate
+                    update_rate!(t, s, event_dist, IMMUNITY_LOSS)
+                end
+            end 
             # Update maximum number of active infections per host
             if update_n_active_infections_per_host_max(s, host)
                 update_rates_from_n_active_infections_per_host_max!(t, s, event_dist)
@@ -831,11 +864,16 @@ function get_rate_switching(t, s)
     # The total rate includes both active and liver infections because host state may not be fully up to date,
     # and a liver infection may be activated when host state is updated to the current time.
     # Rejection sampling is used to effect the correct rate.
-    if !P.whole_gene_immune
-        # Switching rate set by total number of alleles.
-        (maximum(P.switching_rate) * P.n_loci) * P.n_hosts * s.n_active_infections_per_host_max
-    else
-        maximum(P.switching_rate) * P.n_hosts * s.n_active_infections_per_host_max
+    if P.selection_mode == "specific_immunity"
+        if !P.whole_gene_immune
+            # Switching rate set by total number of alleles.
+            (maximum(P.switching_rate) * P.n_loci) * P.n_hosts * s.n_active_infections_per_host_max
+        else
+            maximum(P.switching_rate) * P.n_hosts * s.n_active_infections_per_host_max
+        end
+    elseif P.selection_mode == "neutrality"
+        # If there is neutrality, switching rate per gene.
+        P.neutrality_switching_rate * P.n_loci * P.n_hosts * s.n_active_infections_per_host_max
     end
 end
 
@@ -852,11 +890,15 @@ function do_switching!(t, s, stats, event_dist)
         return false
     end
     infection = host.active_infections[inf_index]
-
-    gene_expression = infection.genes[:, infection.expression_index]
-    # @assert haskey(s.association_genes_to_var_groups, Gene(gene_expression))
-    gene_expression_group_id = s.association_genes_to_var_groups[Gene(gene_expression)]
-    p_acceptance = P.switching_rate[gene_expression_group_id]/maximum(P.switching_rate)
+    
+    if P.selection_mode == "specific_immunity"
+        gene_expression = infection.genes[:, infection.expression_index]
+        # @assert haskey(s.association_genes_to_var_groups, Gene(gene_expression))
+        gene_expression_group_id = s.association_genes_to_var_groups[Gene(gene_expression)]
+        p_acceptance = P.switching_rate[gene_expression_group_id]/maximum(P.switching_rate)
+    elseif P.selection_mode == "neutrality"
+        p_acceptance = 1.0
+    end 
     if rand(s.rng, ) < p_acceptance
         should_update_rates = false
 
@@ -875,7 +917,7 @@ function do_switching!(t, s, stats, event_dist)
         For the partial allele model, expression advance by alleles, but
         Immunity only gains after the full gene finishes expression
         """
-        if infection.expression_index_locus == P.n_loci
+        if P.selection_mode == "specific_immunity" && infection.expression_index_locus == P.n_loci 
             should_update_rates = increment_immunity!(t, s, host, infection.genes[:, infection.expression_index])
         end
 
@@ -901,18 +943,19 @@ function do_switching!(t, s, stats, event_dist)
         after gaining immunity to the expressed gene, loop through the other infections
         in the host to see if any one needs advancing
         """
-        i = 1
-        while i <= length(host.active_infections)
-            (should_update_rates_i, expression_ended) = advance_immune_genes!(t, s, host, i)
-            should_update_rates = should_update_rates || should_update_rates_i
-            if !expression_ended
-                # If there is no end of expression and reordering of infections, then index plus 1.
-                i += 1
+        if P.selection_mode == "specific_immunity"
+            i = 1
+            while i <= length(host.active_infections)
+                (should_update_rates_i, expression_ended) = advance_immune_genes!(t, s, host, i)
+                should_update_rates = should_update_rates || should_update_rates_i
+                if !expression_ended
+                    # If there is no end of expression and reordering of infections, then index plus 1.
+                    i += 1
+                end
             end
-        end
-
-        if should_update_rates
-            update_rate!(t, s, event_dist, IMMUNITY_LOSS)
+            if should_update_rates 
+                update_rate!(t, s, event_dist, IMMUNITY_LOSS)
+            end
         end
 
         true
@@ -1407,3 +1450,4 @@ function add_infection_duration!(t, s, host, i)
     )
     push!(s.durations, newInfDur)
 end
+

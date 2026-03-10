@@ -248,6 +248,15 @@ function generate_runs(db)
             generalized_immunity_detectability_on = false
         end
 
+        selection_mode = paramstxt[row, "selection_mode"]
+        if selection_mode == "neutrality"
+            neutrality_switching_rate = paramstxt[row, "neutrality_switching_rate"]
+        elseif selection_mode == "specific_immunity"
+            neutrality_switching_rate = nothing
+        end
+
+        recomb_strain_transmitted = paramstxt[row, "recomb_strain_transmitted"]
+
         println("Processing c$(combo_id): No = $(No)")
         execute(db, "INSERT INTO param_combos VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", (combo_id, No, daily_biting_rate_multiplier_file, irs_start_year, irs_duration, biting_rate_factor, t_end_years, t_host_sampling_start_year, n_genes_initial, n_genes_per_strain, n_alleles_per_locus_initial, var_groups_do_not_share_alleles, var_groups_ratio_A, var_groups_ratio_BC, var_groups_fix_ratio, var_groups_functionality_A, var_groups_functionality_BC, ectopic_recombination_rate_A, ectopic_recombination_rate_BC, ectopic_recombination_generates_new_alleles, p_ectopic_recombination_generates_new_allele, var_groups_high_functionality_express_earlier, biting_rate_mean, immigration_rate_fraction, switching_rate_A, switching_rate_BC))
 
@@ -541,6 +550,13 @@ function init_base_params()
         generalized_immunity_transmissibility_param = 0.02,
         generalized_immunity_detectability_param = 0.02,
         generalized_immunity_detectability_on = false,
+
+        # parameters for neutrality                                             
+        selection_mode = "specific_immunity",                                   
+        neutrality_switching_rate = 0,  
+        
+        # parameters for the tranmission of recombinant strains
+        recomb_strain_transmitted = true,
     ))
 end
 

@@ -411,6 +411,21 @@ keyword constructor for the class.
         Parameter for different sensitivity levels of PCR detection
     """
     PCR_sensitivity_levels::Union{Vector{Float64}, Nothing} = nothing
+
+    """
+        Selection mode (one of "specific_immunity" or "neutrality").
+        To calculate neutrality_switching_rate, we first calculate mean duration per gene (d) by dividing the mean duration of infection across all 
+        infections in the specific immunity scenario by the number of genes per parasite genome. neutrality_switching_rate = 1/d.  
+    """
+    selection_mode::Union{String, Nothing} = nothing
+    neutrality_switching_rate::Union{Float64, Nothing} = nothing
+
+    """
+        Parameter to control whether we allow recombinant strain to be transmitted or not.
+        If FALSE, no recombinant strains will be transmitted to the destination host. 
+    """
+    recomb_strain_transmitted::Union{Bool, Nothing} = nothing
+
 end
 
 """
@@ -615,4 +630,13 @@ function validate(p::Params)
     if p.PCR_sensitivity_levels !== nothing
         @assert all(x -> 0.0 <= x <= 1.0, p.PCR_sensitivity_levels)
     end
+
+    @assert p.selection_mode in ["specific_immunity", "neutrality"] 
+    if p.selection_mode == "neutrality"
+        @assert p.neutrality_switching_rate !== nothing
+        @assert p.neutrality_switching_rate >= 0.0
+    end
+
+    @assert p.recomb_strain_transmitted !== nothing
 end
+
