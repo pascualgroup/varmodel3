@@ -617,7 +617,7 @@ function do_biting!(t, s, stats, event_dist)
     n_transmissions_max = min(length(transmitted_strains), dst_available_count)
     transmitted = false
     should_update_rates = false
-    if recomb_strain_transmitted
+    if P.recomb_strain_transmitted
         for i in 1:n_transmissions_max
             stats.n_transmissions += 1
             transmitted = true
